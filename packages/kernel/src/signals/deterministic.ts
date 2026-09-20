@@ -9,8 +9,8 @@
  * it, the signal is SUPPRESSED with a stated reason rather than computed wrong.
  */
 
-import type { AdapterCapabilities } from '../adapters/types.js';
-import type { EvidenceSet } from '../model/canonical.js';
+import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
+import type { EvidenceSet } from '@gtm-trust-kernel/adapters/model/canonical.js';
 
 export type SignalId =
   | 'stage_age_vs_cohort'

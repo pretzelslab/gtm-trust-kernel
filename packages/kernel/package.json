@@ -1,0 +1,16 @@
+{
+  "name": "@gtm-trust-kernel/kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic signals, the proposal/approval kernel, and the audit ledger.",
+  "dependencies": {
+    "@gtm-trust-kernel/adapters": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  }
+}

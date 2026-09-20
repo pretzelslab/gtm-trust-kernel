@@ -1,0 +1,13 @@
+{
+  "name": "@gtm-trust-kernel/readiness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Readiness assessment: scored CRM data-health diagnostic. Not yet built.",
+  "dependencies": {
+    "@gtm-trust-kernel/adapters": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

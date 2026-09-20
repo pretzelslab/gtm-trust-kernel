@@ -14,8 +14,8 @@
  *   I7  The kill switch short-circuits every apply, with no redeploy.
  */
 
-import type { CrmAdapter, FieldWrite, WriteOutcome } from '../adapters/types.js';
-import type { RecordRef } from '../model/canonical.js';
+import type { CrmAdapter, FieldWrite, WriteOutcome } from '@gtm-trust-kernel/adapters/types.js';
+import type { RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { AuditLedger } from '../audit/ledger.js';
 
 export type ProposalStatus =

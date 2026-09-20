@@ -5,12 +5,13 @@
   "type": "module",
   "description": "CRM-agnostic trust kernel for GTM AI: evidence-grounded, injection-resistant, human-approved writes with rollback and a tamper-evident audit trail.",
   "engines": { "node": ">=20" },
+  "workspaces": ["packages/*"],
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "lint": "eslint src test --ext .ts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:watch": "npm run test:watch --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "lint": "eslint packages --ext .ts",
     "ci": "npm run typecheck && npm run test"
   },
   "devDependencies": {

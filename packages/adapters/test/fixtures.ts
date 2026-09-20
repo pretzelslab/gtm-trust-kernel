@@ -10,7 +10,7 @@ import type {
   StageHistoryEntry,
 } from '../src/model/canonical.js';
 import { TrustTier, tag } from '../src/model/trust.js';
-import { MockAdapter, type MockFaults, type MockOrgData } from '../src/adapters/mock.js';
+import { MockAdapter, type MockFaults, type MockOrgData } from '../src/mock.js';
 
 const ORG = 'org-test';
 const ref = (objectType: RecordRef['objectType'], id: string): RecordRef => ({

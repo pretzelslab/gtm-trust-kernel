@@ -22,7 +22,7 @@ import type {
   RecordRef,
   StageHistoryEntry,
   CrmVendor,
-} from '../model/canonical.js';
+} from './model/canonical.js';
 
 export interface AdapterCapabilities {
   /** Can report stage transition history (Salesforce OpportunityHistory). */

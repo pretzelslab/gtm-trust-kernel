@@ -16,6 +16,5 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "types": ["node"]
-  },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  }
 }

@@ -19,7 +19,7 @@ import type {
   OwnerChange,
   RecordRef,
   StageHistoryEntry,
-} from '../model/canonical.js';
+} from './model/canonical.js';
 import type {
   AdapterCapabilities,
   CrmAdapter,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryLedger } from '../src/audit/ledger.js';
-import { MockAdapter } from '../src/adapters/mock.js';
+import { MockAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import {
   DEFAULT_ALLOWLIST,
   KernelError,
@@ -8,7 +8,7 @@ import {
   type Actor,
   type ProposedChange,
 } from '../src/proposals/kernel.js';
-import { makeOrgData } from './fixtures.js';
+import { makeOrgData } from '@gtm-trust-kernel/adapters/test/fixtures.js';
 
 const rep: Actor = { id: 'user:rep-1', role: 'rep' };
 const manager: Actor = { id: 'user:mgr-1', role: 'manager' };

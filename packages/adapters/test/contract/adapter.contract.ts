@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { CrmAdapter, FieldWrite } from '../../src/adapters/types.js';
+import type { CrmAdapter, FieldWrite } from '../../src/types.js';
 
 export interface ContractHarness {
   adapter: CrmAdapter;
