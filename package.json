@@ -1,0 +1,21 @@
+{
+  "name": "gtm-trust-kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CRM-agnostic trust kernel for GTM AI: evidence-grounded, injection-resistant, human-approved writes with rollback and a tamper-evident audit trail.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src test --ext .ts",
+    "ci": "npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}
