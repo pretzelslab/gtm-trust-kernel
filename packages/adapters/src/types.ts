@@ -58,6 +58,13 @@ export interface AdapterCapabilities {
    */
   readonly accountBatchLimit: number;
   /**
+   * Max refs per getContactsByRef() call. Advisory only, same contract as
+   * accountBatchLimit — a different field because contacts and accounts
+   * are different ref types, not because the limit itself differs (same
+   * reasoning childRecordBatchLimit got its own field).
+   */
+  readonly contactBatchLimit: number;
+  /**
    * Max opportunity refs per getNotesByOpportunity()/getActivitiesByOpportunity()
    * call. Advisory only, same contract as accountBatchLimit — the adapter
    * does not enforce or truncate at this limit; chunking to it is the
@@ -113,6 +120,17 @@ export interface GetAccountsResult {
    * not-found ref.
    */
   readonly items: readonly Account[];
+  /** Vendor API calls consumed by this call. 0 for an empty refs array. */
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Result of a batched by-ref contact read (CrmAdapter.getContactsByRef).
+ * Same contract shape as GetAccountsResult, for the same reason: a contact
+ * ref resolves to at most one Contact.
+ */
+export interface GetContactsResult {
+  readonly items: readonly Contact[];
   /** Vendor API calls consumed by this call. 0 for an empty refs array. */
   readonly apiCallsConsumed: number;
 }
@@ -197,6 +215,15 @@ export interface CrmAdapter {
    * rejected or truncated — respecting that limit is the caller's job.
    */
   getAccounts(refs: readonly RecordRef[]): Promise<GetAccountsResult>;
+
+  /**
+   * Batched by-ref contact read, for hydrating contacts related to an
+   * already-sampled set of opportunities (via their contactLinks) without a
+   * full listContacts() scan. Same contract as getAccounts: refs beyond
+   * capabilities().contactBatchLimit in one call are NOT rejected or
+   * truncated — chunking is the caller's job.
+   */
+  getContactsByRef(refs: readonly RecordRef[]): Promise<GetContactsResult>;
 
   /**
    * Batched by-opportunity-ref Note read, for hydrating notes related to an

@@ -253,6 +253,13 @@ every hashed key live in memory only for the duration of that run and are
 discarded when it completes — never persisted, never logged (raw emails
 from the second source are never materialized in this tool — see
 `claude/gtm-readiness-scope.md:96` and `:260`).
+**Matching count:** a CRM contact counts as resolved if its hashed email
+matches at least one second-source contact — no dedup beyond that. If
+several second-source records share a hashed email (e.g. duplicate
+records in the second source), the CRM contact still counts once; the
+metric doesn't penalize or double-count for second-source-side
+duplication. Confirmed with the user (D5 part 2a) — not derived
+unilaterally.
 **Threshold:** `contact_identity_resolution_rate`.
 
 ### account_resolution_rate
@@ -261,6 +268,9 @@ in the second source by normalized website domain, using the same
 `normalizeDomain` (`src/metrics/shared.ts`, established in D3 for
 `duplicate_account_rate`) on both sides of the match — not a separate
 normalization recipe.
+**Matching count:** same rule as `contact_identity_resolution_rate` — a
+CRM account counts as resolved if its normalized domain matches at least
+one second-source account, no dedup beyond that.
 **Threshold:** `account_resolution_rate`.
 
 ### activity_attribution_rate

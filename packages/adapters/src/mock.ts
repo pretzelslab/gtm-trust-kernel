@@ -26,6 +26,7 @@ import type {
   FieldWrite,
   GetAccountsResult,
   GetChildRecordsResult,
+  GetContactsResult,
   GetSecondSourceRecordsResult,
   SecondSourceAccount,
   SecondSourceActivity,
@@ -53,6 +54,8 @@ export interface MockFaults {
   failListOnCall?: { n: number; kind: 'rate_limit' | 'auth' | 'network' };
   /** Fail the nth call to getAccounts with this error kind. Separate from failListOnCall — getAccounts is a batch read, not a list method. */
   failGetAccountsOnCall?: { n: number; kind: 'rate_limit' | 'auth' | 'network' };
+  /** Fail the nth call to getContactsByRef with this error kind. Separate counter from getAccounts, same reasoning. */
+  failGetContactsOnCall?: { n: number; kind: 'rate_limit' | 'auth' | 'network' };
   /** Simulate a concurrent edit by bumping tokens before the next write. */
   driftTokensBeforeWrite?: boolean;
   /** Simulate record deletion between read and apply. */
@@ -63,6 +66,7 @@ export class MockAdapter implements CrmAdapter {
   readonly vendor = 'mock' as const;
   private listCalls = 0;
   private getAccountsCalls = 0;
+  private getContactsCalls = 0;
   private appliedKeys = new Map<string, WriteOutcome>();
 
   constructor(
@@ -84,6 +88,7 @@ export class MockAdapter implements CrmAdapter {
       rateLimit: { kind: 'none', value: 0 },
       stageMap: {},
       accountBatchLimit: 200,
+      contactBatchLimit: 200,
       childRecordBatchLimit: 200,
       notesPerOpportunityLimit: 200,
       activitiesPerOpportunityLimit: 200,
@@ -135,6 +140,24 @@ export class MockAdapter implements CrmAdapter {
 
     const idSet = new Set(refs.map((r) => r.id));
     const found = this.data.accounts.filter((a) => idSet.has(a.ref.id));
+    const sorted = [...found].sort((a, b) => a.ref.id.localeCompare(b.ref.id));
+    return { items: sorted, apiCallsConsumed: 1 };
+  }
+
+  async getContactsByRef(refs: readonly RecordRef[]): Promise<GetContactsResult> {
+    if (refs.length === 0) {
+      return { items: [], apiCallsConsumed: 0 };
+    }
+
+    this.getContactsCalls += 1;
+    const f = this.faults.failGetContactsOnCall;
+    if (f && f.n === this.getContactsCalls) {
+      const { AdapterError } = require('./types.js') as typeof import('./types.js');
+      throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
+    }
+
+    const idSet = new Set(refs.map((r) => r.id));
+    const found = this.data.contacts.filter((c) => idSet.has(c.ref.id));
     const sorted = [...found].sort((a, b) => a.ref.id.localeCompare(b.ref.id));
     return { items: sorted, apiCallsConsumed: 1 };
   }

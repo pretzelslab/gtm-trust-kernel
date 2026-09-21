@@ -12,7 +12,7 @@
  */
 
 import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Activity, Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Contact, Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { SampleResult, SampleStratum } from './sample.js';
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample } from './metrics/types.js';
@@ -61,7 +61,61 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     stageHistoryHydrated: false,
     missingAccountCount: 0,
     oppsWithoutAccountRef,
+    contactsByRef: new Map(),
+    contactsHydrated: false,
+    missingContactCount: 0,
     capabilities,
+  };
+}
+
+export interface HydrateContactsResult {
+  readonly sample: CoverageSample;
+  /** Summed apiCallsConsumed across every getContactsByRef chunk call, for budget reporting. */
+  readonly contactApiCallsConsumed: number;
+}
+
+/**
+ * Same shape as hydrateAccounts, for Contact records via
+ * CrmAdapter.getContactsByRef, added for D5 (contact_identity_resolution_rate
+ * needs CRM-side contact emails). Derives the distinct contact-ref set from
+ * sample.openOpportunities + closedOpportunities's contactLinks (not a
+ * separate contact sample), sorts it by ref.id for determinism, and chunks
+ * it at adapter.capabilities().contactBatchLimit. A chunk's getContactsByRef
+ * call rejecting propagates as-is — same all-or-nothing failure contract as
+ * hydrateAccounts.
+ */
+export async function hydrateContacts(sample: CoverageSample, adapter: CrmAdapter): Promise<HydrateContactsResult> {
+  const allOpportunities = [...sample.openOpportunities, ...sample.closedOpportunities];
+  const refsById = new Map<string, RecordRef>();
+  for (const o of allOpportunities) {
+    for (const link of o.contactLinks) {
+      refsById.set(link.contactRef.id, link.contactRef);
+    }
+  }
+  const sortedRefs = [...refsById.values()].sort((a, b) => a.id.localeCompare(b.id));
+
+  const limit = adapter.capabilities().contactBatchLimit;
+  const chunks = chunk(sortedRefs, limit);
+
+  const contactsByRef = new Map<string, Contact>();
+  let contactApiCallsConsumed = 0;
+
+  for (const refChunk of chunks) {
+    const result = await adapter.getContactsByRef(refChunk);
+    contactApiCallsConsumed += result.apiCallsConsumed;
+    for (const contact of result.items) {
+      contactsByRef.set(contact.ref.id, contact);
+    }
+  }
+
+  return {
+    sample: {
+      ...sample,
+      contactsByRef,
+      contactsHydrated: true,
+      missingContactCount: sortedRefs.length - contactsByRef.size,
+    },
+    contactApiCallsConsumed,
   };
 }
 

@@ -22,6 +22,8 @@ export interface ContractHarness {
   knownOpportunityId: string;
   /** An account id known to exist in the fixture org. */
   knownAccountId: string;
+  /** A contact id known to exist in the fixture org. */
+  knownContactId: string;
   /** Mutate the record out of band, to simulate a concurrent edit. */
   simulateConcurrentEdit?: (opportunityId: string) => Promise<void> | void;
 }
@@ -167,6 +169,58 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       const ref = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: h.knownAccountId };
       const result = await h.adapter.getAccounts([ref, ref]);
       expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
+    });
+  });
+
+  describe('batch contact read', () => {
+    it('resolves a known contact ref', async () => {
+      const h = await make();
+      const ref = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: h.knownContactId };
+      const result = await h.adapter.getContactsByRef([ref]);
+      expect(result.items.map((c) => c.ref.id)).toEqual([h.knownContactId]);
+    });
+
+    it('returns nothing and consumes no quota for an empty refs array', async () => {
+      const { adapter } = await make();
+      const result = await adapter.getContactsByRef([]);
+      expect(result.items).toHaveLength(0);
+      expect(result.apiCallsConsumed).toBe(0);
+    });
+
+    it('returns an empty result rather than throwing when every ref is unresolvable', async () => {
+      const { adapter } = await make();
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'contact' as const, id: 'no-such-contact-xyz' };
+      const result = await adapter.getContactsByRef([ref]);
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('resolves the known ref and silently omits an unresolvable one from the same call', async () => {
+      const h = await make();
+      const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: h.knownContactId };
+      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: 'no-such-contact-xyz' };
+      const result = await h.adapter.getContactsByRef([known, missing]);
+      expect(result.items.map((c) => c.ref.id)).toEqual([h.knownContactId]);
+    });
+
+    it('does not truncate or throw when called with more refs than capabilities().contactBatchLimit', async () => {
+      const h = await make();
+      const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: h.knownContactId };
+      const limit = h.adapter.capabilities().contactBatchLimit;
+      const padding = Array.from({ length: limit }, (_, i) => ({
+        crm: h.adapter.vendor,
+        orgId: h.adapter.orgId,
+        objectType: 'contact' as const,
+        id: `no-such-contact-${i}`,
+      }));
+      const result = await h.adapter.getContactsByRef([known, ...padding]);
+      expect(result.items.map((c) => c.ref.id)).toEqual([h.knownContactId]);
+    });
+
+    it('returns at most one entry when the same ref is requested more than once', async () => {
+      const h = await make();
+      const ref = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: h.knownContactId };
+      const result = await h.adapter.getContactsByRef([ref, ref]);
+      expect(result.items.map((c) => c.ref.id)).toEqual([h.knownContactId]);
     });
   });
 

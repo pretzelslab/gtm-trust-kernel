@@ -8,7 +8,7 @@
  */
 
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Activity, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Contact, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
 
 /**
@@ -128,6 +128,18 @@ export interface CoverageSample {
    * capabilities.stageHistory itself, which is a separate, earlier gate).
    */
   readonly stageHistoryHydrated: boolean;
+  /**
+   * Hydrated contacts for the sampled opportunities' contactLinks, keyed by
+   * Contact.ref.id. Empty and meaningless until contactsHydrated is true —
+   * same convention as accountsByRef/accountsHydrated. Added for D5
+   * (contact_identity_resolution_rate needs CRM-side contact emails to
+   * hash and compare against a second source).
+   */
+  readonly contactsByRef: ReadonlyMap<string, Contact>;
+  /** True once hydrateContacts has run. Same gate-off-means-not_instrumented rule as accountsHydrated. */
+  readonly contactsHydrated: boolean;
+  /** Count of distinct sampled contact refs (from contactLinks) that did not resolve to a Contact via getContactsByRef. Meaningless until contactsHydrated is true. */
+  readonly missingContactCount: number;
   readonly capabilities: AdapterCapabilities;
 }
 

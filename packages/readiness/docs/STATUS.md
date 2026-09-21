@@ -32,6 +32,7 @@ repeated here.
 | D4 `owner_history_enabled`, `stage_history_months` | Done, tested | this session ("D4 part 1"), see git log |
 | D4 `close_date_history_enabled` | **Deferred** — not implemented | doc-only, this session |
 | D5 part 1: `SecondSourceAdapter` contract + `MockSecondSourceAdapter` + fixtures | Done, tested. **No D5 metric code** — adapter/mock/contract-test/fixture scaffolding only | this session ("D5 part 1"), see git log |
+| D5 part 2a: joinability orchestration (independent second-source sampling, hashing at ingestion, contact/account resolution) | Done, tested. **Still no D5 metric code** — orchestration only, per the D5-part-2a plan | this session ("D5 part 2a"), see git log |
 | D5 metrics (4), D6 (4), D7 (3) | Not started | — |
 
 `notesByOpportunity`/`activitiesByOpportunity` hydration — the gap flagged
@@ -43,11 +44,13 @@ already computed but discarded: `MetricResult` gained `floor`, surfaced
 as a visible badge in the report. See "Cross-package" and the new
 decisions below.
 
-D5 doc decisions are locked (`metric-definitions.md`'s D5 section rewritten, gating fixed to `not_instrumented`) and the second-source adapter design note (`packages/readiness/docs/second-source-adapter-design.md`) is locked, all open questions closed. This session additionally implemented D5 part 1 against that locked design: `SecondSourceAdapter`/`SecondSourceCapabilities`/`SecondSourceRef` and friends (`packages/adapters/src/types.ts`), `MockSecondSourceAdapter` (`packages/adapters/src/mock.ts`), a shared contract suite (`packages/adapters/test/contract/secondSource.contract.ts`) run against the mock, a mock-only truncation suite (`test/mock.secondSource.test.ts`), and `healthy`/`legacy`/`fresh` second-source fixture data (`packages/readiness/src/fixtures/mockOrgs.ts`). **Still no D5 metric code, no orchestration wiring (`coverageSample.ts`/`sample.ts` untouched), no hashing implementation** — see "Next steps."
+D5 doc decisions are locked (`metric-definitions.md`'s D5 section rewritten, gating fixed to `not_instrumented`) and the second-source adapter design note (`packages/readiness/docs/second-source-adapter-design.md`) is locked, all open questions closed. D5 part 1 (prior session) implemented `SecondSourceAdapter`/`SecondSourceCapabilities`/`SecondSourceRef` and friends (`packages/adapters/src/types.ts`), `MockSecondSourceAdapter` (`packages/adapters/src/mock.ts`), a shared contract suite (`packages/adapters/test/contract/secondSource.contract.ts`) run against the mock, a mock-only truncation suite (`test/mock.secondSource.test.ts`), and `healthy`/`legacy`/`fresh` second-source fixture data (`packages/readiness/src/fixtures/mockOrgs.ts`).
 
-No fault injection (`MockFaults`-equivalent) on `MockSecondSourceAdapter` — deliberately deferred (confirmed this session, not an oversight). Revisit if a D5-part-2+ test needs to exercise a second-source failure path.
+This session (D5 part 2a) added the joinability orchestration layer on top of that: independent second-source sampling (`src/secondSource/sample.ts`), SHA-256+per-run-salt hashing at the ingestion boundary (`src/secondSource/hash.ts`), and contact/account resolution (`src/secondSource/resolve.ts`) — see "Cross-package" and "Decisions" below for what each does and why. **Still no D5 metric code, no wiring into `buildReportData`/`cli.ts`/`--json`** — that's D5 part 2b, see "Next steps."
 
-`SecondSourceCapabilities.maxSampleSizePerType` is caller-enforced by design, not adapter-enforced — `MockSecondSourceAdapter`'s `list*` methods do not cap themselves. **Part 2 (or whichever phase adds the D5 orchestration loop) must include a test that the orchestration layer actually stops paging at this cap** — nothing today verifies that beyond the type's docblock.
+No fault injection (`MockFaults`-equivalent) on `MockSecondSourceAdapter` — deliberately deferred (confirmed D5 part 1, not an oversight). Revisit if a D5-part-2b+ test needs to exercise a second-source failure path.
+
+`SecondSourceCapabilities.maxSampleSizePerType` is caller-enforced by design, not adapter-enforced — `MockSecondSourceAdapter`'s `list*` methods still do not cap themselves. **Now tested** (`test/secondSource/sample.test.ts`, "pagination cap" block): `sampleSecondSource` (`src/secondSource/sample.ts`) stops paging once it hits the cap for each record type independently, even when `nextCursor` is still present — closes the gap D5 part 1 flagged as missing.
 
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
 required/non-nullable, so there's no "missing" state to measure. See
@@ -60,8 +63,9 @@ Files:
 - `src/metrics/consistency.ts` — D3, **all 4 metrics done**: `stage_activity_contradiction_rate`, `round_amount_rate`, `stage_mapping_coverage`, `duplicate_account_rate`.
 - `src/metrics/history.ts` — D4, **2 of 3 metrics done** (added this session, D4 part 1): `owner_history_enabled`, `stage_history_months`. `close_date_history_enabled` deferred, see below — not in this file.
 - `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below), `normalizeDomain`, `DEFAULT_SHARED_PROVIDER_DENYLIST` (D3 part 2b), `wholeCalendarMonthsBetween` (D4 part 1), `applyTruncationFloor` (new this session).
-- `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig` (gained optional `sharedProviderDenylist` in D3 part 2b; `CoverageSample` gained `stageHistoryEarliestChangedAt`/`stageHistoryHydrated` in D4 part 1, `notesTruncatedOpportunityIds`/`activitiesTruncatedOpportunityIds` this session; `MetricResult` gained optional `floor` this session).
-- `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates it: accounts (`hydrateAccounts`), org-wide earliest stage-history entry (`hydrateStageHistory`), and per-opportunity notes/activities (`hydrateNotes`, `hydrateActivities`) — the latter two now also carry forward each `GetChildRecordsResult`'s `truncatedOpportunityIds`, unioned across chunks; see decisions below.
+- `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig` (gained optional `sharedProviderDenylist` in D3 part 2b; `CoverageSample` gained `stageHistoryEarliestChangedAt`/`stageHistoryHydrated` in D4 part 1, `notesTruncatedOpportunityIds`/`activitiesTruncatedOpportunityIds` in a prior session, `contactsByRef`/`contactsHydrated`/`missingContactCount` this session (D5 part 2a — see "Cross-package" below); `MetricResult` gained optional `floor` in a prior session).
+- `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates it: accounts (`hydrateAccounts`), contacts (`hydrateContacts`, new this session — see below), org-wide earliest stage-history entry (`hydrateStageHistory`), and per-opportunity notes/activities (`hydrateNotes`, `hydrateActivities`) — the latter two now also carry forward each `GetChildRecordsResult`'s `truncatedOpportunityIds`, unioned across chunks; see decisions below.
+- `src/secondSource/hash.ts`, `sample.ts`, `resolve.ts` (all new this session, D5 part 2a) — see "Cross-package, D5 part 2a" below for what each does.
 - `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family. `test/metrics/shared.test.ts` is the exception (added D3 part 2b) — it tests `normalizeDomain`/`wholeCalendarMonthsBetween`/`applyTruncationFloor` directly since those are helpers, not metrics, and have no fixture file of their own.
 - `test/coverageSample.test.ts` — builder + hydration tests (not per-metric, so it doesn't follow the `test/fixtures/` + `test/metrics/` split above). Gained `hydrateNotes`/`hydrateActivities` describe blocks last session, plus an integration-style block proving the `activitySync` capability gate survives real hydration.
 - `src/report/buildReport.ts`/`render.ts` — `buildReportData` calls `hydrateNotes`/`hydrateActivities` as part of its orchestration (caveat-note logic removed last session, since these 3 metrics now compute over real data); `render.ts` now shows a visible "FLOOR" badge (plus a `≥` value prefix) when a row's `floor` is true, in both the single-report table and the `--all` comparison matrix.
@@ -80,7 +84,76 @@ kind of cross-package addition D1's `activitySync`/`contactLinks` were.
 two, reporting a capped opportunity in `GetChildRecordsResult.truncatedOpportunityIds`,
 now actually consumed downstream as of this session).
 
-`npm run ci` green at handoff: adapters 53 (31 + 22 new: 18 contract, 4 mock-only truncation), kernel 22, readiness 198.
+Cross-package, D5 part 2a: `CrmAdapter.getContactsByRef(refs)` added
+(`packages/adapters/src/types.ts`, `src/mock.ts`) — same reason `getAccounts`
+was added in D3 part 2a: `listContacts` has no ref filter, only a
+since-window stream, and hydrating a bounded sample's contacts through it
+would mean scanning the whole table. Not something the D5-part-2a plan
+originally listed — found while grounding the plan (no CRM contact
+hydration path existed at all; `contact_identity_resolution_rate` needs
+CRM-side contact emails to hash), confirmed with the user before writing.
+`AdapterCapabilities.contactBatchLimit` (new field, default 200) is
+advisory-only, same contract as `accountBatchLimit` — kept as its own
+field rather than reusing `accountBatchLimit`, same reasoning
+`childRecordBatchLimit` got its own field (different ref type, not a
+different limit value). `MockFaults.failGetContactsOnCall` added,
+mirroring `failGetAccountsOnCall`. Contract-suite coverage added to
+`adapter.contract.ts`'s existing shared suite ("batch contact read"),
+`ContractHarness` gained `knownContactId`.
+
+`packages/readiness`: `coverageSample.ts` gained `hydrateContacts`,
+identical shape to `hydrateAccounts` — derives the distinct contact-ref
+set from `sample.openOpportunities`/`closedOpportunities`'s
+`contactLinks` (not an independent contact sample), chunks at
+`capabilities().contactBatchLimit`, same all-or-nothing chunk-failure
+contract. `CoverageSample` gained `contactsByRef`/`contactsHydrated`/
+`missingContactCount` (`metrics/types.ts`), same "empty and meaningless
+until hydrated" convention as `accountsByRef`/`accountsHydrated`. This
+required touching every existing golden-fixture file under
+`test/fixtures/*.ts` plus `test/coverageSample.test.ts` and
+`src/fixtures/mockOrgs.ts` (17 files) to add the two new required fields
+to their hand-built `AdapterCapabilities`/`CoverageSample` object
+literals — mechanical, no fixture's existing scenario/expected-value
+changed.
+
+`src/secondSource/` (new package-internal module, D5 part 2a):
+- `hash.ts` — `generateRunSalt()` (`crypto.randomBytes`, real randomness
+  — deliberately NOT `sample.ts`'s deterministic mulberry32/xfnv1a
+  stratified-sampling seed, which would defeat "salt differs across
+  runs") and `hashEmail(raw, salt)` (`crypto.createHash('sha256')`, same
+  idiom `packages/kernel/src/audit/ledger.ts` already uses for the audit
+  ledger — no new dependency).
+- `sample.ts` — `sampleSecondSource(adapter, salt)`: independently pages
+  `listContacts`/`listAccounts`/`listActivities`, each capped at
+  `capabilities().maxSampleSizePerType` (enforced here, in orchestration
+  — the adapter itself doesn't, see D5 part 1). **Hashing/normalizing
+  happens here, per-page, as each record arrives** — this session's one
+  change to the plan the user approved before implementation: emails are
+  hashed and domains normalized immediately on receipt, never carried
+  raw into the returned `SecondSourceSampleResult`. `HashedContact`
+  (`emailHash: string | null`) and `NormalizedAccount`
+  (`normalizedDomain: string | null`) replace the adapter's raw
+  `SecondSourceContact`/`SecondSourceAccount` shapes in the result;
+  `SecondSourceActivity` passes through unmodified (no PII field exists
+  on that type). Does not pre-check `has*` capability flags before
+  calling `list*` — same precedent as `hydrateStageHistory` trusting the
+  adapter's own empty-not-throw contract.
+- `resolve.ts` — `resolveSecondSource(sample, adapter)`: the actual
+  matching step. Throws if `sample.contactsHydrated`/`accountsHydrated`
+  is false (an orchestration precondition violation, not a metric's
+  gate-off — deliberately not `not_instrumented`, since this isn't a
+  metric and there's no graceful degradation to fall back to; a caller
+  that hasn't hydrated first has a bug). Generates one salt via
+  `generateRunSalt()`, calls `sampleSecondSource` with it, then hashes
+  every CRM contact's email (`sample.contactsByRef`) with the *same*
+  salt and normalizes every CRM account's domain
+  (`sample.accountsByRef`) with the existing `normalizeDomain` — same
+  salt across both sides is what makes the hashes comparable. Returns
+  `contactMatches`/`accountMatches`: `ReadonlyMap<string /* CRM ref.id
+  */, readonly SecondSourceRef[]>` — refs only, never a merged record.
+  See "Decisions" for the matching-count semantics.
+
+`npm run ci` green at handoff: adapters 59 (53 + 6 new getContactsByRef contract tests), kernel 22, readiness 229 (198 + 5 hydrateContacts + 26 secondSource).
 
 Cross-package, D5 part 1: `packages/adapters` gained a wholly separate
 `SecondSourceAdapter` interface (`src/types.ts`) — `SecondSourceRef`
@@ -155,6 +228,11 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **Two corrections found while implementing D5 part 1, not caught during the design-note review** (both fixed in the design note before writing any code, then implemented per the corrected sketch): (1) the design note originally reused `RecordRef` for second-source objects; `RecordRef.crm` is typed `CrmVendor` (`'salesforce' | 'hubspot' | 'mock'`), a closed CRM-only union, so it doesn't type-check for a non-CRM source — introduced `SecondSourceRef` (`source: string`, open-ended, instead of `crm: CrmVendor`) instead. (2) `SecondSourceContact`/`SecondSourceAccount` originally had no timestamp field; `listContacts`/`listAccounts`' `SyncWindow.since` filter and `SyncPage.watermark` need one to filter/sort by, so both gained `modifiedAt: string`. `SecondSourceActivity` already had timestamps and needed no change. Neither correction changes any of the five locked decisions (interface separation, `list*` + cap, timezone/precision scope, hashing-at-boundary, per-type capability flags) — both are structural fixes to make the locked shape actually compile and function.
 - **`GetSecondSourceRecordsResult<T>.truncatedRefIds` is shared across all three `getXByRef` methods but only ever non-empty for `getActivitiesByRef`** — a contact/account ref resolves to at most one record (same one-ref-to-at-most-one shape as `CrmAdapter.getAccounts`), so there's nothing to truncate there. Not a bug, just an always-empty field on 2 of 3 call sites — flagged as a possible later cleanup (e.g. a narrower `GetSecondSourceByRefResult<T>` without the field for those two), not fixed this session since it doesn't block correctness.
 - **Second-source fixture overlap is illustrative, not calibrated** — `healthy`'s 13/15 and `legacy`'s 1/6 match ratios were chosen for "good" vs. "poor" contrast, not derived from any real-org benchmark. Revisit once D5 metrics exist and their thresholds (`rubric.ts`) need realistic fixture behavior to validate against.
+- **D5 part 2a: matching-count semantics** (confirmed with the user, doc was silent — same pattern as `duplicate_account_rate`'s group-counting decision in D3 part 2b): a CRM contact/account counts as resolved if it matches **at least one** second-source record by hashed email / normalized domain — no dedup beyond that. If multiple second-source records share a hash/domain (e.g. duplicates in the second source), the CRM record still counts once, but `SecondSourceResolution.contactMatches`/`accountMatches` preserve **every** matching `SecondSourceRef` in an array (not just one arbitrarily chosen), so D5 part 2b's `activity_attribution_rate` can look up activities against any of them without re-deriving the match. Documented in `metric-definitions.md`'s `contact_identity_resolution_rate`/`account_resolution_rate` entries.
+- **D5 part 2a: hashing/normalizing happens in `sampleSecondSource`, not `resolveSecondSource`** — a mid-implementation change from the originally-approved plan (user caught it before code was written): `SecondSourceSampleResult` must never hold a raw email or domain, so the transform happens per-page, at the moment each record arrives from the adapter, not later when matching runs. The salt is generated once by `resolveSecondSource` (the only caller) and passed into `sampleSecondSource`, so `sampleSecondSource` itself never generates its own salt — every hash it produces is guaranteed comparable against whatever else that run hashes with the same salt.
+- **D5 part 2a: `resolveSecondSource` throws on `contactsHydrated`/`accountsHydrated` false, rather than returning an empty/`not_instrumented`-shaped result.** This isn't a metric, so there's no `MetricStatus` to degrade into — an orchestration caller invoking it before hydration has a bug, and a thrown error surfaces that immediately rather than silently returning an empty resolution that would look identical to "genuinely zero matches." Confirmed as the right shape during D5-part-2a planning, not silently assumed.
+- **`AdapterCapabilities.contactBatchLimit`** (D5 part 2a, cross-package, `packages/adapters`): new field, not a reuse of `accountBatchLimit` — same reasoning `childRecordBatchLimit` got its own field over reusing `accountBatchLimit` (different ref type, not actually a different limit value in the mock, but kept distinct for real adapters where the two could legitimately differ). Confirmed with the user before implementation, since this is a cross-package adapter-contract change.
+- **"No raw PII in `ReportData`/`--json`" test — written against `SecondSourceResolution`, not `ReportData`, this session, with the user's explicit OK.** Decision 4's original requirement (`second-source-adapter-design.md`) names `ReportData`/`--json` output specifically, but nothing wires D5 into the report until part 2b's metrics exist — there's no `ReportData` path touching second-source data yet to test against. `test/secondSource/resolve.test.ts`'s "no raw email substring anywhere in the resolution" test is the closest available stand-in. **Must be re-verified against real `ReportData`/`--json` output once D5 part 2b wires the 4 metrics into `buildReportData`** — this is not yet satisfied, only the resolution-layer version is.
 
 ---
 
@@ -249,6 +327,12 @@ metric's implementation is blocked.
   as above, but larger in practice — these two calls scale with the
   number of `childRecordBatchLimit`-sized chunks of sampled opportunities,
   not a single bounded call. Not reflected in `SamplePlan` at all yet.
+- **`hydrateContacts` and the dry-run budget, `sampleSecondSource` and the
+  dry-run budget (D5 part 2a).** Same unresolved gap as the two items
+  above, now with two more callers: neither is reflected in `SamplePlan`.
+  Not addressed this session — consistent with prior sessions treating
+  this as a recurring, deliberately deferred item, not solved once and
+  forgotten for the next hydration step.
 
 (The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
@@ -263,21 +347,22 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 - **D3 and D4 are as complete as they'll get in v0.1** (D4:
   `owner_history_enabled`/`stage_history_months` done, `close_date_history_enabled`
   deferred pending a new adapter capability). D5's adapter/mock/contract/
-  fixture layer exists (part 1, this session) but **no D5 metric is
-  implemented yet** — that's D5 part 2+. D6 text substrate (4) and D7
-  label availability (3) are both still fully not started.
-- **D5 part 2 (not started, no plan agreed yet):** the 4 D5 metrics
+  fixture layer (part 1) and joinability orchestration layer (part 2a,
+  this session) both exist, but **no D5 metric is implemented yet** —
+  that's D5 part 2b. D6 text substrate (4) and D7 label availability (3)
+  are both still fully not started.
+- **D5 part 2b (not started, no plan agreed yet):** the 4 D5 metrics
   themselves (`contact_identity_resolution_rate`, `account_resolution_rate`,
-  `activity_attribution_rate`, `temporal_anomaly_rate`), the D5
-  orchestration loop (`coverageSample.ts`/`sample.ts`-equivalent wiring
-  that calls `SecondSourceAdapter.list*`/`getXByRef` and enforces
-  `maxSampleSizePerType`), the SHA-256+per-run-salt hashing at the
-  ingestion boundary, and the "no raw email/domain in `ReportData`/
-  `--json`" test — all locked in design/decisions above, none written.
-- **`SecondSourceCapabilities.maxSampleSizePerType` enforcement is
-  untested** — the mock doesn't cap itself (caller-enforced by design);
-  whichever phase adds the D5 orchestration loop must include a test that
-  it actually stops paging at the cap.
+  `activity_attribution_rate`, `temporal_anomaly_rate`), each computed as
+  a pure function over a `SecondSourceResolution` (`src/secondSource/resolve.ts`)
+  the same way D1-D4 metrics compute over a `CoverageSample` — gating on
+  whether a second source was even connected (per `metric-definitions.md`'s
+  D5 intro: `not_instrumented` when absent), plus wiring `resolveSecondSource`
+  into `buildReportData`/`cli.ts`/`--json` for the first time. **Must
+  also re-verify the "no raw email/domain" test against real `ReportData`/
+  `--json` output** once that wiring exists — the part-2a version of this
+  test only covers `SecondSourceResolution` (see decisions above), which
+  was an explicit, approved stand-in, not the final requirement.
 - **`GetSecondSourceRecordsResult.truncatedRefIds`'s always-empty field on
   `getContactsByRef`/`getAccountsByRef`** (see decisions above) — minor
   cleanup candidate, not blocking.

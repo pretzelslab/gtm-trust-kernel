@@ -5,6 +5,7 @@ import type {
   Account,
   Activity,
   CanonicalStage,
+  Contact,
   Note,
   Opportunity,
   RecordRef,
@@ -15,6 +16,7 @@ import {
   buildCoverageSample,
   hydrateAccounts,
   hydrateActivities,
+  hydrateContacts,
   hydrateNotes,
   hydrateStageHistory,
 } from '../src/coverageSample.js';
@@ -28,7 +30,7 @@ function ref(objectType: RecordRef['objectType'], id: string): RecordRef {
   return { crm: 'mock', orgId: ORG, objectType, id };
 }
 
-function opp(id: string, stage: CanonicalStage, accountId: string): Opportunity {
+function opp(id: string, stage: CanonicalStage, accountId: string, contactIds: readonly string[] = []): Opportunity {
   return {
     ref: ref('opportunity', id),
     accountRef: ref('account', accountId),
@@ -37,7 +39,7 @@ function opp(id: string, stage: CanonicalStage, accountId: string): Opportunity 
     stageConfidence: 'mapped',
     vendorStageLabel: stage,
     isClosed: stage === 'closed_won' || stage === 'closed_lost',
-    contactLinks: [],
+    contactLinks: contactIds.map((contactId, i) => ({ contactRef: ref('contact', contactId), isPrimary: i === 0 })),
     createdAt: '2026-01-01T00:00:00.000Z',
     modifiedAt: '2026-01-01T00:00:00.000Z',
     concurrencyToken: `tok-${id}`,
@@ -48,6 +50,16 @@ function account(id: string): Account {
   return {
     ref: ref('account', id),
     name: `Account ${id}`,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    modifiedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function contact(id: string, email?: string): Contact {
+  return {
+    ref: ref('contact', id),
+    name: `Contact ${id}`,
+    email,
     createdAt: '2026-01-01T00:00:00.000Z',
     modifiedAt: '2026-01-01T00:00:00.000Z',
   };
@@ -115,6 +127,7 @@ const CAPABILITIES: AdapterCapabilities = {
   rateLimit: { kind: 'none', value: 0 },
   stageMap: {},
   accountBatchLimit: 200,
+  contactBatchLimit: 200,
   childRecordBatchLimit: 200,
   notesPerOpportunityLimit: 200,
   activitiesPerOpportunityLimit: 200,
@@ -127,11 +140,12 @@ function makeAdapter(
   stageHistory: StageHistoryEntry[] = [],
   notes: Note[] = [],
   activities: Activity[] = [],
+  contacts: Contact[] = [],
 ) {
   const data: MockOrgData = {
     accounts,
     opportunities: [],
-    contacts: [],
+    contacts,
     activities,
     notes,
     stageHistory,
@@ -246,6 +260,70 @@ describe('hydrateAccounts', () => {
     const sample = buildCoverageSample(result, adapter.capabilities());
 
     await expect(hydrateAccounts(sample, adapter)).rejects.toThrow();
+  });
+});
+
+describe('hydrateContacts', () => {
+  it('dedupes opportunities that share a contactLink into a single contactsByRef entry', async () => {
+    const result = makeSampleResult({
+      discovery: [opp('open-1', 'discovery', 'acc-1', ['con-1']), opp('open-2', 'discovery', 'acc-1', ['con-1'])],
+    });
+    const adapter = makeAdapter([], {}, {}, [], [], [], [contact('con-1', 'dana@example.com')]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateContacts(sample, adapter);
+
+    expect(hydrated.contactsByRef.size).toBe(1);
+    expect(hydrated.contactsByRef.get('con-1')?.ref.id).toBe('con-1');
+  });
+
+  it('counts an unresolvable contact ref as missing rather than throwing', async () => {
+    const result = makeSampleResult({
+      discovery: [opp('open-1', 'discovery', 'acc-1', ['con-1', 'con-missing'])],
+    });
+    const adapter = makeAdapter([], {}, {}, [], [], [], [contact('con-1')]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateContacts(sample, adapter);
+
+    expect(hydrated.missingContactCount).toBe(1);
+    expect(hydrated.contactsByRef.size).toBe(1);
+  });
+
+  it('flips contactsHydrated from false to true', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1', ['con-1'])] });
+    const adapter = makeAdapter([], {}, {}, [], [], [], [contact('con-1')]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+    expect(sample.contactsHydrated).toBe(false);
+
+    const { sample: hydrated } = await hydrateContacts(sample, adapter);
+    expect(hydrated.contactsHydrated).toBe(true);
+  });
+
+  it('leaves an opportunity with no contactLinks contributing nothing (not an error)', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], {}, {}, [], [], [], []);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateContacts(sample, adapter);
+
+    expect(hydrated.contactsByRef.size).toBe(0);
+    expect(hydrated.missingContactCount).toBe(0);
+  });
+
+  it('rejects, with no partial sample and no failed chunk counted as missing, when a chunk fails partway through', async () => {
+    const result = makeSampleResult({
+      discovery: [
+        opp('open-1', 'discovery', 'acc-1', ['con-1']),
+        opp('open-2', 'discovery', 'acc-1', ['con-2']),
+        opp('open-3', 'discovery', 'acc-1', ['con-3']),
+      ],
+    });
+    const contacts = ['con-1', 'con-2', 'con-3'].map((id) => contact(id));
+    const adapter = makeAdapter([], { contactBatchLimit: 2 }, { failGetContactsOnCall: { n: 2, kind: 'network' } }, [], [], [], contacts);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    await expect(hydrateContacts(sample, adapter)).rejects.toThrow();
   });
 });
 

@@ -20,6 +20,7 @@ const CAPABILITIES: AdapterCapabilities = {
   rateLimit: { kind: 'none', value: 0 },
   stageMap: {},
   accountBatchLimit: 200,
+  contactBatchLimit: 200,
   childRecordBatchLimit: 200,
   notesPerOpportunityLimit: 200,
   activitiesPerOpportunityLimit: 200,
@@ -58,6 +59,9 @@ function coverageSample(
     stageHistoryHydrated: false,
     missingAccountCount,
     oppsWithoutAccountRef,
+    contactsByRef: new Map(),
+    contactsHydrated: false,
+    missingContactCount: 0,
     capabilities: CAPABILITIES,
   };
 }
