@@ -2,41 +2,8 @@
  * D1 coverage metrics. See docs/metric-definitions.md, section D1.
  */
 
-import type { Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import type { MetricId } from '../rubric.js';
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
-import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
-
-const DAY_MS = 86_400_000;
-
-/** Every D1 metric is a share of some denominator of opportunities meeting a per-metric predicate. */
-function rateOverOpportunities(
-  metric: MetricId,
-  opportunities: readonly Opportunity[],
-  isFilled: (o: Opportunity) => boolean,
-): MetricResult {
-  const sampleSize = opportunities.length;
-  if (sampleSize === 0) {
-    return {
-      metric,
-      status: 'not_applicable',
-      value: null,
-      sampleSize: 0,
-      lowConfidence: false,
-      note: 'no open opportunities in sample',
-    };
-  }
-
-  const filled = opportunities.filter(isFilled).length;
-
-  return {
-    metric,
-    status: 'ok',
-    value: filled / sampleSize,
-    sampleSize,
-    lowConfidence: sampleSize < LOW_CONFIDENCE_SAMPLE_SIZE,
-  };
-}
+import { DAY_MS, rateOverOpportunities } from './shared.js';
 
 export function closeDateFillRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
   return rateOverOpportunities('close_date_fill_rate', sample.openOpportunities, (o) => o.closeDate != null);
