@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Readiness assessment: scored CRM data-health diagnostic. Not yet built.",
   "dependencies": {
-    "@gtm-trust-kernel/adapters": "*"
+    "@gtm-trust-kernel/adapters": "*",
+    "tldts": "7.4.13"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

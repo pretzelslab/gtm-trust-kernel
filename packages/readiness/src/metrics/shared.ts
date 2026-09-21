@@ -1,7 +1,9 @@
 /**
- * Helpers shared by more than one metric family (D1 coverage, D2 freshness).
+ * Helpers shared by more than one metric family (D1 coverage, D2 freshness,
+ * D3 consistency).
  */
 
+import { getDomain } from 'tldts';
 import type { Activity, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
 import type { MetricResult } from './types.js';
@@ -59,6 +61,62 @@ export function rateOverOpportunities(
     lowConfidence: sampleSize < LOW_CONFIDENCE_SAMPLE_SIZE,
   };
 }
+
+/**
+ * Reduces a raw domain-shaped string (a URL, a bare hostname, an email
+ * domain) to its registrable domain, for account dedupe (duplicate_account_rate,
+ * D3) and any future domain-based metric. This is the ONLY place domain
+ * normalization lives — import this, don't re-derive it.
+ *
+ * Delegates to tldts's getDomain, which already performs every step
+ * metric-definitions.md's normalization spec calls for (trim, lowercase,
+ * strip protocol/"www."/path/port/trailing dot, resolve via the Public
+ * Suffix List) — verified against the exact table in
+ * test/metrics/shared.test.ts before writing this, so those steps are not
+ * hand-rolled here on top of tldts.
+ *
+ * allowPrivateDomains: true — a PSL private-section host (herokuapp.com,
+ * github.io, etc.) keeps its subdomain as part of the registrable unit
+ * (acme.herokuapp.com stays acme.herokuapp.com, distinct from
+ * beta.herokuapp.com) instead of collapsing every tenant on a shared PaaS
+ * host down to one domain, which would manufacture false-positive
+ * duplicate_account_rate groups.
+ *
+ * Returns null for unresolvable input: empty/whitespace, IPs, localhost,
+ * anything with no public suffix (placeholders like "n/a" included).
+ */
+export function normalizeDomain(raw: string | undefined): string | null {
+  if (raw == null) {
+    return null;
+  }
+  return getDomain(raw, { allowPrivateDomains: true });
+}
+
+/**
+ * duplicate_account_rate's (D3) default shared-provider denylist —
+ * consumer/free-mail domains excluded from dedupe because they produce
+ * false-positive account duplicates. Compared on NORMALIZED domain, so
+ * lowercasing/whitespace in a config override doesn't need to be handled by
+ * the caller. Config-extensible: MetricConfig.sharedProviderDenylist
+ * replaces or supplements this list (see metrics/types.ts).
+ *
+ * Regional variants (yahoo.co.uk, etc.) are not included in this v0.1
+ * default — addable per-org via config. Not a technical limitation, just
+ * scope: see docs/STATUS.md.
+ */
+export const DEFAULT_SHARED_PROVIDER_DENYLIST: readonly string[] = [
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'yahoo.com',
+  'icloud.com',
+  'aol.com',
+  'proton.me',
+  'protonmail.com',
+  'gmx.com',
+];
 
 /** Callers must guard the empty case themselves; this throws rather than return a misleading number. */
 export function median(values: readonly number[]): number {

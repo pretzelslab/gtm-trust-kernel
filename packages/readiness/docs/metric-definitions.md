@@ -134,7 +134,28 @@ currently uses does not count against coverage. This is what makes
 domain with at least one other account in the sample, excluding domains on
 a shared-provider denylist (gmail.com, outlook.com, yahoo.com, and similar
 consumer/free-mail domains, which produce false positives).
-**Normalization:** lowercase, strip subdomains.
+**Normalization:** reduced to registrable domain (Public Suffix List, via
+`tldts`), not just lowercase + strip-subdomains — needed for correctness on
+multi-part TLDs (`sub.acme.co.uk` -> `acme.co.uk`, not `co.uk`). Single
+shared implementation: `normalizeDomain` in `src/metrics/shared.ts`; every
+domain-based metric must import it, not re-derive normalization.
+**Denominator:** sampled accounts (the distinct hydrated accounts backing
+the sample's opportunities, one row per account — not one row per
+opportunity) with a resolvable, non-denylisted normalized domain. Accounts
+with no resolvable domain, or whose normalized domain is on the
+shared-provider denylist, are excluded from the denominator.
+**Resolved ambiguity (today):** a duplicate group's numerator counts every
+member, not just members beyond the first — the definition above is
+symmetric ("shares a domain with at least one other account"), so a
+group's first-created account satisfies it too. The alternate ("beyond
+first") count is derivable from the reported duplicate-group count without
+a second metric; see docs/STATUS.md for that as a v0.2 open question.
+**Gate:** requires `CoverageSample.accountsHydrated` to be true (a
+build-order precondition, not an adapter capability) — returns
+`not_instrumented` otherwise, same as an `AdapterCapabilities`-gated metric.
+**Out of scope (v0.1):** cross-TLD dedupe (`acme.com` vs `acme.io` are
+never linked); regional shared-provider variants (`yahoo.co.uk` etc.) are
+not in the default denylist, addable per-org via config.
 **Threshold:** `duplicate_account_rate`.
 
 ### stage_activity_contradiction_rate

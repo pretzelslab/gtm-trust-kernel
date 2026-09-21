@@ -28,7 +28,7 @@ repeated here.
 | D2 `past_due_close_date_rate` | Done, tested | `1590803` |
 | D2 `median_next_step_age_days` | **Deferred** — not implemented | doc-only in `031ad35` |
 | D3 `stage_activity_contradiction_rate`, `round_amount_rate` | Done, tested | prior session, see git log |
-| D3 `stage_mapping_coverage`, `duplicate_account_rate` | Not started — pipeline glue landed in 2a (closed opps + account hydration), awaiting 2b | this session, see git log |
+| D3 `stage_mapping_coverage`, `duplicate_account_rate` | **Done, tested.** D3 is now fully implemented (all 4 metrics) | this session ("D3 part 2b"), see git log |
 | D4–D7 (16 remaining metrics) | Not started | — |
 
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
@@ -39,11 +39,11 @@ other half of the "open question" this doc used to carry; it's resolved.
 Files:
 - `src/metrics/coverage.ts` — D1 (all 7 metrics, including `owner_id_fill_rate`).
 - `src/metrics/freshness.ts` — D2 (two of three; see deferral below).
-- `src/metrics/consistency.ts` — D3 (two of four; `stage_mapping_coverage`/`duplicate_account_rate` not implemented, see status table).
-- `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below).
-- `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig`.
+- `src/metrics/consistency.ts` — D3, **all 4 metrics done**: `stage_activity_contradiction_rate`, `round_amount_rate`, `stage_mapping_coverage`, `duplicate_account_rate`.
+- `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below), `normalizeDomain`, `DEFAULT_SHARED_PROVIDER_DENYLIST` (added this session, D3 part 2b).
+- `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig` (gained optional `sharedProviderDenylist` this session).
 - `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates its accounts (`hydrateAccounts`); see decisions below.
-- `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family.
+- `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family. `test/metrics/shared.test.ts` is the exception (added this session) — it tests `normalizeDomain` directly since that helper isn't itself a metric and has no fixture file.
 - `test/coverageSample.test.ts` — builder + hydration tests (not per-metric, so it doesn't follow the `test/fixtures/` + `test/metrics/` split above).
 
 Cross-package: `packages/adapters` gained `CrmAdapter.getAccounts(refs)` this
@@ -52,7 +52,11 @@ addition D1's `activitySync`/`contactLinks` were — see git history on those
 files (`contract: add getAccounts batch read`) if the rationale is needed
 again.
 
-`npm run ci` green at handoff: adapters 20, kernel 22, readiness 130.
+`npm run ci` green at handoff: adapters 20, kernel 22, readiness 154.
+
+Cross-package, D3 part 2b: `tldts` (`7.4.13`, exact-pinned) added as a
+`packages/readiness` dependency — the only domain-normalization library in
+the tree, used solely by `normalizeDomain`.
 
 ---
 
@@ -77,13 +81,17 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **Canonical model additions made to support D1** (not just Phase C internals — these are cross-package changes, already committed in `9200b08`): `AdapterCapabilities.activitySync: boolean` (`packages/adapters/src/types.ts`), and `OpportunityContactLink` + `Opportunity.contactLinks: readonly OpportunityContactLink[]` (`packages/adapters/src/model/canonical.ts`). Both went through full interface review before being written — see git history on those files if the rationale is needed again.
 - **`stage_activity_contradiction_rate`:** the qualifying-activity predicate is imported, not copied, from `activity_capture_rate` — extracted into `hasQualifyingActivity` (`shared.ts`), parameterized on window start/`asOf` so each caller supplies its own window length. This metric's window is **21 days**, not `activity_capture_rate`'s 30 — a late-stage deal implies more frequent expected touchpoints. "Late-stage" = `CANONICAL_STAGE_ORDER.slice(-2)` (today: `proposal`, `negotiation`), derived rather than hardcoded so it tracks the canonical ladder if it changes. Gated on `AdapterCapabilities.activitySync`, same as `activity_capture_rate` (same underlying activity data) — `not_instrumented` with the same note text when the gate is off.
 - **`round_amount_rate`:** denominator excludes null and zero amount, mirroring `amount_fill_rate`'s zero-exclusion and `past_due_close_date_rate`'s null-exclusion pattern — amount = 0 is already counted as unfilled by `amount_fill_rate`, not double-counted here. **Negative amounts are left in the denominator** and evaluated by the same `% 1000 === 0` rule as any other amount (e.g. -5000 counts as round) — this is an **open question for v0.2**, not resolved this session; flag it if negative amounts turn out to be common enough to matter (they generally shouldn't occur in a real CRM, but nothing currently rejects them upstream).
-- **Excluded-count reporting (`round_amount_rate`):** `MetricResult` has no dedicated field for "count excluded from the denominator," so the excluded count is surfaced via `note` on the `'ok'` path (`"<n> opportunities excluded from the denominator (null or zero amount)"`), built by calling `rateOverOpportunities` and then overwriting `note`. **Tech debt:** if a third metric needs to report an excluded count, stop reusing `note` for this and add a structured `excludedCount` (or similar) field to `MetricResult` instead — two ad hoc string-encoded instances is tolerable, three is a pattern that should be a real field.
+- **Excluded-count reporting (`round_amount_rate`, and now `stage_mapping_coverage`):** `MetricResult` has no dedicated field for "count excluded from the denominator" (or, for `stage_mapping_coverage`, the mapped/inferred/unmapped split), so both surface it via `note` on the `'ok'` path, built by calling `rateOverOpportunities` and then overwriting `note`. **This is now the second use of the pattern** (D3 part 2b, this session) — per the original tech-debt call: **a third metric needing this should stop reusing `note` and add a structured field (`excludedCount` or similar) to `MetricResult` instead.** `duplicate_account_rate`'s note (below) is related but heavier — it packs five distinct counts into one string — and is itself a candidate for that structured field if a third "plain" excluded-count case doesn't show up first.
 - **`CrmAdapter.getAccounts(refs)`** (D3 part 2a, `packages/adapters`): added because `listAccounts` has no ref filter — only a since-window, cursor-paginated stream — and using it to hydrate accounts for an already-sampled set of opportunities would mean paging the whole account table regardless of sample size, in tension with the scope doc's "never full-scan a production org" rule. `AdapterCapabilities.accountBatchLimit` (default 200 in the mock, matching Salesforce SOQL `IN` practice) is **advisory only** — the adapter does not enforce or truncate at it; chunking to it is the caller's (`hydrateAccounts`'s) job. Missing refs are absent from the result, never thrown; a ref repeated in one request collapses to one result entry; results are sorted by `ref.id`, independent of backend order. `MockFaults.failGetAccountsOnCall` is a separate fault hook from the existing `listCalls`-based `failListOnCall` — `getAccounts` is a batch read, not a list method, and isn't wired into the `listCalls` counter.
 - **`buildCoverageSample`/`hydrateAccounts` split** (`src/coverageSample.ts`): `buildCoverageSample` is pure/sync (wires up `openOpportunities`/`closedOpportunities` from a `SampleResult`); `hydrateAccounts` is the only impure/async step (fetches accounts via the adapter), mirroring `runSample` already being the impure orchestrator while `CoverageSample` and the metrics stay pure. `accountsByRef`/`missingAccountCount` are placeholder empty/zero until `hydrateAccounts` runs; `accountsHydrated: boolean` (false → true) is the explicit signal of that transition. **Any metric that reads `accountsByRef` (i.e. `duplicate_account_rate`, in 2b) must return `not_instrumented` when `accountsHydrated` is false** — the same gate-off-means-`not_instrumented` rule established for `AdapterCapabilities.activitySync`, applied here to a build-order precondition rather than a capability.
 - **Account hydration determinism:** the distinct `accountRef` set (deduped by `ref.id` across `openOpportunities + closedOpportunities`) is sorted by `ref.id` before chunking, so `accountsByRef`'s insertion order is always globally `ref.id`-sorted — independent of opportunity order or which opportunities happened to reference which accounts. `missingAccountCount = distinctRefs.length - accountsByRef.size`, only ever computed after every chunk succeeds.
 - **Hydration failure is all-or-nothing:** `hydrateAccounts` does not catch, retry, or partially apply — a rejected `getAccounts` call on any chunk propagates as-is out of `hydrateAccounts`. No partial `CoverageSample` is ever returned, and a failed chunk's refs are never counted in `missingAccountCount` (that field only exists on a fully successful hydration).
 - **`oppsWithoutAccountRef`:** opportunities with no usable `accountRef` (absent, or `ref.id` empty/whitespace-only — `accountRef` is non-optional in the canonical model, but this guards real adapter data the same way `owner_id_fill_rate` guards `ownerId`) are skipped entirely by both `buildCoverageSample`'s counting and `hydrateAccounts`'s ref derivation. Counted separately from `missingAccountCount`, which is only about refs that *were* requested but didn't resolve.
 - **Dry-run budget now includes account hydration:** `SamplePlan.plannedAccountApiCalls` is a worst-case ceiling — `Math.ceil((SAMPLE_STRATA.length * perStratumSampleSize) / accountBatchLimit)`, i.e. as if every sampled opportunity resolved to a distinct account. Real orgs share accounts across opportunities, so actual hydration calls are almost always lower; this is a budget ceiling for the confirmation prompt, not a typical-case estimate — same framing `plannedApiCalls` already uses. `formatRateLimit`'s quota percentage/seconds estimate now uses `plannedApiCalls + plannedAccountApiCalls` (understating it would defeat the point of the quota-discipline display).
+- **`stage_mapping_coverage` (D3 part 2b):** denominator is `[...openOpportunities, ...closedOpportunities]`; numerator is `stageConfidence` in `{mapped, inferred}` — only `unmapped` counts against coverage. Uses `rateOverOpportunities` directly (no new helper needed, opportunities are already the right shape). `note` on the `'ok'` path reports the mapped/inferred/unmapped split.
+- **`normalizeDomain` (`src/metrics/shared.ts`, D3 part 2b):** the only domain-normalization function in the codebase — every domain-based metric must import it, not re-derive normalization. Implemented as a thin wrapper around `tldts`'s `getDomain(raw, { allowPrivateDomains: true })`, not a hand-rolled trim/lowercase/strip-protocol/strip-www/strip-path/strip-port/strip-trailing-dot pipeline — probed `tldts` directly against the full test table before writing the function and confirmed its default behavior already performs every one of those steps, so duplicating them would have been dead code. `allowPrivateDomains: true` is a deliberate choice (this session, per explicit instruction): without it, PSL private-section hosts (`herokuapp.com`, `github.io`, `blogspot.com`, etc.) collapse every tenant's subdomain down to the shared host domain, which would manufacture false-positive `duplicate_account_rate` groups for unrelated companies both hosted on e.g. Heroku. With it, `acme.herokuapp.com` and `beta.herokuapp.com` normalize to two different values. Covered by `test/metrics/shared.test.ts`'s table, which carries a header comment marking it as `normalizeDomain`'s behavioral contract: a `tldts` version bump that changes any row's expected output must be reviewed and the row updated deliberately, never auto-updated to match new library output.
+- **`DEFAULT_SHARED_PROVIDER_DENYLIST` (`src/metrics/shared.ts`) / `MetricConfig.sharedProviderDenylist` (D3 part 2b):** 11 default consumer/free-mail domains (gmail.com, googlemail.com, outlook.com, hotmail.com, live.com, yahoo.com, icloud.com, aol.com, proton.me, protonmail.com, gmx.com). `MetricConfig.sharedProviderDenylist`, when supplied, **replaces** the default rather than merging with it (same `??` pattern as `DEFAULT_SAMPLE_CONFIG` elsewhere in this package) — an org that wants to add one domain must currently repeat the full list; not treated as a problem worth solving until an actual caller needs it. Every denylist entry (default or config-supplied) is itself passed through `normalizeDomain` before comparison, so a config entry like `" Gmail.COM "` still matches a sampled account's `"gmail.com"` — verified by a dedicated test (`duplicateAccountRateConfigDenylistFixture`).
+- **`duplicate_account_rate` (D3 part 2b):** gated on `CoverageSample.accountsHydrated` (a build-order precondition, not an `AdapterCapabilities` flag) — `not_instrumented` when false, without reading `accountsByRef`, same rule as `CoverageSample`'s own docblock already specified for this metric. Operates over `sample.accountsByRef.values()` (the distinct hydrated accounts, one row per account — **not** `openOpportunities`/`closedOpportunities`), since the doc's "sampled accounts" language means accounts, not opportunities. Each account's `domain` goes through `normalizeDomain`; accounts with a `null` result, or a denylisted result, are excluded from the denominator and counted separately (`excludedNullDomain`, `excludedDenylisted`). Two `not_applicable` notes are distinguished: `"no hydrated accounts in sample"` (accountsByRef itself is empty) vs. `"no accounts with a resolvable, non-denylisted domain in sample"` (accounts exist but all were excluded) — same "distinguish the empty-denominator cause" convention `past_due_close_date_rate` established. **Group-counting decision (confirmed with the user this session, doc was silent — did not pick unilaterally):** every account in a duplicate group (size >= 2) counts toward the numerator, including the first-created member — not just members beyond the first. The `note` on the `'ok'` path additionally reports the duplicate-group count, so the alternate "beyond first" count (denominator members in groups minus group count) is derivable without a second metric or a rubric.ts change. Does not reuse `rateOverOpportunities` (it's typed to `Opportunity[]`; this is the first Account-shaped metric) — written inline rather than genericizing that helper for a single caller.
 
 ---
 
@@ -116,6 +124,25 @@ and wait for approval before writing any of it, same process as
   amount (e.g. -5000 counts as round). Not resolved this session — deferred
   to v0.2. Revisit if negative amounts turn out to be common enough in real
   data to matter; nothing upstream currently rejects them.
+- **`duplicate_account_rate`, "beyond first" group-counting variant.** This
+  session's decision counts every member of a duplicate group toward the
+  numerator (see decisions above). If a future consumer wants the "members
+  beyond the first" count instead (e.g. for a remediation-effort estimate —
+  "N accounts need merging" reads differently from "N accounts are
+  involved"), it's derivable from the existing `note`'s duplicate-group
+  count without changing the metric; only becomes a real question if
+  something needs it as a first-class number rather than derived from a
+  string.
+- **`duplicate_account_rate` and cross-TLD dedupe.** `acme.com` and
+  `acme.io` are never linked as duplicates in v0.1 — out of scope, per
+  `metric-definitions.md`. Revisit if this undercounts duplication enough
+  to matter in practice.
+- **`duplicate_account_rate` and regional shared-provider domains.**
+  `DEFAULT_SHARED_PROVIDER_DENYLIST` has no regional variants (`yahoo.co.uk`,
+  etc.) in v0.1 — addable per-org via `MetricConfig.sharedProviderDenylist`,
+  which currently *replaces* the default rather than merging with it (see
+  decisions above). Revisit if an org needs "default plus a few extras"
+  often enough to justify a merge option.
 
 (The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
@@ -127,13 +154,18 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
-- D3 remaining (`stage_mapping_coverage`, `duplicate_account_rate` — 2a's
-  pipeline glue is done, these are next up as 2b), D4 history depth (3),
-  D5 joinability (4, all gated on a second source being connected), D6 text
-  substrate (4), D7 label availability (3) — 16 metrics total remaining.
+- **D3 is now complete (all 4 metrics).** Next up: D4 history depth (3
+  metrics), D5 joinability (4, all gated on a second source being
+  connected), D6 text substrate (4), D7 label availability (3) — 16
+  metrics total remaining.
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
 - `median_next_step_age_days`'s `nextStepHistory` capability, if it's
   prioritized before the rest of D4–D7.
-- The `excludedCount`-as-`note` tech debt in `round_amount_rate` (see
-  decisions above) — revisit if a third metric needs the same pattern.
+- The `excludedCount`-as-`note` tech debt, now at its second use
+  (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
+  revisit if a third metric needs the same pattern, or if
+  `duplicate_account_rate`'s heavier note turns out to need it sooner.
+- The three `duplicate_account_rate` open questions above (beyond-first
+  variant, cross-TLD, regional shared-provider domains) — none blocking,
+  all deferred to v0.2 or later.

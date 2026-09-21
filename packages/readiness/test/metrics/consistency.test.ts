@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { roundAmountRate, stageActivityContradictionRate } from '../../src/metrics/consistency.js';
+import {
+  duplicateAccountRate,
+  roundAmountRate,
+  stageActivityContradictionRate,
+  stageMappingCoverage,
+} from '../../src/metrics/consistency.js';
 import {
   ROUND_AMOUNT_RATE_EXPECTED,
   coverageSample as roundAmountCoverageSample,
@@ -13,6 +18,21 @@ import {
   stageActivityContradictionRateGateOffFixture,
   stageActivityContradictionRateNoLateStageFixture,
 } from '../fixtures/stage_activity_contradiction_rate.js';
+import {
+  STAGE_MAPPING_COVERAGE_EXPECTED,
+  stageMappingCoverageEmptyFixture,
+  stageMappingCoverageFixture,
+} from '../fixtures/stage_mapping_coverage.js';
+import {
+  DUPLICATE_ACCOUNT_RATE_EXPECTED,
+  duplicateAccountRateAllExcludedFixture,
+  duplicateAccountRateConfigDenylistFixture,
+  duplicateAccountRateEmptyFixture,
+  duplicateAccountRateFixture,
+  duplicateAccountRateGateOffFixture,
+} from '../fixtures/duplicate_account_rate.js';
+
+const ASOF = '2026-06-15T00:00:00.000Z';
 
 describe('stageActivityContradictionRate', () => {
   it('matches the golden fixture: 3 of 5 open opportunities in proposal/negotiation have no qualifying activity in the trailing 21 days', () => {
@@ -91,6 +111,105 @@ describe('roundAmountRate', () => {
       sampleSize: 0,
       lowConfidence: false,
       note: 'no open opportunities in sample',
+    });
+  });
+});
+
+describe('stageMappingCoverage', () => {
+  it('matches the golden fixture: 4 of 6 sampled opportunities (open + closed) are mapped or inferred, split reported via note', () => {
+    const result = stageMappingCoverage(stageMappingCoverageFixture(), { asOf: ASOF });
+    expect(result).toEqual({
+      metric: 'stage_mapping_coverage',
+      status: 'ok',
+      value: STAGE_MAPPING_COVERAGE_EXPECTED.value,
+      sampleSize: STAGE_MAPPING_COVERAGE_EXPECTED.sampleSize,
+      lowConfidence: true, // 6 < LOW_CONFIDENCE_SAMPLE_SIZE (30)
+      note: `${STAGE_MAPPING_COVERAGE_EXPECTED.mapped} mapped, ${STAGE_MAPPING_COVERAGE_EXPECTED.inferred} inferred, ${STAGE_MAPPING_COVERAGE_EXPECTED.unmapped} unmapped`,
+    });
+  });
+
+  it('returns not_applicable rather than dividing by zero when there are no sampled opportunities at all', () => {
+    const result = stageMappingCoverage(stageMappingCoverageEmptyFixture(), { asOf: ASOF });
+    expect(result).toEqual({
+      metric: 'stage_mapping_coverage',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'no sampled opportunities (open or closed) in sample',
+    });
+  });
+});
+
+describe('duplicateAccountRate', () => {
+  it('matches the golden fixture: one duplicate group of 3 (all members counted) among 4 accounts considered after excluding null-domain and denylisted accounts', () => {
+    const result = duplicateAccountRate(duplicateAccountRateFixture(), { asOf: ASOF });
+    expect(result).toEqual({
+      metric: 'duplicate_account_rate',
+      status: 'ok',
+      value: DUPLICATE_ACCOUNT_RATE_EXPECTED.value,
+      sampleSize: DUPLICATE_ACCOUNT_RATE_EXPECTED.sampleSize,
+      lowConfidence: true, // 4 < LOW_CONFIDENCE_SAMPLE_SIZE (30)
+      note:
+        `${DUPLICATE_ACCOUNT_RATE_EXPECTED.excludedNullDomain} accounts excluded (no resolvable domain), ` +
+        `${DUPLICATE_ACCOUNT_RATE_EXPECTED.excludedDenylisted} excluded (shared-provider domain), ` +
+        `${DUPLICATE_ACCOUNT_RATE_EXPECTED.duplicateGroupCount} duplicate group(s) among ${DUPLICATE_ACCOUNT_RATE_EXPECTED.sampleSize} accounts considered; ` +
+        `${DUPLICATE_ACCOUNT_RATE_EXPECTED.missingAccountCount} accountRefs did not resolve, ` +
+        `${DUPLICATE_ACCOUNT_RATE_EXPECTED.oppsWithoutAccountRef} opportunities had no usable accountRef`,
+    });
+  });
+
+  it('returns not_applicable with a distinct note when every hydrated account is excluded (null or denylisted domain)', () => {
+    const result = duplicateAccountRate(duplicateAccountRateAllExcludedFixture(), { asOf: ASOF });
+    expect(result).toEqual({
+      metric: 'duplicate_account_rate',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'no accounts with a resolvable, non-denylisted domain in sample',
+    });
+  });
+
+  it('returns not_applicable with a distinct note when there are no hydrated accounts at all', () => {
+    const result = duplicateAccountRate(duplicateAccountRateEmptyFixture(), { asOf: ASOF });
+    expect(result).toEqual({
+      metric: 'duplicate_account_rate',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'no hydrated accounts in sample',
+    });
+  });
+
+  it('returns not_instrumented when accountsHydrated is false, without reading accountsByRef', () => {
+    const result = duplicateAccountRate(duplicateAccountRateGateOffFixture(), { asOf: ASOF });
+    expect(result).toEqual({
+      metric: 'duplicate_account_rate',
+      status: 'not_instrumented',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'account hydration has not run for this sample (accountsHydrated is false)',
+    });
+  });
+
+  it('normalizes a config-supplied denylist entry before comparison, so " Gmail.COM " still excludes a gmail.com account', () => {
+    const result = duplicateAccountRate(duplicateAccountRateConfigDenylistFixture(), {
+      asOf: ASOF,
+      sharedProviderDenylist: [' Gmail.COM '],
+    });
+    expect(result).toEqual({
+      metric: 'duplicate_account_rate',
+      status: 'ok',
+      value: 0,
+      sampleSize: 1,
+      lowConfidence: true,
+      note:
+        '0 accounts excluded (no resolvable domain), 1 excluded (shared-provider domain), ' +
+        '0 duplicate group(s) among 1 accounts considered; 0 accountRefs did not resolve, ' +
+        '0 opportunities had no usable accountRef',
     });
   });
 });

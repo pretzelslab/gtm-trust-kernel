@@ -89,4 +89,13 @@ export interface CoverageSample {
 export interface MetricConfig {
   /** Reference "now" for date-window math, ISO timestamp. Pass explicitly for reproducible tests. */
   readonly asOf: string;
+  /**
+   * duplicate_account_rate's (D3) shared-provider denylist. Entries are
+   * compared on normalized domain — a caller-supplied entry is passed
+   * through normalizeDomain (metrics/shared.ts) before comparison, same as
+   * a sampled account's domain, so casing/whitespace in config doesn't need
+   * separate handling. Defaults to DEFAULT_SHARED_PROVIDER_DENYLIST when
+   * omitted.
+   */
+  readonly sharedProviderDenylist?: readonly string[];
 }
