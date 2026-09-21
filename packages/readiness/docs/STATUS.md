@@ -42,6 +42,8 @@ already computed but discarded: `MetricResult` gained `floor`, surfaced
 as a visible badge in the report. See "Cross-package" and the new
 decisions below.
 
+D5 doc decisions are now locked (`metric-definitions.md`'s D5 section rewritten, gating fixed to `not_instrumented`) and a draft second-source adapter design note exists (`packages/readiness/docs/second-source-adapter-design.md`) — no D5 metric code written yet.
+
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
 required/non-nullable, so there's no "missing" state to measure. See
 metric-definitions.md's D1 header for the full explanation. This was the

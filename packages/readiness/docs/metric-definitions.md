@@ -237,29 +237,43 @@ capability being off.
 ## D5. Cross-system joinability
 
 *Applies only when a second source (engagement tool, billing/product system)
-is connected. If only the CRM adapter is configured, these five metrics
-report `not_applicable`, and every capability gated on them is reported
-Blocked with remediation "connect a second source to enable this
-capability" rather than silently passing.*
+is connected. If only the CRM adapter is configured, these four metrics
+return `not_instrumented` — the same capability-matrix gate-off convention
+established in D1–D4 (see `activity_capture_rate`'s "Capability-matrix
+gate"), not `not_applicable`. Every capability gated on a D5 metric is
+reported Blocked with remediation "connect a second source to enable this
+capability" when that metric is `not_instrumented`.*
 
 ### contact_identity_resolution_rate
 **Definition:** share of sampled CRM contacts that match a contact in the
-second source by normalized, lowercased email address, using SHA-256 hashed
-keys for the match (raw emails from the second source are never materialized
-in this tool — see `CLAUDE.md` rule 2).
+second source by normalized email address.
+**Hash keys:** each email is trimmed and lowercased, then hashed with
+SHA-256 salted with a random value generated once per D5 run. The salt and
+every hashed key live in memory only for the duration of that run and are
+discarded when it completes — never persisted, never logged (raw emails
+from the second source are never materialized in this tool — see
+`claude/gtm-readiness-scope.md:96` and `:260`).
 **Threshold:** `contact_identity_resolution_rate`.
 
 ### account_resolution_rate
 **Definition:** share of sampled CRM accounts that match an account/customer
-in the second source by normalized website domain (strip protocol, `www.`,
-and trailing slash; lowercase).
+in the second source by normalized website domain, using the same
+`normalizeDomain` (`src/metrics/shared.ts`, established in D3 for
+`duplicate_account_rate`) on both sides of the match — not a separate
+normalization recipe.
 **Threshold:** `account_resolution_rate`.
 
 ### activity_attribution_rate
 **Definition:** share of sampled engagement-tool activities (calls, emails,
 meetings) that can be matched to a specific CRM opportunity, via the contact
-and account resolution above plus a time-window heuristic (activity dated
-within the opportunity's open window).
+and account resolution above plus a time window: the activity must be dated
+between the opportunity's `createdAt` and its `closeDate` if the opportunity
+is closed, or between `createdAt` and `asOf` if it's still open.
+**Resolution reuse:** the contact/account match results are computed once
+per run and held in memory, shared with `contact_identity_resolution_rate`/
+`account_resolution_rate` rather than recomputed for this metric — never
+persisted, never merged into a combined record (same in-memory-only,
+discard-at-end-of-run rule as the hash keys above).
 **Threshold:** `activity_attribution_rate`.
 
 ### temporal_anomaly_rate
@@ -267,6 +281,9 @@ within the opportunity's open window).
 any of: `CreatedDate > LastModifiedDate`; an Activity dated after its
 opportunity's Close Date; any timestamp more than 24 hours in the future
 relative to the sampling run time.
+**Denominator:** the sum of both sources' sampled records — CRM records and
+second-source records counted together, with no CRM-only carve-out. A
+record from either source can independently trip the numerator.
 **Resolved ambiguity (today):** this replaced a boolean
 (`temporal_alignment_ok`) because a handful of anomalous rows shouldn't
 block the whole capability — only a high *rate* of them should. See
