@@ -1,7 +1,8 @@
 # Metric definitions — gtm-readiness v0.1.0
 
 Feeds Phase C (`packages/readiness/src/metrics/*.ts`). Each entry is what a
-Claude CLI session pastes as input, per the runbook's Step 7 prompt template.
+Claude CLI session pastes as input, per `claude/RUNBOOK.md`'s Step 7 prompt
+template.
 If an implementation session hits a case not covered here, that's a gap in
 this doc, not a judgment call for the session to make — stop and add it here.
 

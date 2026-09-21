@@ -1,7 +1,12 @@
 # Phase C ("readiness") — status and handoff state
 
-Not the build runbook — see the open question below about `metric-definitions.md`'s
-"runbook" reference, which points at a different, currently-nonexistent document.
+Not the build runbook. That's `claude/RUNBOOK.md` (repo root) — the
+step-by-step build process, including the Phase C "one metric per session"
+loop `metric-definitions.md` cross-references. This file is a point-in-time
+state snapshot for resuming `packages/readiness` cold; it doesn't replace
+either `claude/RUNBOOK.md` or `claude/gtm-readiness-scope.md` (the original
+scope doc — see its section 3 for the seven-dimension metric list this
+whole package implements against).
 
 Working state for continuing `packages/readiness` across sessions. Read this
 before `metric-definitions.md` when picking the work back up cold.
@@ -86,17 +91,11 @@ and wait for approval before writing any of it, same process as
 
 ## Open questions, not yet resolved
 
-**The `metric-definitions.md` "runbook" reference.** Line 4 says "per the
-runbook's Step 7 prompt template" — describing a build-process document
-with numbered steps, distinct from this file (see the note at the top of
-this doc). Grepped the whole repo: no such file exists anywhere, under any
-name. Predates this doc entirely (from `c5c3015`), so it isn't something
-this rename broke — it was already dangling. Not resolved: create the
-stub, remove/soften the reference, or leave it as a deliberate forward
-pointer to future work. Needs a decision, not a guess.
-
-*(The `stage_fill_rate`/`owner_id_fill_rate` question that used to live here
-is resolved — see the status table above.)*
+None currently. (The `metric-definitions.md` "runbook" reference and the
+`stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
+both resolved — the runbook reference now points at `claude/RUNBOOK.md`,
+added to the repo and confirmed to match: its Step 7 is exactly the
+"one metric per session" prompt loop the doc describes.)
 
 ---
 
@@ -105,8 +104,6 @@ is resolved — see the status table above.)*
 - D3 consistency/hygiene (4 metrics), D4 history depth (3), D5 joinability
   (4, all gated on a second source being connected), D6 text substrate (4),
   D7 label availability (3) — 18 metrics total remaining.
-- The dangling "runbook" reference above, whenever it's convenient — it's
-  not blocking anything, just inaccurate.
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
 - `median_next_step_age_days`'s `nextStepHistory` capability, if it's
