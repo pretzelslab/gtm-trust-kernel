@@ -27,7 +27,9 @@ repeated here.
 | D2 `median_days_since_modified` | Done, tested | `1590803` |
 | D2 `past_due_close_date_rate` | Done, tested | `1590803` |
 | D2 `median_next_step_age_days` | **Deferred** — not implemented | doc-only in `031ad35` |
-| D3–D7 (18 remaining metrics) | Not started | — |
+| D3 `stage_activity_contradiction_rate`, `round_amount_rate` | Done, tested | this session, see git log |
+| D3 `stage_mapping_coverage`, `duplicate_account_rate` | **Blocked** — sample-pipeline gaps, not implemented | — |
+| D4–D7 (16 remaining metrics) | Not started | — |
 
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
 required/non-nullable, so there's no "missing" state to measure. See
@@ -37,11 +39,12 @@ other half of the "open question" this doc used to carry; it's resolved.
 Files:
 - `src/metrics/coverage.ts` — D1 (all 7 metrics, including `owner_id_fill_rate`).
 - `src/metrics/freshness.ts` — D2 (two of three; see deferral below).
-- `src/metrics/shared.ts` — helpers used by both families (see below).
+- `src/metrics/consistency.ts` — D3 (two of four; `stage_mapping_coverage`/`duplicate_account_rate` not implemented, see status table).
+- `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below).
 - `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig`.
 - `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family.
 
-`npm run ci` green at handoff: adapters 14, kernel 22, readiness 114.
+`npm run ci` green at handoff: adapters 14, kernel 22, readiness 120.
 
 ---
 
@@ -64,6 +67,9 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **`owner_id_fill_rate`:** empty-string and whitespace-only `ownerId` count as unfilled, same as `undefined` — `(ownerId?.trim().length ?? 0) > 0`, not a bare non-null check (same shape as `next_step_fill_rate`'s edge case, different field). Deliberately **not** added to any `CapabilitySpec.gates` in `rubric.ts` — report-only for now. If a capability should eventually gate on it, that's a separate decision, not implied by this metric existing.
 - **`shared.ts`** (`src/metrics/shared.ts`) holds `rateOverOpportunities` (the share-of-denominator-with-a-predicate pattern used by most D1 metrics and by `past_due_close_date_rate`), `median()`, and `DAY_MS`. Originally lived only in `coverage.ts`; extracted when D2 needed the same shape. `coverage.ts`'s behavior/output did not change in that extraction — confirm this stays true if you touch either file.
 - **Canonical model additions made to support D1** (not just Phase C internals — these are cross-package changes, already committed in `9200b08`): `AdapterCapabilities.activitySync: boolean` (`packages/adapters/src/types.ts`), and `OpportunityContactLink` + `Opportunity.contactLinks: readonly OpportunityContactLink[]` (`packages/adapters/src/model/canonical.ts`). Both went through full interface review before being written — see git history on those files if the rationale is needed again.
+- **`stage_activity_contradiction_rate`:** the qualifying-activity predicate is imported, not copied, from `activity_capture_rate` — extracted into `hasQualifyingActivity` (`shared.ts`), parameterized on window start/`asOf` so each caller supplies its own window length. This metric's window is **21 days**, not `activity_capture_rate`'s 30 — a late-stage deal implies more frequent expected touchpoints. "Late-stage" = `CANONICAL_STAGE_ORDER.slice(-2)` (today: `proposal`, `negotiation`), derived rather than hardcoded so it tracks the canonical ladder if it changes. Gated on `AdapterCapabilities.activitySync`, same as `activity_capture_rate` (same underlying activity data) — `not_instrumented` with the same note text when the gate is off.
+- **`round_amount_rate`:** denominator excludes null and zero amount, mirroring `amount_fill_rate`'s zero-exclusion and `past_due_close_date_rate`'s null-exclusion pattern — amount = 0 is already counted as unfilled by `amount_fill_rate`, not double-counted here. **Negative amounts are left in the denominator** and evaluated by the same `% 1000 === 0` rule as any other amount (e.g. -5000 counts as round) — this is an **open question for v0.2**, not resolved this session; flag it if negative amounts turn out to be common enough to matter (they generally shouldn't occur in a real CRM, but nothing currently rejects them upstream).
+- **Excluded-count reporting (`round_amount_rate`):** `MetricResult` has no dedicated field for "count excluded from the denominator," so the excluded count is surfaced via `note` on the `'ok'` path (`"<n> opportunities excluded from the denominator (null or zero amount)"`), built by calling `rateOverOpportunities` and then overwriting `note`. **Tech debt:** if a third metric needs to report an excluded count, stop reusing `note` for this and add a structured `excludedCount` (or similar) field to `MetricResult` instead — two ad hoc string-encoded instances is tolerable, three is a pattern that should be a real field.
 
 ---
 
@@ -91,7 +97,13 @@ and wait for approval before writing any of it, same process as
 
 ## Open questions, not yet resolved
 
-None currently. (The `metric-definitions.md` "runbook" reference and the
+- **`round_amount_rate` and negative amounts.** Currently left in the
+  denominator and evaluated by the same `% 1000 === 0` rule as any other
+  amount (e.g. -5000 counts as round). Not resolved this session — deferred
+  to v0.2. Revisit if negative amounts turn out to be common enough in real
+  data to matter; nothing upstream currently rejects them.
+
+(The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
 both resolved — the runbook reference now points at `claude/RUNBOOK.md`,
 added to the repo and confirmed to match: its Step 7 is exactly the
@@ -101,10 +113,13 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
-- D3 consistency/hygiene (4 metrics), D4 history depth (3), D5 joinability
+- D3 remaining (`stage_mapping_coverage`, `duplicate_account_rate` — both
+  blocked on sample-pipeline gaps), D4 history depth (3), D5 joinability
   (4, all gated on a second source being connected), D6 text substrate (4),
-  D7 label availability (3) — 18 metrics total remaining.
+  D7 label availability (3) — 16 metrics total remaining.
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
 - `median_next_step_age_days`'s `nextStepHistory` capability, if it's
-  prioritized before the rest of D3–D7.
+  prioritized before the rest of D4–D7.
+- The `excludedCount`-as-`note` tech debt in `round_amount_rate` (see
+  decisions above) — revisit if a third metric needs the same pattern.
