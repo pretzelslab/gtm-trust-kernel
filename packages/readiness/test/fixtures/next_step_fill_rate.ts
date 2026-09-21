@@ -50,8 +50,13 @@ function baseOpportunity(id: string, overrides: Partial<Opportunity> = {}): Oppo
 export function coverageSample(openOpportunities: readonly Opportunity[]): CoverageSample {
   return {
     openOpportunities,
+    closedOpportunities: [],
     notesByOpportunity: new Map(),
     activitiesByOpportunity: new Map(),
+    accountsByRef: new Map(),
+    accountsHydrated: false,
+    missingAccountCount: 0,
+    oppsWithoutAccountRef: 0,
     capabilities: CAPABILITIES,
   };
 }

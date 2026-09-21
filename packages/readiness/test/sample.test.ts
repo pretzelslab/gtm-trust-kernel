@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { MockAdapter, type MockOrgData } from '@gtm-trust-kernel/adapters/mock.js';
 import type { CanonicalStage, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import { CANONICAL_STAGE_ORDER } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import { CLOSED_WINDOW_MONTHS, classifyStratum, runSample, type SampleConfig } from '../src/sample.js';
+import {
+  CLOSED_WINDOW_MONTHS,
+  classifyStratum,
+  formatSamplePlan,
+  planSample,
+  runSample,
+  type SampleConfig,
+} from '../src/sample.js';
 
 const ORG = 'org-sample-test';
 const ASOF = new Date('2026-06-15T00:00:00.000Z');
@@ -119,6 +126,29 @@ describe('runSample determinism', () => {
     const resultB = idsByStratum(await runSample(adapterB, { ...baseConfig, seed: 'seed-beta' }, alwaysConfirm));
 
     expect(resultB).not.toEqual(resultA);
+  });
+});
+
+describe('planSample account hydration budget', () => {
+  it('computes a worst-case account hydration call count from strata.length * perStratumSampleSize and accountBatchLimit', () => {
+    const adapter = new MockAdapter(ORG, buildOrgData(0), { accountBatchLimit: 5 });
+    const plan = planSample(adapter, { ...baseConfig, seed: 'budget-seed' });
+    // 7 strata * 3 perStratumSampleSize = 21 worst-case refs; ceil(21 / 5) = 5.
+    expect(plan.plannedAccountApiCalls).toBe(5);
+  });
+
+  it('reflects account hydration in the printed dry-run plan and in the combined quota estimate', () => {
+    const adapter = new MockAdapter(ORG, buildOrgData(0), {
+      accountBatchLimit: 5,
+      rateLimit: { kind: 'daily_quota', value: 100 },
+    });
+    const plan = planSample(adapter, { ...baseConfig, seed: 'budget-seed' });
+    const text = formatSamplePlan(plan);
+
+    expect(plan.plannedApiCalls).toBe(1); // ceil(1000 maxRecordsToScan / 2000 bulk page size)
+    expect(text).toContain('Planned account hydration API calls: up to 5');
+    // Combined (1 opportunity-scan + 5 account-hydration) against a 100 quota.
+    expect(text).toContain('Quota: up to 6.0% of the daily quota of 100');
   });
 });
 

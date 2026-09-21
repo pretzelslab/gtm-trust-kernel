@@ -8,7 +8,7 @@
  */
 
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
-import type { Activity, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
 
 /**
@@ -40,15 +40,27 @@ export interface MetricResult {
 export const LOW_CONFIDENCE_SAMPLE_SIZE = 30;
 
 /**
- * Shared input for the per-opportunity metrics (D1-D3). Built by hydrating
- * the open strata of a stratified sample (sample.ts) with the notes and
- * activities related to each sampled opportunity. That hydration is a
- * separate, bounded fetch (by sampled opportunity ref, not a full-org scan)
- * and is not implemented yet — out of scope for this file.
+ * Shared input for the per-opportunity metrics (D1-D3). Built in two steps,
+ * both in src/coverageSample.ts:
+ *
+ * 1. buildCoverageSample(sampleResult) — pure, sync. Wires up
+ *    openOpportunities/closedOpportunities from a stratified sample
+ *    (sample.ts). accountsByRef/missingAccountCount are placeholder
+ *    empty/zero at this point; accountsHydrated is false.
+ * 2. hydrateAccounts(sample, adapter) — async, the only I/O. Fetches the
+ *    Account for every sampled opportunity's accountRef via
+ *    CrmAdapter.getAccounts, and sets accountsHydrated true.
+ *
+ * notesByOpportunity/activitiesByOpportunity hydration remains a separate,
+ * bounded fetch (by sampled opportunity ref, not a full-org scan) that is
+ * not implemented yet — out of scope for this file and unrelated to the
+ * account-hydration work above.
  */
 export interface CoverageSample {
-  /** Open-stage opportunities only; closed strata already excluded by the caller. */
+  /** Open-stage opportunities only. */
   readonly openOpportunities: readonly Opportunity[];
+  /** closed_won/closed_lost opportunities from the sample's closed strata. No D1/D2/D3-part-1 metric reads this — they only ever read openOpportunities. */
+  readonly closedOpportunities: readonly Opportunity[];
   /** Notes related to a sampled opportunity, keyed by Opportunity.ref.id. */
   readonly notesByOpportunity: ReadonlyMap<string, readonly Note[]>;
   /**
@@ -56,6 +68,21 @@ export interface CoverageSample {
    * Unfiltered: each metric applies its own "qualifying activity" rule.
    */
   readonly activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]>;
+  /** Hydrated accounts for the sampled opportunities' accountRefs, keyed by Account.ref.id. Empty and meaningless until accountsHydrated is true. */
+  readonly accountsByRef: ReadonlyMap<string, Account>;
+  /**
+   * True once hydrateAccounts has run. A metric that reads accountsByRef
+   * MUST return not_instrumented (not a computed score, and not a silent
+   * "no accounts" reading) when this is false — the same
+   * gate-off-means-not_instrumented rule established for
+   * AdapterCapabilities.activitySync, applied here to a build-order
+   * precondition instead of a capability.
+   */
+  readonly accountsHydrated: boolean;
+  /** Count of distinct sampled accountRefs that did not resolve to an Account via getAccounts. Meaningless until accountsHydrated is true. */
+  readonly missingAccountCount: number;
+  /** Count of sampled opportunities (open + closed) with no usable accountRef (absent, or ref.id empty/whitespace-only) — excluded from account hydration entirely, not counted in missingAccountCount. */
+  readonly oppsWithoutAccountRef: number;
   readonly capabilities: AdapterCapabilities;
 }
 

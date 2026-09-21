@@ -119,6 +119,15 @@ export interface SamplePlan {
   readonly effectivePageSize: number;
   /** Math.ceil(maxRecordsToScan / effectivePageSize) — the worst case; the actual run may stop earlier. */
   readonly plannedApiCalls: number;
+  /**
+   * Worst-case getAccounts() calls for account hydration (coverageSample.ts),
+   * computed as if every sampled opportunity resolved to a distinct account:
+   * Math.ceil((strata.length * perStratumSampleSize) / accountBatchLimit).
+   * Real orgs share accounts across opportunities, so the actual hydration
+   * call count is almost always lower — this is a budget ceiling, not an
+   * estimate of the typical case, same "worst case" framing as plannedApiCalls.
+   */
+  readonly plannedAccountApiCalls: number;
   readonly rateLimit: AdapterCapabilities['rateLimit'];
 }
 
@@ -127,6 +136,8 @@ export function planSample(adapter: CrmAdapter, config: SampleConfig): SamplePla
   const caps = adapter.capabilities();
   const effectivePageSize = caps.bulkRead ? config.pageSizeBulk : config.pageSizeStandard;
   const plannedApiCalls = Math.ceil(config.maxRecordsToScan / effectivePageSize);
+  const worstCaseAccountRefs = SAMPLE_STRATA.length * config.perStratumSampleSize;
+  const plannedAccountApiCalls = Math.ceil(worstCaseAccountRefs / caps.accountBatchLimit);
 
   return {
     seed: config.seed,
@@ -135,24 +146,27 @@ export function planSample(adapter: CrmAdapter, config: SampleConfig): SamplePla
     maxRecordsToScan: config.maxRecordsToScan,
     effectivePageSize,
     plannedApiCalls,
+    plannedAccountApiCalls,
     rateLimit: caps.rateLimit,
   };
 }
 
-function formatRateLimit(rateLimit: AdapterCapabilities['rateLimit'], plannedApiCalls: number): string {
+/** Quota impact of the full run, opportunity scan plus account hydration — understating it would defeat the point of the quota-discipline display. */
+function formatRateLimit(rateLimit: AdapterCapabilities['rateLimit'], totalPlannedApiCalls: number): string {
   if (rateLimit.kind === 'none' || rateLimit.value <= 0) {
     return 'Quota: adapter reports no rate limit';
   }
   if (rateLimit.kind === 'daily_quota') {
-    const pct = ((100 * plannedApiCalls) / rateLimit.value).toFixed(1);
+    const pct = ((100 * totalPlannedApiCalls) / rateLimit.value).toFixed(1);
     return `Quota: up to ${pct}% of the daily quota of ${rateLimit.value}`;
   }
-  const seconds = (plannedApiCalls / rateLimit.value).toFixed(1);
+  const seconds = (totalPlannedApiCalls / rateLimit.value).toFixed(1);
   return `Quota: at least ~${seconds}s at ${rateLimit.value} calls/sec`;
 }
 
 /** Pure. Renders the plan for the confirmation prompt. */
 export function formatSamplePlan(plan: SamplePlan): string {
+  const totalPlannedApiCalls = plan.plannedApiCalls + plan.plannedAccountApiCalls;
   return [
     `Stratified sample plan (seed: ${plan.seed})`,
     `  Strata (${plan.strata.length}): ${plan.strata.join(', ')}`,
@@ -160,7 +174,8 @@ export function formatSamplePlan(plan: SamplePlan): string {
     `  Max records to scan: ${plan.maxRecordsToScan}`,
     `  Page size: ${plan.effectivePageSize}`,
     `  Planned API calls: up to ${plan.plannedApiCalls} (worst case; may stop earlier if every stratum fills first)`,
-    `  ${formatRateLimit(plan.rateLimit, plan.plannedApiCalls)}`,
+    `  Planned account hydration API calls: up to ${plan.plannedAccountApiCalls} (worst case: every sampled opportunity has a distinct account)`,
+    `  ${formatRateLimit(plan.rateLimit, totalPlannedApiCalls)}`,
   ].join('\n');
 }
 

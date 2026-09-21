@@ -62,8 +62,13 @@ export function coverageSample(
 ): CoverageSample {
   return {
     openOpportunities,
+    closedOpportunities: [],
     notesByOpportunity: new Map(),
     activitiesByOpportunity,
+    accountsByRef: new Map(),
+    accountsHydrated: false,
+    missingAccountCount: 0,
+    oppsWithoutAccountRef: 0,
     capabilities,
   };
 }

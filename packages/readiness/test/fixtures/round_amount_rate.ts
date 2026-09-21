@@ -48,8 +48,13 @@ function baseOpportunity(id: string, amount?: number): Opportunity {
 export function coverageSample(openOpportunities: readonly Opportunity[]): CoverageSample {
   return {
     openOpportunities,
+    closedOpportunities: [],
     notesByOpportunity: new Map(),
     activitiesByOpportunity: new Map(),
+    accountsByRef: new Map(),
+    accountsHydrated: false,
+    missingAccountCount: 0,
+    oppsWithoutAccountRef: 0,
     capabilities: CAPABILITIES,
   };
 }
