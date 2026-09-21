@@ -357,14 +357,19 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
-- **D1-D5 are all fully implemented as of this session.** D3/D4 as
-  complete as they'll get in v0.1 (D4: `owner_history_enabled`/
-  `stage_history_months` done, `close_date_history_enabled` deferred
-  pending a new adapter capability). **D5 is done** (part 1: adapter/
-  mock/contract/fixtures; part 2a: sampling/hashing/resolution
-  orchestration; part 2b, this session: the 4 metrics + report wiring).
-  D6 text substrate (4) and D7 label availability (3) are the only
-  dimensions with zero metrics implemented — next up, no plan agreed yet.
+- **D1, D3, D5 are fully implemented as of this session. D2 and D4 each
+  have one deferred metric** (2 of 3 done, not 3 of 3): D2's
+  `median_next_step_age_days` and D4's `close_date_history_enabled` are
+  both blocked on a new adapter capability (see the two "Deferred"
+  sections below) — neither is "complete," just as complete as v0.1 gets
+  without that cross-package change. D4's other two
+  (`owner_history_enabled`/`stage_history_months`) are done. **D5 is
+  done** (part 1: adapter/mock/contract/fixtures; part 2a:
+  sampling/hashing/resolution orchestration; part 2b, this session: the 4
+  metrics + report wiring), the only dimension besides D1/D3 with zero
+  deferrals. D6 text substrate (4) and D7 label availability (3) are the
+  only dimensions with zero metrics implemented — next up, no plan agreed
+  yet.
 - **`GetSecondSourceRecordsResult.truncatedRefIds`'s always-empty field on
   `getContactsByRef`/`getAccountsByRef`** (see decisions above) — minor
   cleanup candidate, not blocking.
