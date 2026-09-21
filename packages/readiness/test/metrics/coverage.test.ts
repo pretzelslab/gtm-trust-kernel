@@ -32,6 +32,7 @@ import {
 import {
   NOTE_COVERAGE_RATE_EXPECTED,
   noteCoverageRateFixture,
+  noteCoverageRateTruncatedFixture,
   coverageSample as noteCoverageSample,
 } from '../fixtures/note_coverage_rate.js';
 import {
@@ -39,6 +40,7 @@ import {
   ACTIVITY_CAPTURE_RATE_EXPECTED,
   activityCaptureRateFixture,
   activityCaptureRateGateOffFixture,
+  activityCaptureRateTruncatedFixture,
 } from '../fixtures/activity_capture_rate.js';
 import {
   OWNER_ID_FILL_RATE_EXPECTED,
@@ -177,6 +179,24 @@ describe('noteCoverageRate', () => {
       note: 'no open opportunities in sample',
     });
   });
+
+  it('sets floor: true and a truncated-count note when a sampled opportunity had truncated notes, value unchanged', () => {
+    const result = noteCoverageRate(noteCoverageRateTruncatedFixture(), { asOf });
+    expect(result).toEqual({
+      metric: 'note_coverage_rate',
+      status: 'ok',
+      value: NOTE_COVERAGE_RATE_EXPECTED.value,
+      sampleSize: NOTE_COVERAGE_RATE_EXPECTED.sampleSize,
+      lowConfidence: true,
+      floor: true,
+      note: '1 opportunity had truncated related records — value is a floor, not exact',
+    });
+  });
+
+  it('does not set floor when no sampled opportunity was truncated (golden fixture)', () => {
+    const result = noteCoverageRate(noteCoverageRateFixture(), { asOf });
+    expect(result.floor).toBeUndefined();
+  });
 });
 
 describe('ownerIdFillRate', () => {
@@ -228,5 +248,23 @@ describe('activityCaptureRate', () => {
       lowConfidence: false,
       note: 'adapter capability matrix reports no activity-sync capability for this org',
     });
+  });
+
+  it('sets floor: true and a truncated-count note when an eligible opportunity had truncated activities, value unchanged', () => {
+    const result = activityCaptureRate(activityCaptureRateTruncatedFixture(), { asOf: ACTIVITY_CAPTURE_RATE_ASOF });
+    expect(result).toEqual({
+      metric: 'activity_capture_rate',
+      status: 'ok',
+      value: ACTIVITY_CAPTURE_RATE_EXPECTED.value,
+      sampleSize: ACTIVITY_CAPTURE_RATE_EXPECTED.sampleSize,
+      lowConfidence: true,
+      floor: true,
+      note: '1 opportunity had truncated related records — value is a floor, not exact',
+    });
+  });
+
+  it('does not set floor when no eligible opportunity was truncated (golden fixture)', () => {
+    const result = activityCaptureRate(activityCaptureRateFixture(), { asOf: ACTIVITY_CAPTURE_RATE_ASOF });
+    expect(result.floor).toBeUndefined();
   });
 });

@@ -59,12 +59,15 @@ function note(id: string, opportunityId: string, body: string): Note {
 export function coverageSample(
   openOpportunities: readonly Opportunity[],
   notesByOpportunity: ReadonlyMap<string, readonly Note[]> = new Map(),
+  notesTruncatedOpportunityIds: ReadonlySet<string> = new Set(),
 ): CoverageSample {
   return {
     openOpportunities,
     closedOpportunities: [],
     notesByOpportunity,
     activitiesByOpportunity: new Map(),
+    notesTruncatedOpportunityIds,
+    activitiesTruncatedOpportunityIds: new Set(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,
@@ -107,3 +110,14 @@ export function noteCoverageRateFixture(): CoverageSample {
 }
 
 export const NOTE_COVERAGE_RATE_EXPECTED = { value: 0.6, sampleSize: 5 };
+
+/**
+ * Same as the golden fixture, but 'normal-note' is flagged as truncated.
+ * Value is unchanged — 0.6, same as NOTE_COVERAGE_RATE_EXPECTED —
+ * truncation can't turn "has a note" into "has none", but floor: true and
+ * a note naming the truncated count must still be set.
+ */
+export function noteCoverageRateTruncatedFixture(): CoverageSample {
+  const sample = noteCoverageRateFixture();
+  return { ...sample, notesTruncatedOpportunityIds: new Set(['normal-note']) };
+}

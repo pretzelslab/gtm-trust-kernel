@@ -25,6 +25,8 @@ function coverageSample(ownerHistory: boolean): CoverageSample {
     closedOpportunities: [],
     notesByOpportunity: new Map(),
     activitiesByOpportunity: new Map(),
+    notesTruncatedOpportunityIds: new Set(),
+    activitiesTruncatedOpportunityIds: new Set(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,

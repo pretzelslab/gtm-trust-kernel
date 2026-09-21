@@ -62,12 +62,15 @@ export function coverageSample(
   openOpportunities: readonly Opportunity[],
   activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]>,
   capabilities: AdapterCapabilities = CAPABILITIES,
+  activitiesTruncatedOpportunityIds: ReadonlySet<string> = new Set(),
 ): CoverageSample {
   return {
     openOpportunities,
     closedOpportunities: [],
     notesByOpportunity: new Map(),
     activitiesByOpportunity,
+    notesTruncatedOpportunityIds: new Set(),
+    activitiesTruncatedOpportunityIds,
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,
@@ -145,4 +148,16 @@ export function activityCaptureRateGateOffFixture(): CoverageSample {
     new Map(),
     { ...CAPABILITIES, activitySync: false },
   );
+}
+
+/**
+ * Same as the golden fixture, but 'covered-normal' (one of the 8 eligible
+ * opportunities) is flagged as truncated. The computed value is
+ * unchanged — 4/8, same as ACTIVITY_CAPTURE_RATE_EXPECTED — truncation
+ * doesn't affect a presence-only check, but floor: true and a note
+ * naming the truncated count must still be set.
+ */
+export function activityCaptureRateTruncatedFixture(): CoverageSample {
+  const sample = activityCaptureRateFixture();
+  return { ...sample, activitiesTruncatedOpportunityIds: new Set(['covered-normal']) };
 }

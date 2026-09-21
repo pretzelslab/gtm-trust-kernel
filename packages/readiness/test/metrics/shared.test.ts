@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeDomain, wholeCalendarMonthsBetween } from '../../src/metrics/shared.js';
+import type { Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import { applyTruncationFloor, normalizeDomain, wholeCalendarMonthsBetween } from '../../src/metrics/shared.js';
+import type { MetricResult } from '../../src/metrics/types.js';
 
 describe('normalizeDomain', () => {
   /**
@@ -70,5 +72,72 @@ describe('wholeCalendarMonthsBetween', () => {
 
   it('is floored at 0 rather than going negative when later is before earlier', () => {
     expect(wholeCalendarMonthsBetween('2026-06-20T00:00:00.000Z', '2026-01-15T00:00:00.000Z')).toBe(0);
+  });
+});
+
+describe('applyTruncationFloor', () => {
+  function ref(id: string): RecordRef {
+    return { crm: 'mock', orgId: 'org-shared-test', objectType: 'opportunity', id };
+  }
+
+  function opp(id: string): Opportunity {
+    return {
+      ref: ref(id),
+      accountRef: { crm: 'mock', orgId: 'org-shared-test', objectType: 'account', id: 'acc-1' },
+      name: `Deal ${id}`,
+      stage: 'discovery',
+      stageConfidence: 'mapped',
+      vendorStageLabel: 'Discovery',
+      isClosed: false,
+      contactLinks: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      modifiedAt: '2026-01-01T00:00:00.000Z',
+      concurrencyToken: `tok-${id}`,
+    };
+  }
+
+  const okResult: MetricResult = {
+    metric: 'note_coverage_rate',
+    status: 'ok',
+    value: 0.5,
+    sampleSize: 2,
+    lowConfidence: true,
+  };
+
+  it('is a no-op when status is not ok', () => {
+    const notOk: MetricResult = { ...okResult, status: 'not_applicable', value: null };
+    const result = applyTruncationFloor(notOk, [opp('a')], new Set(['a']));
+    expect(result).toEqual(notOk);
+  });
+
+  it('is a no-op when nothing was truncated', () => {
+    const result = applyTruncationFloor(okResult, [opp('a'), opp('b')], new Set());
+    expect(result).toEqual(okResult);
+  });
+
+  it('is a no-op when truncation happened only outside the denominator', () => {
+    const result = applyTruncationFloor(okResult, [opp('a'), opp('b')], new Set(['c']));
+    expect(result).toEqual(okResult);
+  });
+
+  it('sets floor: true and a singular note when exactly one denominator opportunity was truncated', () => {
+    const result = applyTruncationFloor(okResult, [opp('a'), opp('b')], new Set(['a']));
+    expect(result).toEqual({
+      ...okResult,
+      floor: true,
+      note: '1 opportunity had truncated related records — value is a floor, not exact',
+    });
+  });
+
+  it('sets floor: true and a plural note when more than one denominator opportunity was truncated', () => {
+    const result = applyTruncationFloor(okResult, [opp('a'), opp('b'), opp('c')], new Set(['a', 'c']));
+    expect(result.floor).toBe(true);
+    expect(result.note).toBe('2 opportunities had truncated related records — value is a floor, not exact');
+  });
+
+  it('appends to an existing note rather than overwriting it', () => {
+    const withNote: MetricResult = { ...okResult, note: 'some pre-existing note' };
+    const result = applyTruncationFloor(withNote, [opp('a')], new Set(['a']));
+    expect(result.note).toBe('some pre-existing note 1 opportunity had truncated related records — value is a floor, not exact');
   });
 });

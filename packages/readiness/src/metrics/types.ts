@@ -30,6 +30,16 @@ export interface MetricResult {
   readonly lowConfidence: boolean;
   /** Required when status isn't 'ok' (the reason); optional stated assumption otherwise. */
   readonly note?: string;
+  /**
+   * True when status is 'ok' and value is a lower bound, not exact — at
+   * least one opportunity in the computed denominator had its related
+   * notes/activities truncated at the adapter's per-opportunity limit
+   * (CoverageSample.notesTruncatedOpportunityIds /
+   * activitiesTruncatedOpportunityIds). Never set for a metric that
+   * doesn't read truncatable child records. See
+   * shared.ts's applyTruncationFloor, the only place this is set.
+   */
+  readonly floor?: boolean;
 }
 
 /**
@@ -77,6 +87,16 @@ export interface CoverageSample {
    * not readability; see CrmAdapter.getActivitiesByOpportunity).
    */
   readonly activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]>;
+  /**
+   * ref.ids of sampled opportunities whose related notes were capped at
+   * the adapter's notesPerOpportunityLimit by hydrateNotes — that
+   * opportunity's entry in notesByOpportunity is a floor, not the
+   * complete set. Empty until hydrateNotes runs, same as
+   * notesByOpportunity itself. See metrics/shared.ts's applyTruncationFloor.
+   */
+  readonly notesTruncatedOpportunityIds: ReadonlySet<string>;
+  /** Same as notesTruncatedOpportunityIds, for activitiesByOpportunity / hydrateActivities / activitiesPerOpportunityLimit. */
+  readonly activitiesTruncatedOpportunityIds: ReadonlySet<string>;
   /** Hydrated accounts for the sampled opportunities' accountRefs, keyed by Account.ref.id. Empty and meaningless until accountsHydrated is true. */
   readonly accountsByRef: ReadonlyMap<string, Account>;
   /**

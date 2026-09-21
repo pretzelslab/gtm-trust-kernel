@@ -149,6 +149,8 @@ export interface MetricRow {
   readonly note: string | null;
   /** Set only when status is 'ok' and the reading could be graded against rubric.ts. */
   readonly tier: Verdict | null;
+  /** True when value is a lower bound, not exact — see MetricResult.floor. Always false for a row with no computed value. */
+  readonly floor: boolean;
   readonly unit: Unit;
   readonly viableAt: number | null;
   readonly degradedAt: number | null;
@@ -253,6 +255,7 @@ export async function buildReportData(adapter: CrmAdapter, options: BuildReportO
         lowConfidence: result.lowConfidence,
         note,
         tier,
+        floor: result.floor ?? false,
         unit,
         viableAt,
         degradedAt,
@@ -275,6 +278,7 @@ export async function buildReportData(adapter: CrmAdapter, options: BuildReportO
       lowConfidence: false,
       note,
       tier: null,
+      floor: false,
       unit,
       viableAt: null,
       degradedAt: null,

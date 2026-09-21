@@ -9,6 +9,7 @@ import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
 import {
   DAY_MS,
   DEFAULT_SHARED_PROVIDER_DENYLIST,
+  applyTruncationFloor,
   hasQualifyingActivity,
   normalizeDomain,
   rateOverOpportunities,
@@ -52,7 +53,7 @@ export function stageActivityContradictionRate(sample: CoverageSample, config: M
 
   const lateStage = sample.openOpportunities.filter((o) => CONTRADICTION_STAGES.has(o.stage));
 
-  return rateOverOpportunities(
+  const result = rateOverOpportunities(
     'stage_activity_contradiction_rate',
     lateStage,
     (o) => {
@@ -61,6 +62,7 @@ export function stageActivityContradictionRate(sample: CoverageSample, config: M
     },
     'no open opportunities in proposal or negotiation stage in sample',
   );
+  return applyTruncationFloor(result, lateStage, sample.activitiesTruncatedOpportunityIds);
 }
 
 /**

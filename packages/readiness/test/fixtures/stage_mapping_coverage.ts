@@ -52,6 +52,8 @@ function coverageSample(open: readonly Opportunity[], closed: readonly Opportuni
     closedOpportunities: closed,
     notesByOpportunity: new Map(),
     activitiesByOpportunity: new Map(),
+    notesTruncatedOpportunityIds: new Set(),
+    activitiesTruncatedOpportunityIds: new Set(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,

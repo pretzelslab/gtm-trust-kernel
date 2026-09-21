@@ -3,7 +3,7 @@
  */
 
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
-import { DAY_MS, hasQualifyingActivity, rateOverOpportunities } from './shared.js';
+import { DAY_MS, applyTruncationFloor, hasQualifyingActivity, rateOverOpportunities } from './shared.js';
 
 export function closeDateFillRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
   return rateOverOpportunities('close_date_fill_rate', sample.openOpportunities, (o) => o.closeDate != null);
@@ -35,13 +35,22 @@ export function nextStepFillRate(sample: CoverageSample, _config: MetricConfig):
   );
 }
 
-/** Presence only — no length or content-quality judgment. That's substantive_note_rate's job (D6), not this metric's. */
+/**
+ * Presence only — no length or content-quality judgment. That's
+ * substantive_note_rate's job (D6), not this metric's. Floor-flagged via
+ * applyTruncationFloor when a sampled opportunity's related notes were
+ * capped at the adapter's per-opportunity limit — presence itself is
+ * unaffected by truncation (a cap of 200+ can't turn "has a note" into
+ * "has none"), but the floor signal is surfaced anyway, for any reader
+ * relying on this run's data completeness.
+ */
 export function noteCoverageRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
-  return rateOverOpportunities(
+  const result = rateOverOpportunities(
     'note_coverage_rate',
     sample.openOpportunities,
     (o) => (sample.notesByOpportunity.get(o.ref.id)?.length ?? 0) > 0,
   );
+  return applyTruncationFloor(result, sample.openOpportunities, sample.notesTruncatedOpportunityIds);
 }
 
 /** Whitespace-only or empty-string ownerId counts as unfilled, same as undefined. Not currently wired into any CapabilitySpec's gates — report-only. */
@@ -90,8 +99,9 @@ export function activityCaptureRate(sample: CoverageSample, config: MetricConfig
     (o) => new Date(o.createdAt).getTime() < newOpportunityCutoff,
   );
 
-  return rateOverOpportunities('activity_capture_rate', eligible, (o) => {
+  const result = rateOverOpportunities('activity_capture_rate', eligible, (o) => {
     const activities = sample.activitiesByOpportunity.get(o.ref.id) ?? [];
     return hasQualifyingActivity(o, activities, windowStart, asOf);
   });
+  return applyTruncationFloor(result, eligible, sample.activitiesTruncatedOpportunityIds);
 }

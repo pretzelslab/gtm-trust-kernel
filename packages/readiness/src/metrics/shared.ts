@@ -153,3 +153,42 @@ export function wholeCalendarMonthsBetween(earlierIso: string, laterIso: string)
   }
   return Math.max(0, months);
 }
+
+/**
+ * The only place MetricResult.floor is ever set. Checks whether any
+ * opportunity in a metric's ACTUAL computed denominator (not the raw
+ * sample — a metric's own filtering, e.g. activity_capture_rate's 7-day
+ * exclusion, may drop a truncated opportunity before it ever mattered)
+ * had its related notes/activities truncated at the adapter's
+ * per-opportunity limit. When it did, the result's value is a lower
+ * bound, not exact, even though truncation doesn't change these
+ * particular metrics' arithmetic (presence-only checks can't be fooled by
+ * a cap of 200+ records) — flagged anyway, as a general data-completeness
+ * signal for anything downstream that reads this result.
+ *
+ * No-op (returns result unchanged) when status isn't 'ok', when nothing
+ * was truncated at all, or when truncation happened only to
+ * opportunities outside this metric's denominator.
+ */
+export function applyTruncationFloor(
+  result: MetricResult,
+  denominatorOpportunities: readonly Opportunity[],
+  truncatedOpportunityIds: ReadonlySet<string>,
+): MetricResult {
+  if (result.status !== 'ok' || truncatedOpportunityIds.size === 0) {
+    return result;
+  }
+
+  const truncatedCount = denominatorOpportunities.filter((o) => truncatedOpportunityIds.has(o.ref.id)).length;
+  if (truncatedCount === 0) {
+    return result;
+  }
+
+  const floorNote = `${truncatedCount} opportunit${truncatedCount === 1 ? 'y' : 'ies'} had truncated related records — value is a floor, not exact`;
+
+  return {
+    ...result,
+    floor: true,
+    note: result.note ? `${result.note} ${floorNote}` : floorNote,
+  };
+}

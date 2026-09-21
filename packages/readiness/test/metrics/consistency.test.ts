@@ -17,6 +17,7 @@ import {
   stageActivityContradictionRateFixture,
   stageActivityContradictionRateGateOffFixture,
   stageActivityContradictionRateNoLateStageFixture,
+  stageActivityContradictionRateTruncatedFixture,
 } from '../fixtures/stage_activity_contradiction_rate.js';
 import {
   STAGE_MAPPING_COVERAGE_EXPECTED,
@@ -74,6 +75,28 @@ describe('stageActivityContradictionRate', () => {
       lowConfidence: false,
       note: 'adapter capability matrix reports no activity-sync capability for this org',
     });
+  });
+
+  it('sets floor: true and a truncated-count note when a denominator opportunity had truncated activities, value unchanged', () => {
+    const result = stageActivityContradictionRate(stageActivityContradictionRateTruncatedFixture(), {
+      asOf: STAGE_ACTIVITY_CONTRADICTION_RATE_ASOF,
+    });
+    expect(result).toEqual({
+      metric: 'stage_activity_contradiction_rate',
+      status: 'ok',
+      value: STAGE_ACTIVITY_CONTRADICTION_RATE_EXPECTED.value,
+      sampleSize: STAGE_ACTIVITY_CONTRADICTION_RATE_EXPECTED.sampleSize,
+      lowConfidence: true,
+      floor: true,
+      note: '1 opportunity had truncated related records — value is a floor, not exact',
+    });
+  });
+
+  it('does not set floor when no denominator opportunity was truncated (golden fixture)', () => {
+    const result = stageActivityContradictionRate(stageActivityContradictionRateFixture(), {
+      asOf: STAGE_ACTIVITY_CONTRADICTION_RATE_ASOF,
+    });
+    expect(result.floor).toBeUndefined();
   });
 });
 

@@ -53,6 +53,8 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     closedOpportunities,
     notesByOpportunity: new Map(),
     activitiesByOpportunity: new Map(),
+    notesTruncatedOpportunityIds: new Set(),
+    activitiesTruncatedOpportunityIds: new Set(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,
@@ -213,18 +215,22 @@ export async function hydrateNotes(sample: CoverageSample, adapter: CrmAdapter):
   const chunks = chunk(sortedRefs, limit);
 
   const allNotes: Note[] = [];
+  const notesTruncatedOpportunityIds = new Set<string>();
   let apiCallsConsumed = 0;
   for (const refChunk of chunks) {
     const result = await adapter.getNotesByOpportunity(refChunk);
     apiCallsConsumed += result.apiCallsConsumed;
     allNotes.push(...result.items);
+    for (const id of result.truncatedOpportunityIds) {
+      notesTruncatedOpportunityIds.add(id);
+    }
   }
 
   const oppIds = new Set(sortedRefs.map((r) => r.id));
   const notesByOpportunity: ReadonlyMap<string, readonly Note[]> = groupByOpportunity(allNotes, oppIds);
 
   return {
-    sample: { ...sample, notesByOpportunity },
+    sample: { ...sample, notesByOpportunity, notesTruncatedOpportunityIds },
     apiCallsConsumed,
   };
 }
@@ -248,18 +254,22 @@ export async function hydrateActivities(sample: CoverageSample, adapter: CrmAdap
   const chunks = chunk(sortedRefs, limit);
 
   const allActivities: Activity[] = [];
+  const activitiesTruncatedOpportunityIds = new Set<string>();
   let apiCallsConsumed = 0;
   for (const refChunk of chunks) {
     const result = await adapter.getActivitiesByOpportunity(refChunk);
     apiCallsConsumed += result.apiCallsConsumed;
     allActivities.push(...result.items);
+    for (const id of result.truncatedOpportunityIds) {
+      activitiesTruncatedOpportunityIds.add(id);
+    }
   }
 
   const oppIds = new Set(sortedRefs.map((r) => r.id));
   const activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]> = groupByOpportunity(allActivities, oppIds);
 
   return {
-    sample: { ...sample, activitiesByOpportunity },
+    sample: { ...sample, activitiesByOpportunity, activitiesTruncatedOpportunityIds },
     apiCallsConsumed,
   };
 }

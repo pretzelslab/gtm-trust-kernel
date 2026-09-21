@@ -67,12 +67,15 @@ export function coverageSample(
   openOpportunities: readonly Opportunity[],
   activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]> = new Map(),
   capabilities: AdapterCapabilities = CAPABILITIES,
+  activitiesTruncatedOpportunityIds: ReadonlySet<string> = new Set(),
 ): CoverageSample {
   return {
     openOpportunities,
     closedOpportunities: [],
     notesByOpportunity: new Map(),
     activitiesByOpportunity,
+    notesTruncatedOpportunityIds: new Set(),
+    activitiesTruncatedOpportunityIds,
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,
@@ -147,4 +150,15 @@ export function stageActivityContradictionRateGateOffFixture(): CoverageSample {
     new Map(),
     { ...CAPABILITIES, activitySync: false },
   );
+}
+
+/**
+ * Same as the golden fixture, but 'negotiation-boundary-21d' (one of the 5
+ * in the denominator) is flagged as truncated. Value is unchanged — 0.6,
+ * same as STAGE_ACTIVITY_CONTRADICTION_RATE_EXPECTED — but floor: true and
+ * a note naming the truncated count must still be set.
+ */
+export function stageActivityContradictionRateTruncatedFixture(): CoverageSample {
+  const sample = stageActivityContradictionRateFixture();
+  return { ...sample, activitiesTruncatedOpportunityIds: new Set(['negotiation-boundary-21d']) };
 }

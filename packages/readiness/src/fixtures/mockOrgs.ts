@@ -245,6 +245,15 @@ function generateHealthy(): MockOrgFixture {
   // Oldest retained stage history: well over a year back, for a comfortably viable stage_history_months.
   stageHistory.push(makeStageHistoryEntry(orgId, 'sh-earliest', ref(orgId, 'opportunity', 'opp-0'), 'prospecting', daysBefore(asOf, 640)));
 
+  // One opportunity deliberately seeded well over notesPerOpportunityLimit/
+  // activitiesPerOpportunityLimit (200 each), so the report's "floor" badge
+  // has something real to demonstrate rather than only unit-test fixtures.
+  const overflowOppRef = ref(orgId, 'opportunity', 'opp-0');
+  for (let i = 0; i < 205; i++) {
+    notes.push(makeNote(orgId, `note-overflow-${i}`, overflowOppRef, `Overflow note ${i}, seeded to exceed the per-opportunity cap.`, daysBefore(asOf, i % 30)));
+    activities.push(makeActivity(orgId, `act-overflow-${i}`, overflowOppRef, daysBefore(asOf, i % 20)));
+  }
+
   return {
     name: 'healthy',
     orgId,

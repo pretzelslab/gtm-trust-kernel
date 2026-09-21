@@ -31,21 +31,22 @@ function rowStatusMeta(row: MetricRow): { label: string; cssClass: string } {
 
 function formatValue(row: MetricRow): string {
   if (row.value === null) return '—';
+  const prefix = row.floor ? '≥ ' : ''; // "at least" — value is a lower bound when some related notes/activities were truncated.
   const unit: Unit = row.unit;
   switch (unit) {
     case 'rate':
-      return `${(row.value * 100).toFixed(1)}%`;
+      return `${prefix}${(row.value * 100).toFixed(1)}%`;
     case 'bool':
       return row.value === 1 ? 'Yes' : 'No';
     case 'months':
-      return `${row.value} mo`;
+      return `${prefix}${row.value} mo`;
     case 'days':
-      return `${row.value} d`;
+      return `${prefix}${row.value} d`;
     case 'chars':
-      return `${row.value} chars`;
+      return `${prefix}${row.value} chars`;
     case 'count':
     default:
-      return `${row.value}`;
+      return `${prefix}${row.value}`;
   }
 }
 
@@ -60,6 +61,7 @@ const STYLE = `
     --ninstr-bg: #eaf1fb; --ninstr-fg: #3b5b82;
     --deferred-bg: #f1edf9; --deferred-fg: #5b4b8a;
     --nimpl-bg: #ececec; --nimpl-fg: #767676;
+    --floor-bg: #fff3cd; --floor-fg: #8a6d00;
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #14161a; --fg: #e7e7ea; --muted: #9aa0a6; --border: #2b2e33; --card-bg: #1c1f24; }
@@ -90,6 +92,7 @@ const STYLE = `
   .gates { font-size: 12px; color: var(--muted); }
   .thresh { font-size: 11px; color: var(--muted); white-space: nowrap; }
   .lowconf { font-size: 11px; color: var(--degraded-fg); }
+  .floor-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; background: var(--floor-bg); color: var(--floor-fg); border: 1px solid var(--floor-fg); cursor: help; }
 `;
 
 function renderSummaryCards(data: ReportData): string {
@@ -146,9 +149,12 @@ function renderMetricsTable(rows: readonly MetricRow[]): string {
           ? `viable ≥ ${row.viableAt}, degraded ≥ ${row.degradedAt}`
           : '';
       const lowConf = row.lowConfidence ? `<div class="lowconf">low confidence (n=${row.sampleSize})</div>` : '';
+      const floorBadge = row.floor
+        ? `<span class="floor-badge" title="Value is a lower bound: at least one opportunity's related notes/activities were truncated at the adapter's per-opportunity limit.">FLOOR</span>`
+        : '';
       return `${header}<tr>
         <td>${escapeHtml(row.metric)}</td>
-        <td>${formatValue(row)}</td>
+        <td>${formatValue(row)}${floorBadge}</td>
         <td><span class="pill ${meta.cssClass}">${meta.label}</span>${lowConf}</td>
         <td class="note">${row.note ? escapeHtml(row.note) : ''}</td>
         <td class="gates">${gates}${thresh ? `<div class="thresh">${escapeHtml(thresh)}</div>` : ''}</td>
@@ -220,7 +226,10 @@ export function renderComparisonHtml(datas: readonly ReportData[]): string {
         .map((d) => {
           const row = d.metrics.find((m) => m.metric === metric)!;
           const meta = rowStatusMeta(row);
-          return `<td><span class="pill ${meta.cssClass}">${meta.label}</span><div class="note">${formatValue(row)}</div></td>`;
+          const floorBadge = row.floor
+            ? `<span class="floor-badge" title="Value is a lower bound: at least one opportunity's related notes/activities were truncated.">FLOOR</span>`
+            : '';
+          return `<td><span class="pill ${meta.cssClass}">${meta.label}</span>${floorBadge}<div class="note">${formatValue(row)}</div></td>`;
         })
         .join('');
       return `${header}<tr><td>${escapeHtml(metric)}</td>${cells}</tr>`;
