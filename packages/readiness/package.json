@@ -8,8 +8,12 @@
     "@gtm-trust-kernel/adapters": "*",
     "tldts": "7.4.13"
   },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "report": "tsx src/report/cli.ts"
   }
 }
