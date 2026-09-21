@@ -33,6 +33,12 @@ repeated here.
 | D4 `close_date_history_enabled` | **Deferred** — not implemented | doc-only, this session |
 | D5–D7 (11 remaining metrics) | Not started | — |
 
+`notesByOpportunity`/`activitiesByOpportunity` hydration — the gap flagged
+when the visual report shipped (`note_coverage_rate`,
+`activity_capture_rate`, `stage_activity_contradiction_rate` were running
+over permanently-empty maps) — is fixed this session. See "Cross-package"
+and the new decisions below; the report's 3 caveat notes are gone.
+
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
 required/non-nullable, so there's no "missing" state to measure. See
 metric-definitions.md's D1 header for the full explanation. This was the
@@ -45,17 +51,24 @@ Files:
 - `src/metrics/history.ts` — D4, **2 of 3 metrics done** (added this session, D4 part 1): `owner_history_enabled`, `stage_history_months`. `close_date_history_enabled` deferred, see below — not in this file.
 - `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below), `normalizeDomain`, `DEFAULT_SHARED_PROVIDER_DENYLIST` (D3 part 2b), `wholeCalendarMonthsBetween` (D4 part 1, this session).
 - `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig` (gained optional `sharedProviderDenylist` in D3 part 2b; `CoverageSample` gained `stageHistoryEarliestChangedAt`/`stageHistoryHydrated` this session).
-- `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates its accounts (`hydrateAccounts`) and, as of this session, its org-wide earliest stage-history entry (`hydrateStageHistory`); see decisions below.
+- `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates it: accounts (`hydrateAccounts`), org-wide earliest stage-history entry (`hydrateStageHistory`), and, new this session, per-opportunity notes/activities (`hydrateNotes`, `hydrateActivities`); see decisions below.
 - `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family. `test/metrics/shared.test.ts` is the exception (added D3 part 2b) — it tests `normalizeDomain`/`wholeCalendarMonthsBetween` directly since those are helpers, not metrics, and have no fixture file of their own.
-- `test/coverageSample.test.ts` — builder + hydration tests (not per-metric, so it doesn't follow the `test/fixtures/` + `test/metrics/` split above). Gained a `hydrateStageHistory` describe block this session.
+- `test/coverageSample.test.ts` — builder + hydration tests (not per-metric, so it doesn't follow the `test/fixtures/` + `test/metrics/` split above). Gained `hydrateNotes`/`hydrateActivities` describe blocks this session, plus an integration-style block proving the `activitySync` capability gate survives real hydration.
+- `src/report/buildReport.ts` — now calls `hydrateNotes`/`hydrateActivities` as part of its orchestration; the caveat-note logic for the 3 previously-affected metrics (`note_coverage_rate`, `activity_capture_rate`, `stage_activity_contradiction_rate`) is removed, since they now compute over real data.
 
-Cross-package: `packages/adapters` gained `CrmAdapter.getAccounts(refs)` this
-session (`src/types.ts`, `src/mock.ts`), the same kind of cross-package
-addition D1's `activitySync`/`contactLinks` were — see git history on those
-files (`contract: add getAccounts batch read`) if the rationale is needed
-again.
+Cross-package: `packages/adapters` gained `CrmAdapter.getAccounts(refs)`
+(D3 part 2a) and, this session, `getNotesByOpportunity(oppRefs)` /
+`getActivitiesByOpportunity(oppRefs)` (`src/types.ts`, `src/mock.ts`, plus
+new coverage in `test/contract/adapter.contract.ts` and a
+mock-only truncation suite, `test/mock.childRecords.test.ts`) — the same
+kind of cross-package addition D1's `activitySync`/`contactLinks` were.
+`AdapterCapabilities` gained 3 fields this session: `childRecordBatchLimit`
+(advisory ref-batch limit, shared by both new methods, same contract as
+`accountBatchLimit`), `notesPerOpportunityLimit`, `activitiesPerOpportunityLimit`
+(advisory per-opportunity truncation caps — the mock DOES enforce these
+two, reporting a capped opportunity in `GetChildRecordsResult.truncatedOpportunityIds`).
 
-`npm run ci` green at handoff: adapters 20, kernel 22, readiness 170.
+`npm run ci` green at handoff: adapters 30, kernel 22, readiness 186.
 
 Cross-package, D3 part 2b: `tldts` (`7.4.13`, exact-pinned) added as a
 `packages/readiness` dependency — the only domain-normalization library in
@@ -99,6 +112,10 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **`stage_history_months` (D4 part 1, `src/metrics/history.ts`):** scope ambiguity resolved this session — **org-wide**, not scoped to the sample's opportunities (see `metric-definitions.md`'s updated D4 entry for the reasoning: answerable in one bounded ascending `listStageHistory` page, `limit: 1`, no `since`; a sample-scoped version would need a new by-ref batched history method or an unbounded scan). Three-level gate cascade: `capabilities.stageHistory` false → `not_instrumented` (standard capability gate); `stageHistoryHydrated` false → `not_instrumented` (build-order precondition, same rule as `duplicate_account_rate`'s `accountsHydrated` gate); `stageHistoryEarliestChangedAt` null (hydrated, zero entries) → `ok`, `value: 0`, `note: "history enabled, no entries yet"` (this session's explicit decision — a freshly-enabled org isn't the same as a missing capability). Otherwise → `ok`, `value: wholeCalendarMonthsBetween(earliest, config.asOf)`.
 - **`wholeCalendarMonthsBetween` (`src/metrics/shared.ts`, D4 part 1):** whole calendar months between two ISO timestamps, partial months dropped — standard "age in whole months" rule (raw month difference, minus one if the later date's day-of-month is earlier than the earlier date's), same as most date libraries' `diff('months')`. Floored at 0. Month-end/leap-year behavior is a deliberate choice, not an oversight: Jan 31 → Feb 28 is 0 months (Feb has no 31st); Feb 29, 2028 → Feb 28, 2029 is 11, not 12 (2029 has no 29th) — both pinned by tests in `test/metrics/shared.test.ts`, same "behavioral contract" framing as `normalizeDomain`'s table.
 - **`hydrateStageHistory` (`src/coverageSample.ts`, D4 part 1):** minimal glue — one `adapter.listStageHistory({ limit: 1 })` call, no `since`, relying on the method's own ascending-sort contract so the first (and only) returned item is the org's earliest entry. Does **not** special-case `capabilities.stageHistory` itself — relies on `CrmAdapter.listStageHistory`'s existing contract ("must return empty, not throw, when the capability is false") rather than duplicating that check in two places; `stage_history_months` still gates on the capability before trusting the hydrated field. **No new adapter method added** (per this session's explicit scope) and **not wired into the dry-run budget** (`SamplePlan.plannedAccountApiCalls`-equivalent) — this session scoped the glue as CoverageSample-only, not a budget-system update; worth doing if this ships for real quota planning, since account hydration's budget integration (D3 part 2a) didn't get a stage-history counterpart.
+- **`CrmAdapter.getNotesByOpportunity(oppRefs)` / `getActivitiesByOpportunity(oppRefs)`** (this session, `packages/adapters`): added for the same reason `getAccounts` was — `listNotes`/`listActivities` are since-window streams with no ref filter, so hydrating a bounded sample's notes/activities through them would mean scanning the whole table regardless of sample size. Both return `GetChildRecordsResult<T>` (`items` flat, sorted by owning opportunity ref.id then by date; `truncatedOpportunityIds`; `apiCallsConsumed`) rather than one-ref-to-one-record like `GetAccountsResult`, since an opportunity maps to zero or more notes/activities, not at most one. Neither method special-cases `AdapterCapabilities.activitySync` — that flag governs whether *absence* of activity is a reliable signal (interpretation), not whether Activity *records* can be read at all; manually-logged activities exist and are readable regardless. Grouping a flat `items` array back into a per-opportunity map (`groupByOpportunity`, `coverageSample.ts`) reads each record's `relatedTo` array, which is multi-valued in the canonical model — a record related to more than one opportunity legitimately appears in more than one bucket.
+- **Per-opportunity truncation is real, unlike `accountBatchLimit`/`childRecordBatchLimit`:** `notesPerOpportunityLimit`/`activitiesPerOpportunityLimit` ARE enforced by the adapter (the mock caps each opportunity's returned records and flags it in `truncatedOpportunityIds`) — the one capability-limit pair in this whole family that isn't purely advisory. Callers must treat a truncated opportunity's count as "at least N," never exact. **Not yet consumed anywhere**: no metric or report row currently reads `truncatedOpportunityIds` — `hydrateNotes`/`hydrateActivities` fetch and group the (possibly-capped) `items` without surfacing which opportunities were capped. Flagged as an open item below, not silently dropped.
+- **`hydrateNotes`/`hydrateActivities` (`src/coverageSample.ts`, this session):** same shape as `hydrateStageHistory` — chunk the sorted, deduped opportunity-ref set at `capabilities().childRecordBatchLimit`, call the adapter, group results back by opportunity. **Deliberately no new `notesHydrated`/`activitiesHydrated` boolean or gate on `CoverageSample`** (a live option, given `accountsHydrated`'s precedent) — decided against it: `notesByOpportunity`/`activitiesByOpportunity` were never documented with `accountsByRef`'s "empty and meaningless until hydrated" caveat, `note_coverage_rate` has no capability to gate on (presence-of-notes is unconditionally meaningful), and `activity_capture_rate`/`stage_activity_contradiction_rate` already gate on `capabilities.activitySync` *before* ever reading the map — a second gate would be redundant, not additive. Verified directly: a dedicated test (`coverageSample.test.ts`, "activitySync capability gate survives real hydration") hydrates real activity data with `activitySync: false` and confirms both metrics still return `not_instrumented`, not a computed value.
+- **`buildReport.ts`'s 3 caveat notes (D1 gap, flagged when the visual report shipped) are removed**, not just silenced — the code that added `"Known gap: CoverageSample does not yet hydrate notes/activities..."` to `note_coverage_rate`/`activity_capture_rate`/`stage_activity_contradiction_rate`'s rows is deleted, since `buildReportData` now calls `hydrateNotes`/`hydrateActivities` for real. Rerunning the report against `healthy`/`fresh` now shows real coverage numbers (e.g. `note_coverage_rate` ~0.8 instead of a caveat) instead of the placeholder 0%/caveat pairing; `legacy` (which seeds no notes) correctly still shows 0%, now for a real reason.
 
 ---
 
@@ -189,6 +206,22 @@ metric's implementation is blocked.
   hydration (D3 part 2a). Minor (it's exactly one bounded call, not a
   chunked scan) but inconsistent with the existing quota-discipline
   display; revisit if this ships for real quota planning.
+- **`hydrateNotes`/`hydrateActivities` and the dry-run budget.** Same gap
+  as above, but larger in practice — these two calls scale with the
+  number of `childRecordBatchLimit`-sized chunks of sampled opportunities,
+  not a single bounded call. Not reflected in `SamplePlan` at all yet.
+- **`truncatedOpportunityIds` is computed but not consumed.** The mock
+  adapter correctly caps and flags an opportunity whose notes/activities
+  exceed the per-opportunity limit, but `hydrateNotes`/`hydrateActivities`
+  currently discard that information — no `CoverageSample` field carries
+  it forward, and no metric or report row surfaces "this count is a floor,
+  not exact." Not a correctness bug (the returned records are genuinely
+  the most relevant, since the mock sorts ascending and slices — real
+  adapters would need to define their own truncation-selection order too),
+  but a real gap in honesty about data completeness if an opportunity ever
+  actually exceeds 200 notes or activities. Worth closing before this
+  ships for real orgs, where 200 is far more plausible than in test
+  fixtures.
 
 (The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
@@ -216,6 +249,10 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   revisit if a third metric needs the same pattern, or if
   `duplicate_account_rate`'s heavier note turns out to need it sooner.
 - The three `duplicate_account_rate` open questions (beyond-first variant,
-  cross-TLD, regional shared-provider domains), plus the two new D4 open
-  questions (`lowConfidence` hardcoding, dry-run budget) — none blocking,
-  all deferred to v0.2 or later.
+  cross-TLD, regional shared-provider domains), the two D4 open questions
+  (`lowConfidence` hardcoding, dry-run budget), and the two new note/
+  activity-hydration open questions (`truncatedOpportunityIds` not
+  consumed, dry-run budget) — none blocking, all deferred to v0.2 or
+  later. `truncatedOpportunityIds` is the one worth prioritizing first if
+  any of this heads toward a real org, since 200 notes/activities on one
+  opportunity is a real scenario there in a way it isn't in test fixtures.

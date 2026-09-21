@@ -40,32 +40,41 @@ export interface MetricResult {
 export const LOW_CONFIDENCE_SAMPLE_SIZE = 30;
 
 /**
- * Shared input for the per-opportunity metrics (D1-D3). Built in two steps,
- * both in src/coverageSample.ts:
- *
- * 1. buildCoverageSample(sampleResult) — pure, sync. Wires up
- *    openOpportunities/closedOpportunities from a stratified sample
- *    (sample.ts). accountsByRef/missingAccountCount are placeholder
- *    empty/zero at this point; accountsHydrated is false.
- * 2. hydrateAccounts(sample, adapter) — async, the only I/O. Fetches the
- *    Account for every sampled opportunity's accountRef via
- *    CrmAdapter.getAccounts, and sets accountsHydrated true.
- *
- * notesByOpportunity/activitiesByOpportunity hydration remains a separate,
- * bounded fetch (by sampled opportunity ref, not a full-org scan) that is
- * not implemented yet — out of scope for this file and unrelated to the
- * account-hydration work above.
+ * Shared input for the per-opportunity metrics (D1-D3). Built in
+ * src/coverageSample.ts: buildCoverageSample(sampleResult) is pure/sync and
+ * wires up openOpportunities/closedOpportunities from a stratified sample
+ * (sample.ts), leaving every hydrated field below as a placeholder
+ * empty/zero value. Everything else is a separate, independent async
+ * hydration step — hydrateAccounts, hydrateStageHistory,
+ * hydrateNotes, hydrateActivities — each fetching its own field via a
+ * batched by-ref CrmAdapter read, never a full-org scan. A metric only
+ * needs to await the hydration step(s) whose fields it actually reads.
  */
 export interface CoverageSample {
   /** Open-stage opportunities only. */
   readonly openOpportunities: readonly Opportunity[];
   /** closed_won/closed_lost opportunities from the sample's closed strata. No D1/D2/D3-part-1 metric reads this — they only ever read openOpportunities. */
   readonly closedOpportunities: readonly Opportunity[];
-  /** Notes related to a sampled opportunity, keyed by Opportunity.ref.id. */
+  /**
+   * Notes related to a sampled opportunity, keyed by Opportunity.ref.id.
+   * Empty (not absent) until hydrateNotes runs; a genuinely note-less
+   * opportunity is indistinguishable from an unhydrated one by this field
+   * alone, but no D1-D4 metric needs that distinction — note_coverage_rate
+   * (the only reader) has no capability or precondition gate of its own,
+   * by design: presence-of-notes is always a meaningful question,
+   * unconditionally.
+   */
   readonly notesByOpportunity: ReadonlyMap<string, readonly Note[]>;
   /**
    * Activities related to a sampled opportunity, keyed by Opportunity.ref.id.
    * Unfiltered: each metric applies its own "qualifying activity" rule.
+   * Empty until hydrateActivities runs, same as notesByOpportunity — no
+   * separate "hydrated" gate here either: activity_capture_rate and
+   * stage_activity_contradiction_rate already gate on
+   * capabilities.activitySync before ever reading this map, which is
+   * sufficient (hydrateActivities always fetches whatever exists,
+   * regardless of activitySync — that capability governs interpretation,
+   * not readability; see CrmAdapter.getActivitiesByOpportunity).
    */
   readonly activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]>;
   /** Hydrated accounts for the sampled opportunities' accountRefs, keyed by Account.ref.id. Empty and meaningless until accountsHydrated is true. */

@@ -25,6 +25,7 @@ import type {
   CrmAdapter,
   FieldWrite,
   GetAccountsResult,
+  GetChildRecordsResult,
   SyncPage,
   SyncWindow,
   WriteOutcome,
@@ -76,6 +77,9 @@ export class MockAdapter implements CrmAdapter {
       rateLimit: { kind: 'none', value: 0 },
       stageMap: {},
       accountBatchLimit: 200,
+      childRecordBatchLimit: 200,
+      notesPerOpportunityLimit: 200,
+      activitiesPerOpportunityLimit: 200,
       ...this.caps,
     };
   }
@@ -126,6 +130,54 @@ export class MockAdapter implements CrmAdapter {
     const found = this.data.accounts.filter((a) => idSet.has(a.ref.id));
     const sorted = [...found].sort((a, b) => a.ref.id.localeCompare(b.ref.id));
     return { items: sorted, apiCallsConsumed: 1 };
+  }
+
+  private getChildRecordsByOpportunity<T extends { relatedTo: readonly RecordRef[] }>(
+    allRecords: readonly T[],
+    oppRefs: readonly RecordRef[],
+    dateOf: (item: T) => string,
+    perOpportunityLimit: number,
+  ): GetChildRecordsResult<T> {
+    if (oppRefs.length === 0) {
+      return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
+    }
+
+    // A repeated ref is processed once, not duplicated — same dedupe rule as getAccounts.
+    const dedupedIds: string[] = [];
+    const seen = new Set<string>();
+    for (const r of oppRefs) {
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        dedupedIds.push(r.id);
+      }
+    }
+
+    const items: T[] = [];
+    const truncatedOpportunityIds = new Set<string>();
+
+    for (const oppId of dedupedIds) {
+      const related = allRecords.filter((item) => item.relatedTo.some((r) => r.objectType === 'opportunity' && r.id === oppId));
+      const sorted = [...related].sort((a, b) => dateOf(a).localeCompare(dateOf(b)));
+      if (sorted.length > perOpportunityLimit) {
+        truncatedOpportunityIds.add(oppId);
+      }
+      items.push(...sorted.slice(0, perOpportunityLimit));
+    }
+
+    return { items, truncatedOpportunityIds, apiCallsConsumed: 1 };
+  }
+
+  async getNotesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Note>> {
+    return this.getChildRecordsByOpportunity(this.data.notes, oppRefs, (n) => n.createdAt, this.capabilities().notesPerOpportunityLimit);
+  }
+
+  async getActivitiesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Activity>> {
+    return this.getChildRecordsByOpportunity(
+      this.data.activities,
+      oppRefs,
+      (a) => a.occurredAt,
+      this.capabilities().activitiesPerOpportunityLimit,
+    );
   }
 
   async listStageHistory(w: SyncWindow) {

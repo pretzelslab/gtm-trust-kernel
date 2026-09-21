@@ -3,12 +3,23 @@ import { MockAdapter, type MockFaults, type MockOrgData } from '@gtm-trust-kerne
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type {
   Account,
+  Activity,
   CanonicalStage,
+  Note,
   Opportunity,
   RecordRef,
   StageHistoryEntry,
 } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import { buildCoverageSample, hydrateAccounts, hydrateStageHistory } from '../src/coverageSample.js';
+import { TrustTier, tag } from '@gtm-trust-kernel/adapters/model/trust.js';
+import {
+  buildCoverageSample,
+  hydrateAccounts,
+  hydrateActivities,
+  hydrateNotes,
+  hydrateStageHistory,
+} from '../src/coverageSample.js';
+import { activityCaptureRate } from '../src/metrics/coverage.js';
+import { stageActivityContradictionRate } from '../src/metrics/consistency.js';
 import { SAMPLE_STRATA, type SamplePlan, type SampleResult, type SampleStratum, type StratumSampleResult } from '../src/sample.js';
 
 const ORG = 'org-coverage-sample-test';
@@ -51,6 +62,26 @@ function stageHistoryEntry(id: string, opportunityId: string, changedAt: string)
   };
 }
 
+function note(id: string, opportunityId: string, createdAt: string): Note {
+  return {
+    ref: ref('note', id),
+    relatedTo: [ref('opportunity', opportunityId)],
+    createdAt,
+    body: tag(TrustTier.UserAuthored, `Note body for ${id}`, { recordId: `note:${id}`, field: 'body', capturedAt: createdAt }),
+  };
+}
+
+function activity(id: string, opportunityId: string, occurredAt: string): Activity {
+  return {
+    ref: ref('activity', id),
+    relatedTo: [ref('opportunity', opportunityId)],
+    kind: 'call',
+    direction: 'outbound',
+    occurredAt,
+    participantIds: [],
+  };
+}
+
 function fakePlan(): SamplePlan {
   return {
     seed: 'test-seed',
@@ -84,6 +115,9 @@ const CAPABILITIES: AdapterCapabilities = {
   rateLimit: { kind: 'none', value: 0 },
   stageMap: {},
   accountBatchLimit: 200,
+  childRecordBatchLimit: 200,
+  notesPerOpportunityLimit: 200,
+  activitiesPerOpportunityLimit: 200,
 };
 
 function makeAdapter(
@@ -91,13 +125,15 @@ function makeAdapter(
   caps: Partial<AdapterCapabilities> = {},
   faults: MockFaults = {},
   stageHistory: StageHistoryEntry[] = [],
+  notes: Note[] = [],
+  activities: Activity[] = [],
 ) {
   const data: MockOrgData = {
     accounts,
     opportunities: [],
     contacts: [],
-    activities: [],
-    notes: [],
+    activities,
+    notes,
     stageHistory,
     ownerChanges: [],
   };
@@ -258,5 +294,106 @@ describe('hydrateStageHistory', () => {
 
     const { sample: hydrated } = await hydrateStageHistory(sample, adapter);
     expect(hydrated.stageHistoryHydrated).toBe(true);
+  });
+});
+
+describe('hydrateNotes', () => {
+  it('populates notesByOpportunity, keyed by opportunity ref.id, sorted by createdAt', async () => {
+    const result = makeSampleResult({
+      discovery: [opp('open-1', 'discovery', 'acc-1'), opp('open-2', 'discovery', 'acc-1')],
+    });
+    const adapter = makeAdapter(
+      [],
+      {},
+      {},
+      [],
+      [note('note-2', 'open-1', '2026-01-02T00:00:00.000Z'), note('note-1', 'open-1', '2026-01-01T00:00:00.000Z')],
+    );
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateNotes(sample, adapter);
+
+    expect(hydrated.notesByOpportunity.get('open-1')?.map((n) => n.ref.id)).toEqual(['note-1', 'note-2']);
+    expect(hydrated.notesByOpportunity.has('open-2')).toBe(false);
+  });
+
+  it('leaves an opportunity with no related notes absent from the map (not an error)', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateNotes(sample, adapter);
+
+    expect(hydrated.notesByOpportunity.size).toBe(0);
+  });
+
+  it('populates notes regardless of capabilities — notes are always readable, not gated', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { activitySync: false, stageHistory: false, ownerHistory: false }, {}, [], [
+      note('note-1', 'open-1', '2026-01-01T00:00:00.000Z'),
+    ]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateNotes(sample, adapter);
+
+    expect(hydrated.notesByOpportunity.get('open-1')).toHaveLength(1);
+  });
+});
+
+describe('hydrateActivities', () => {
+  it('populates activitiesByOpportunity, keyed by opportunity ref.id, sorted by occurredAt', async () => {
+    const result = makeSampleResult({
+      discovery: [opp('open-1', 'discovery', 'acc-1'), opp('open-2', 'discovery', 'acc-1')],
+    });
+    const adapter = makeAdapter(
+      [],
+      {},
+      {},
+      [],
+      [],
+      [activity('act-2', 'open-1', '2026-01-02T00:00:00.000Z'), activity('act-1', 'open-1', '2026-01-01T00:00:00.000Z')],
+    );
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateActivities(sample, adapter);
+
+    expect(hydrated.activitiesByOpportunity.get('open-1')?.map((a) => a.ref.id)).toEqual(['act-1', 'act-2']);
+    expect(hydrated.activitiesByOpportunity.has('open-2')).toBe(false);
+  });
+
+  it('populates activities even when activitySync is false — that capability governs interpretation (silence isn\'t reliable), not readability', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { activitySync: false }, {}, [], [], [activity('act-1', 'open-1', '2026-01-01T00:00:00.000Z')]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateActivities(sample, adapter);
+
+    expect(hydrated.activitiesByOpportunity.get('open-1')).toHaveLength(1);
+  });
+});
+
+describe('activitySync capability gate survives real hydration', () => {
+  it('activityCaptureRate still returns not_instrumented when activitySync is false, even though hydrateActivities populated real activity data', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { activitySync: false }, {}, [], [], [activity('act-1', 'open-1', '2026-06-15T00:00:00.000Z')]);
+    let sample = buildCoverageSample(result, adapter.capabilities());
+    sample = (await hydrateActivities(sample, adapter)).sample;
+
+    expect(sample.activitiesByOpportunity.get('open-1')).toHaveLength(1); // hydration genuinely ran and found data
+
+    const reading = activityCaptureRate(sample, { asOf: '2026-06-15T00:00:00.000Z' });
+    expect(reading.status).toBe('not_instrumented');
+    expect(reading.value).toBeNull();
+  });
+
+  it('stageActivityContradictionRate still returns not_instrumented when activitySync is false, even though hydrateActivities populated real activity data', async () => {
+    const result = makeSampleResult({ negotiation: [opp('open-1', 'negotiation', 'acc-1')] });
+    const adapter = makeAdapter([], { activitySync: false }, {}, [], [], [activity('act-1', 'open-1', '2026-06-15T00:00:00.000Z')]);
+    let sample = buildCoverageSample(result, adapter.capabilities());
+    sample = (await hydrateActivities(sample, adapter)).sample;
+
+    const reading = stageActivityContradictionRate(sample, { asOf: '2026-06-15T00:00:00.000Z' });
+    expect(reading.status).toBe('not_instrumented');
+    expect(reading.value).toBeNull();
   });
 });

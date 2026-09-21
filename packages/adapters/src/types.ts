@@ -57,6 +57,25 @@ export interface AdapterCapabilities {
    * limit — chunking to it is the caller's responsibility.
    */
   readonly accountBatchLimit: number;
+  /**
+   * Max opportunity refs per getNotesByOpportunity()/getActivitiesByOpportunity()
+   * call. Advisory only, same contract as accountBatchLimit — the adapter
+   * does not enforce or truncate at this limit; chunking to it is the
+   * caller's job. Shared by both methods since both batch on the same kind
+   * of ref (an opportunity, the parent of the records being read).
+   */
+  readonly childRecordBatchLimit: number;
+  /**
+   * Max Notes returned per opportunity by a single getNotesByOpportunity()
+   * call. Unlike accountBatchLimit/childRecordBatchLimit, this ONE the
+   * adapter does enforce: an opportunity with more related notes than this
+   * has its result capped, and its ref.id reported in
+   * GetChildRecordsResult.truncatedOpportunityIds so the count is never
+   * silently undercounted as exact.
+   */
+  readonly notesPerOpportunityLimit: number;
+  /** Same contract as notesPerOpportunityLimit, for getActivitiesByOpportunity(). */
+  readonly activitiesPerOpportunityLimit: number;
 }
 
 export interface SyncWindow {
@@ -88,6 +107,40 @@ export interface GetAccountsResult {
    * not-found ref.
    */
   readonly items: readonly Account[];
+  /** Vendor API calls consumed by this call. 0 for an empty refs array. */
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Result of a batched by-opportunity-ref child-record read
+ * (CrmAdapter.getNotesByOpportunity / getActivitiesByOpportunity). Not a
+ * SyncPage: a bounded batch read, not a cursor-paginated stream. Named
+ * "byOpportunity" and parameterized "oppRefs" to make clear the refs are
+ * the PARENTS being queried, not the records themselves — an opportunity
+ * ref maps to zero or more child records, unlike getAccounts' one-ref-to-
+ * at-most-one-account shape.
+ */
+export interface GetChildRecordsResult<T> {
+  /**
+   * Every resolvable requested opportunity ref's related records, sorted
+   * by the owning opportunity's ref.id (in the order requested refs were
+   * given), then by the record's own date field (createdAt for Notes,
+   * occurredAt for Activities) ascending within that opportunity. An
+   * opportunity with zero related records contributes zero items — not an
+   * error, and not distinguishable in this array from an unresolvable
+   * opportunity ref, which also contributes zero items and never throws.
+   * A ref repeated in the request is processed once, not duplicated.
+   */
+  readonly items: readonly T[];
+  /**
+   * ref.ids of opportunities whose related-record count was capped at the
+   * adapter's per-opportunity advisory limit (notesPerOpportunityLimit /
+   * activitiesPerOpportunityLimit) — more records exist than were
+   * returned for that opportunity. Callers must treat that opportunity's
+   * count as "at least N", never exact, and should surface the
+   * truncation rather than silently undercounting.
+   */
+  readonly truncatedOpportunityIds: ReadonlySet<string>;
   /** Vendor API calls consumed by this call. 0 for an empty refs array. */
   readonly apiCallsConsumed: number;
 }
@@ -134,6 +187,28 @@ export interface CrmAdapter {
    * rejected or truncated — respecting that limit is the caller's job.
    */
   getAccounts(refs: readonly RecordRef[]): Promise<GetAccountsResult>;
+
+  /**
+   * Batched by-opportunity-ref Note read, for hydrating notes related to an
+   * already-sampled set of opportunities without a full listNotes() scan —
+   * listNotes has no ref filter, only a since-window, the same gap
+   * getAccounts closed for accounts. oppRefs beyond
+   * capabilities().childRecordBatchLimit in one call are NOT rejected or
+   * truncated — respecting that limit is the caller's job. Not gated on any
+   * capability: notes are always readable regardless of activitySync
+   * (that flag is about auto-capture of Activities, unrelated to Notes).
+   */
+  getNotesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Note>>;
+
+  /**
+   * Same contract as getNotesByOpportunity, for Activity records. Also not
+   * gated on activitySync itself — that capability governs how
+   * activity_capture_rate INTERPRETS the presence or absence of activities
+   * (silence isn't reliable without auto-capture), not whether Activity
+   * records can be read at all. Manually-logged activities can exist and
+   * be readable even when activitySync is false.
+   */
+  getActivitiesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Activity>>;
 
   /** Must return empty (not throw) when capabilities().stageHistory is false. */
   listStageHistory(w: SyncWindow): Promise<SyncPage<StageHistoryEntry>>;

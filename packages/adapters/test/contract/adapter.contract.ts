@@ -170,6 +170,78 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     });
   });
 
+  describe('batch child-record reads (notes/activities by opportunity)', () => {
+    it('resolves notes and activities related to a known opportunity ref', async () => {
+      const h = await make();
+      const oppRef = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
+
+      const notes = await h.adapter.getNotesByOpportunity([oppRef]);
+      expect(notes.items.length).toBeGreaterThan(0);
+      for (const n of notes.items) {
+        expect(n.relatedTo.some((r) => r.objectType === 'opportunity' && r.id === h.knownOpportunityId)).toBe(true);
+      }
+
+      const activities = await h.adapter.getActivitiesByOpportunity([oppRef]);
+      expect(activities.items.length).toBeGreaterThan(0);
+      for (const a of activities.items) {
+        expect(a.relatedTo.some((r) => r.objectType === 'opportunity' && r.id === h.knownOpportunityId)).toBe(true);
+      }
+    });
+
+    it('returns nothing and consumes no quota for an empty refs array', async () => {
+      const { adapter } = await make();
+      const notes = await adapter.getNotesByOpportunity([]);
+      expect(notes.items).toHaveLength(0);
+      expect(notes.apiCallsConsumed).toBe(0);
+
+      const activities = await adapter.getActivitiesByOpportunity([]);
+      expect(activities.items).toHaveLength(0);
+      expect(activities.apiCallsConsumed).toBe(0);
+    });
+
+    it('returns no items rather than throwing for an unresolvable opportunity ref', async () => {
+      const { adapter } = await make();
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: 'no-such-opportunity-xyz' };
+      const notes = await adapter.getNotesByOpportunity([ref]);
+      expect(notes.items).toHaveLength(0);
+      const activities = await adapter.getActivitiesByOpportunity([ref]);
+      expect(activities.items).toHaveLength(0);
+    });
+
+    it('resolves the known ref while an unresolvable ref in the same call contributes nothing', async () => {
+      const h = await make();
+      const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
+      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: 'no-such-opportunity-xyz' };
+      const result = await h.adapter.getNotesByOpportunity([known, missing]);
+      expect(result.items.length).toBeGreaterThan(0);
+      for (const n of result.items) {
+        expect(n.relatedTo.some((r) => r.objectType === 'opportunity' && r.id === h.knownOpportunityId)).toBe(true);
+      }
+    });
+
+    it('does not truncate or throw when called with more refs than capabilities().childRecordBatchLimit', async () => {
+      const h = await make();
+      const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
+      const limit = h.adapter.capabilities().childRecordBatchLimit;
+      const padding = Array.from({ length: limit }, (_, i) => ({
+        crm: h.adapter.vendor,
+        orgId: h.adapter.orgId,
+        objectType: 'opportunity' as const,
+        id: `no-such-opportunity-${i}`,
+      }));
+      const result = await h.adapter.getNotesByOpportunity([known, ...padding]);
+      expect(result.items.length).toBeGreaterThan(0);
+    });
+
+    it('reports truncatedOpportunityIds as a set, empty when well under the per-opportunity limit', async () => {
+      const h = await make();
+      const oppRef = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
+      const result = await h.adapter.getNotesByOpportunity([oppRef]);
+      expect(result.truncatedOpportunityIds instanceof Set).toBe(true);
+      expect(result.truncatedOpportunityIds.size).toBe(0);
+    });
+  });
+
   describe('write semantics', () => {
     it('applies a single field write and advances the concurrency token', async () => {
       const h = await make();

@@ -1,20 +1,18 @@
 /**
  * Builds a CoverageSample (src/metrics/types.ts) from a stratified sample
- * (sample.ts), in two steps:
- *
- * 1. buildCoverageSample — pure, sync. Wires up openOpportunities/
- *    closedOpportunities from a SampleResult.
- * 2. hydrateAccounts — async, the only I/O in this file (mirrors runSample
- *    already being the impure orchestrator over in sample.ts). Fetches the
- *    Account for every sampled opportunity's accountRef via
- *    CrmAdapter.getAccounts.
- *
- * notesByOpportunity/activitiesByOpportunity hydration is unrelated to
- * this file and remains unimplemented (see CoverageSample's docblock).
+ * (sample.ts): buildCoverageSample is pure/sync, wiring up
+ * openOpportunities/closedOpportunities from a SampleResult. Every other
+ * export here is an independent async hydration step, each the only I/O
+ * for its own field (mirrors runSample already being the impure
+ * orchestrator over in sample.ts): hydrateAccounts (accountRef ->
+ * Account), hydrateStageHistory (org-wide earliest StageHistoryEntry),
+ * hydrateNotes / hydrateActivities (opportunity -> related Notes/
+ * Activities). A caller only needs to await the hydration step(s) whose
+ * fields the metrics it's about to run actually read.
  */
 
 import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { SampleResult, SampleStratum } from './sample.js';
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample } from './metrics/types.js';
@@ -154,5 +152,114 @@ export async function hydrateStageHistory(
       stageHistoryHydrated: true,
     },
     apiCallsConsumed: page.apiCallsConsumed,
+  };
+}
+
+/** Distinct sampled opportunity refs (open + closed), sorted by ref.id — same determinism convention as hydrateAccounts' account-ref set. */
+function sortedOpportunityRefs(sample: CoverageSample): RecordRef[] {
+  const allOpportunities = [...sample.openOpportunities, ...sample.closedOpportunities];
+  const refsById = new Map<string, RecordRef>();
+  for (const o of allOpportunities) {
+    refsById.set(o.ref.id, o.ref);
+  }
+  return [...refsById.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * Groups a flat, adapter-returned child-record list back by owning
+ * opportunity, via each record's relatedTo entries — a record can
+ * legitimately appear in more than one opportunity's bucket if it's
+ * related to more than one (the canonical model's relatedTo is
+ * multi-valued). oppIds not present as a key in the returned map had zero
+ * matching records, not an error.
+ */
+function groupByOpportunity<T extends { relatedTo: readonly RecordRef[] }>(
+  items: readonly T[],
+  oppIds: ReadonlySet<string>,
+): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const item of items) {
+    for (const relRef of item.relatedTo) {
+      if (relRef.objectType === 'opportunity' && oppIds.has(relRef.id)) {
+        const bucket = grouped.get(relRef.id);
+        if (bucket) {
+          bucket.push(item);
+        } else {
+          grouped.set(relRef.id, [item]);
+        }
+      }
+    }
+  }
+  return grouped;
+}
+
+export interface HydrateNotesResult {
+  readonly sample: CoverageSample;
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Minimal glue for note_coverage_rate (D1): fetches related Notes for
+ * every sampled opportunity (open + closed) via
+ * CrmAdapter.getNotesByOpportunity, chunked at
+ * capabilities().childRecordBatchLimit (advisory; chunking is this
+ * function's job, same as hydrateAccounts' accountBatchLimit chunking).
+ * Not gated on any capability — notes are always readable regardless of
+ * activitySync (see CrmAdapter.getNotesByOpportunity's docblock).
+ */
+export async function hydrateNotes(sample: CoverageSample, adapter: CrmAdapter): Promise<HydrateNotesResult> {
+  const sortedRefs = sortedOpportunityRefs(sample);
+  const limit = adapter.capabilities().childRecordBatchLimit;
+  const chunks = chunk(sortedRefs, limit);
+
+  const allNotes: Note[] = [];
+  let apiCallsConsumed = 0;
+  for (const refChunk of chunks) {
+    const result = await adapter.getNotesByOpportunity(refChunk);
+    apiCallsConsumed += result.apiCallsConsumed;
+    allNotes.push(...result.items);
+  }
+
+  const oppIds = new Set(sortedRefs.map((r) => r.id));
+  const notesByOpportunity: ReadonlyMap<string, readonly Note[]> = groupByOpportunity(allNotes, oppIds);
+
+  return {
+    sample: { ...sample, notesByOpportunity },
+    apiCallsConsumed,
+  };
+}
+
+export interface HydrateActivitiesResult {
+  readonly sample: CoverageSample;
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Same shape as hydrateNotes, for Activity records via
+ * CrmAdapter.getActivitiesByOpportunity. Also not gated on activitySync
+ * here — activity_capture_rate and stage_activity_contradiction_rate
+ * (metrics/coverage.ts, metrics/consistency.ts) already gate on that
+ * capability before ever reading activitiesByOpportunity, which is
+ * sufficient; this function always fetches whatever actually exists.
+ */
+export async function hydrateActivities(sample: CoverageSample, adapter: CrmAdapter): Promise<HydrateActivitiesResult> {
+  const sortedRefs = sortedOpportunityRefs(sample);
+  const limit = adapter.capabilities().childRecordBatchLimit;
+  const chunks = chunk(sortedRefs, limit);
+
+  const allActivities: Activity[] = [];
+  let apiCallsConsumed = 0;
+  for (const refChunk of chunks) {
+    const result = await adapter.getActivitiesByOpportunity(refChunk);
+    apiCallsConsumed += result.apiCallsConsumed;
+    allActivities.push(...result.items);
+  }
+
+  const oppIds = new Set(sortedRefs.map((r) => r.id));
+  const activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]> = groupByOpportunity(allActivities, oppIds);
+
+  return {
+    sample: { ...sample, activitiesByOpportunity },
+    apiCallsConsumed,
   };
 }

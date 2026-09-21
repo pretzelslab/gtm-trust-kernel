@@ -20,6 +20,9 @@ const CAPABILITIES: AdapterCapabilities = {
   rateLimit: { kind: 'none', value: 0 },
   stageMap: {},
   accountBatchLimit: 200,
+  childRecordBatchLimit: 200,
+  notesPerOpportunityLimit: 200,
+  activitiesPerOpportunityLimit: 200,
 };
 
 function opportunity(

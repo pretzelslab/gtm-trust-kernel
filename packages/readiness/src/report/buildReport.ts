@@ -1,15 +1,16 @@
 /**
  * Orchestrates one readiness assessment run into a single, testable
  * ReportData object: sample -> hydrate accounts -> hydrate stage history ->
- * every implemented metric -> grade every gradeable reading -> grade every
- * capability. This is the JSON shape (--json) and the input to render.ts.
+ * hydrate notes -> hydrate activities -> every implemented metric -> grade
+ * every gradeable reading -> grade every capability. This is the JSON shape
+ * (--json) and the input to render.ts.
  *
  * Not itself pure (runs real sampling I/O against the given adapter), but
  * everything past sampling is deterministic given the adapter's data.
  */
 
 import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import { buildCoverageSample, hydrateAccounts, hydrateStageHistory } from '../coverageSample.js';
+import { buildCoverageSample, hydrateAccounts, hydrateActivities, hydrateNotes, hydrateStageHistory } from '../coverageSample.js';
 import type { CoverageSample, MetricConfig, MetricResult } from '../metrics/types.js';
 import {
   closeDateFillRate,
@@ -126,22 +127,6 @@ const D5_METRICS: ReadonlySet<MetricId> = new Set([
   'temporal_anomaly_rate',
 ]);
 
-/**
- * Metrics that read CoverageSample.notesByOpportunity/activitiesByOpportunity,
- * which nothing hydrates yet (docs/STATUS.md: "not implemented" for both
- * maps) — their computed result is real code, real thresholds, but running
- * over data that never arrives. Flagged on the row rather than silently
- * shown as if the fixture's seeded notes/activities were reflected.
- */
-const AFFECTED_BY_MISSING_NOTE_ACTIVITY_HYDRATION: ReadonlySet<MetricId> = new Set([
-  'note_coverage_rate',
-  'activity_capture_rate',
-  'stage_activity_contradiction_rate',
-]);
-
-const HYDRATION_GAP_CAVEAT =
-  'Known gap: CoverageSample does not yet hydrate notes/activities (docs/STATUS.md) — this reflects that gap, not the fixture\'s seeded data.';
-
 // ---------------------------------------------------------------------------
 // Report shape
 // ---------------------------------------------------------------------------
@@ -230,6 +215,8 @@ export async function buildReportData(adapter: CrmAdapter, options: BuildReportO
   let sample = buildCoverageSample(sampleResult, adapter.capabilities());
   sample = (await hydrateAccounts(sample, adapter)).sample;
   sample = (await hydrateStageHistory(sample, adapter)).sample;
+  sample = (await hydrateNotes(sample, adapter)).sample;
+  sample = (await hydrateActivities(sample, adapter)).sample;
 
   const metricConfig: MetricConfig = { asOf: options.asOf };
   const readings = new Map<MetricId, MetricReading>();
@@ -243,10 +230,7 @@ export async function buildReportData(adapter: CrmAdapter, options: BuildReportO
     const fn = IMPLEMENTED[metric];
     if (fn) {
       const result = fn(sample, metricConfig);
-      let note = result.note ?? null;
-      if (AFFECTED_BY_MISSING_NOTE_ACTIVITY_HYDRATION.has(metric) && result.status === 'ok') {
-        note = note ? `${note} ${HYDRATION_GAP_CAVEAT}` : HYDRATION_GAP_CAVEAT;
-      }
+      const note = result.note ?? null;
 
       let tier: Verdict | null = null;
       let viableAt: number | null = null;
