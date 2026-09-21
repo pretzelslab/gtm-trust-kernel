@@ -19,6 +19,7 @@ const CAPABILITIES: AdapterCapabilities = {
   nativeConcurrencyCheck: false,
   rateLimit: { kind: 'none', value: 0 },
   stageMap: {},
+  accountBatchLimit: 200,
 };
 
 function nextStep(id: string, value: string) {

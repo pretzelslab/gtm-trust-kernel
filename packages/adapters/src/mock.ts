@@ -24,6 +24,7 @@ import type {
   AdapterCapabilities,
   CrmAdapter,
   FieldWrite,
+  GetAccountsResult,
   SyncPage,
   SyncWindow,
   WriteOutcome,
@@ -42,6 +43,8 @@ export interface MockOrgData {
 export interface MockFaults {
   /** Fail the nth call to any list method with this error kind. */
   failListOnCall?: { n: number; kind: 'rate_limit' | 'auth' | 'network' };
+  /** Fail the nth call to getAccounts with this error kind. Separate from failListOnCall — getAccounts is a batch read, not a list method. */
+  failGetAccountsOnCall?: { n: number; kind: 'rate_limit' | 'auth' | 'network' };
   /** Simulate a concurrent edit by bumping tokens before the next write. */
   driftTokensBeforeWrite?: boolean;
   /** Simulate record deletion between read and apply. */
@@ -51,6 +54,7 @@ export interface MockFaults {
 export class MockAdapter implements CrmAdapter {
   readonly vendor = 'mock' as const;
   private listCalls = 0;
+  private getAccountsCalls = 0;
   private appliedKeys = new Map<string, WriteOutcome>();
 
   constructor(
@@ -71,6 +75,7 @@ export class MockAdapter implements CrmAdapter {
       nativeConcurrencyCheck: false,
       rateLimit: { kind: 'none', value: 0 },
       stageMap: {},
+      accountBatchLimit: 200,
       ...this.caps,
     };
   }
@@ -104,6 +109,24 @@ export class MockAdapter implements CrmAdapter {
   async listContacts(w: SyncWindow) { return this.page(this.data.contacts, w); }
   async listActivities(w: SyncWindow) { return this.page(this.data.activities, w); }
   async listNotes(w: SyncWindow) { return this.page(this.data.notes, w); }
+
+  async getAccounts(refs: readonly RecordRef[]): Promise<GetAccountsResult> {
+    if (refs.length === 0) {
+      return { items: [], apiCallsConsumed: 0 };
+    }
+
+    this.getAccountsCalls += 1;
+    const f = this.faults.failGetAccountsOnCall;
+    if (f && f.n === this.getAccountsCalls) {
+      const { AdapterError } = require('./types.js') as typeof import('./types.js');
+      throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
+    }
+
+    const idSet = new Set(refs.map((r) => r.id));
+    const found = this.data.accounts.filter((a) => idSet.has(a.ref.id));
+    const sorted = [...found].sort((a, b) => a.ref.id.localeCompare(b.ref.id));
+    return { items: sorted, apiCallsConsumed: 1 };
+  }
 
   async listStageHistory(w: SyncWindow) {
     if (!this.capabilities().stageHistory) {

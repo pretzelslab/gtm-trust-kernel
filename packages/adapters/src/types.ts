@@ -50,6 +50,13 @@ export interface AdapterCapabilities {
   };
   /** Maps vendor stage labels onto the canonical ladder. */
   readonly stageMap: Readonly<Record<string, CanonicalStage>>;
+  /**
+   * Max refs per getAccounts() call, declared by the adapter for callers to
+   * plan batches against (e.g. Salesforce SOQL "WHERE Id IN (...)" practice).
+   * Advisory only: the adapter itself does not enforce or truncate at this
+   * limit — chunking to it is the caller's responsibility.
+   */
+  readonly accountBatchLimit: number;
 }
 
 export interface SyncWindow {
@@ -65,6 +72,23 @@ export interface SyncPage<T> {
   /** High-water mark to persist for the next incremental run. */
   readonly watermark: string;
   /** Vendor API calls consumed by this page, for quota telemetry. */
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Result of a batched by-ref account read (CrmAdapter.getAccounts). Not a
+ * SyncPage: this is a bounded batch read, not a cursor-paginated stream.
+ */
+export interface GetAccountsResult {
+  /**
+   * Accounts found, at most one entry per distinct requested ref (a
+   * repeated ref in the request yields one entry, not a repeat), sorted by
+   * ref.id ascending — deterministic and independent of backend/storage
+   * order. Refs that don't resolve are simply absent; never throws for a
+   * not-found ref.
+   */
+  readonly items: readonly Account[];
+  /** Vendor API calls consumed by this call. 0 for an empty refs array. */
   readonly apiCallsConsumed: number;
 }
 
@@ -102,6 +126,14 @@ export interface CrmAdapter {
   listContacts(w: SyncWindow): Promise<SyncPage<Contact>>;
   listActivities(w: SyncWindow): Promise<SyncPage<Activity>>;
   listNotes(w: SyncWindow): Promise<SyncPage<Note>>;
+
+  /**
+   * Batched by-ref account read, for hydrating accounts related to an
+   * already-sampled set of opportunities without a full listAccounts()
+   * scan. refs beyond capabilities().accountBatchLimit in one call are NOT
+   * rejected or truncated — respecting that limit is the caller's job.
+   */
+  getAccounts(refs: readonly RecordRef[]): Promise<GetAccountsResult>;
 
   /** Must return empty (not throw) when capabilities().stageHistory is false. */
   listStageHistory(w: SyncWindow): Promise<SyncPage<StageHistoryEntry>>;

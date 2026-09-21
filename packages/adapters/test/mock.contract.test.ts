@@ -6,5 +6,6 @@ describe('MockAdapter satisfies the CRM adapter contract', () => {
   runAdapterContract(() => ({
     adapter: makeMockAdapter(),
     knownOpportunityId: 'opp-1',
+    knownAccountId: 'acc-1',
   }));
 });

@@ -20,6 +20,8 @@ export interface ContractHarness {
   adapter: CrmAdapter;
   /** An opportunity id known to exist in the fixture org. */
   knownOpportunityId: string;
+  /** An account id known to exist in the fixture org. */
+  knownAccountId: string;
   /** Mutate the record out of band, to simulate a concurrent edit. */
   simulateConcurrentEdit?: (opportunityId: string) => Promise<void> | void;
 }
@@ -113,6 +115,58 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       for (const o of page.items) {
         expect(o.concurrencyToken).toBeTruthy();
       }
+    });
+  });
+
+  describe('batch account read', () => {
+    it('resolves a known account ref', async () => {
+      const h = await make();
+      const ref = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: h.knownAccountId };
+      const result = await h.adapter.getAccounts([ref]);
+      expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
+    });
+
+    it('returns nothing and consumes no quota for an empty refs array', async () => {
+      const { adapter } = await make();
+      const result = await adapter.getAccounts([]);
+      expect(result.items).toHaveLength(0);
+      expect(result.apiCallsConsumed).toBe(0);
+    });
+
+    it('returns an empty result rather than throwing when every ref is unresolvable', async () => {
+      const { adapter } = await make();
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'account' as const, id: 'no-such-account-xyz' };
+      const result = await adapter.getAccounts([ref]);
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('resolves the known ref and silently omits an unresolvable one from the same call', async () => {
+      const h = await make();
+      const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: h.knownAccountId };
+      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: 'no-such-account-xyz' };
+      const result = await h.adapter.getAccounts([known, missing]);
+      expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
+    });
+
+    it('does not truncate or throw when called with more refs than capabilities().accountBatchLimit', async () => {
+      const h = await make();
+      const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: h.knownAccountId };
+      const limit = h.adapter.capabilities().accountBatchLimit;
+      const padding = Array.from({ length: limit }, (_, i) => ({
+        crm: h.adapter.vendor,
+        orgId: h.adapter.orgId,
+        objectType: 'account' as const,
+        id: `no-such-account-${i}`,
+      }));
+      const result = await h.adapter.getAccounts([known, ...padding]);
+      expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
+    });
+
+    it('returns at most one entry when the same ref is requested more than once', async () => {
+      const h = await make();
+      const ref = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: h.knownAccountId };
+      const result = await h.adapter.getAccounts([ref, ref]);
+      expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
     });
   });
 
