@@ -12,6 +12,14 @@ entry names its threshold key for cross-reference only.
 
 ## D1. Coverage
 
+**`stage_fill_rate` does not exist, intentionally.** `Opportunity.stage` is
+a required, non-nullable field in the canonical model (`canonical.ts`) — an
+adapter must map every opportunity to some `CanonicalStage`, even a low-
+confidence or unmapped one via `stageConfidence`. There is no "missing
+stage" state to measure, so a fill rate over it would always read 100% and
+carry no signal. Stage data *quality* (as opposed to presence) is already
+covered by D3's `stage_mapping_coverage`.
+
 ### close_date_fill_rate
 **Definition:** share of sampled *open* opportunities with a non-null Close
 Date field.
@@ -65,6 +73,16 @@ or logged call-note record, of any length.
 **Distinction from `substantive_note_rate`:** this metric doesn't judge
 content quality, only presence. A one-word note counts here.
 **Threshold:** `note_coverage_rate`.
+
+### owner_id_fill_rate
+**Definition:** share of sampled open opportunities with a non-null,
+non-empty Owner Id.
+**Edge case:** an empty string or a whitespace-only value counts as
+unfilled, same as a missing field — use `(ownerId?.trim().length ?? 0) > 0`,
+not a bare non-null check.
+**Not currently wired into any capability's gates** — report-only, unlike
+the other D1 metrics.
+**Threshold:** `owner_id_fill_rate`.
 
 ---
 

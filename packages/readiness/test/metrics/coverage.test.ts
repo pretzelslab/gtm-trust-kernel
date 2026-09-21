@@ -6,6 +6,7 @@ import {
   contactLinkageRate,
   nextStepFillRate,
   noteCoverageRate,
+  ownerIdFillRate,
 } from '../../src/metrics/coverage.js';
 import {
   CLOSE_DATE_FILL_RATE_ASOF,
@@ -39,6 +40,11 @@ import {
   activityCaptureRateFixture,
   activityCaptureRateGateOffFixture,
 } from '../fixtures/activity_capture_rate.js';
+import {
+  OWNER_ID_FILL_RATE_EXPECTED,
+  ownerIdFillRateFixture,
+  coverageSample as ownerIdCoverageSample,
+} from '../fixtures/owner_id_fill_rate.js';
 
 describe('closeDateFillRate', () => {
   it('matches the golden fixture: 3 of 5 open opportunities filled, one exactly at asOf', () => {
@@ -164,6 +170,33 @@ describe('noteCoverageRate', () => {
     const result = noteCoverageRate(noteCoverageSample([]), { asOf });
     expect(result).toEqual({
       metric: 'note_coverage_rate',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'no open opportunities in sample',
+    });
+  });
+});
+
+describe('ownerIdFillRate', () => {
+  const asOf = '2026-06-15T00:00:00.000Z';
+
+  it('matches the golden fixture: an empty-string or whitespace-only ownerId counts as unfilled, same as undefined', () => {
+    const result = ownerIdFillRate(ownerIdFillRateFixture(), { asOf });
+    expect(result).toEqual({
+      metric: 'owner_id_fill_rate',
+      status: 'ok',
+      value: OWNER_ID_FILL_RATE_EXPECTED.value,
+      sampleSize: OWNER_ID_FILL_RATE_EXPECTED.sampleSize,
+      lowConfidence: true, // 5 < LOW_CONFIDENCE_SAMPLE_SIZE (30)
+    });
+  });
+
+  it('returns not_applicable rather than dividing by zero when the sample has no open opportunities', () => {
+    const result = ownerIdFillRate(ownerIdCoverageSample([]), { asOf });
+    expect(result).toEqual({
+      metric: 'owner_id_fill_rate',
       status: 'not_applicable',
       value: null,
       sampleSize: 0,

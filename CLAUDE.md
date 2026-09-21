@@ -23,3 +23,8 @@ human-approved writes with rollback and a tamper-evident audit trail.
 
 - TypeScript strict, `noUncheckedIndexedAccess` on.
 - Run `npm run ci` before declaring anything done.
+
+## State
+
+- `packages/readiness/docs/STATUS.md` — current build status and handoff
+  state for Phase C (readiness). Read it before resuming that work cold.

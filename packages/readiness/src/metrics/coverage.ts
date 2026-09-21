@@ -44,6 +44,15 @@ export function noteCoverageRate(sample: CoverageSample, _config: MetricConfig):
   );
 }
 
+/** Whitespace-only or empty-string ownerId counts as unfilled, same as undefined. Not currently wired into any CapabilitySpec's gates — report-only. */
+export function ownerIdFillRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  return rateOverOpportunities(
+    'owner_id_fill_rate',
+    sample.openOpportunities,
+    (o) => (o.ownerId?.trim().length ?? 0) > 0,
+  );
+}
+
 /** Trailing window a qualifying activity must fall within, relative to asOf. Per metric-definitions.md D1. */
 const ACTIVITY_CAPTURE_WINDOW_DAYS = 30;
 /**

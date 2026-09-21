@@ -1,4 +1,7 @@
-# Phase C ("readiness") — runbook and handoff state
+# Phase C ("readiness") — status and handoff state
+
+Not the build runbook — see the open question below about `metric-definitions.md`'s
+"runbook" reference, which points at a different, currently-nonexistent document.
 
 Working state for continuing `packages/readiness` across sessions. Read this
 before `metric-definitions.md` when picking the work back up cold.
@@ -14,20 +17,26 @@ repeated here.
 
 | Metric group | State | Commit |
 |---|---|---|
-| D1 coverage (all 6: `close_date_fill_rate`, `amount_fill_rate`, `next_step_fill_rate`, `activity_capture_rate`, `contact_linkage_rate`, `note_coverage_rate`) | Done, tested | `9200b08` |
+| D1 coverage, original 6 (`close_date_fill_rate`, `amount_fill_rate`, `next_step_fill_rate`, `activity_capture_rate`, `contact_linkage_rate`, `note_coverage_rate`) | Done, tested | `9200b08` |
+| D1 `owner_id_fill_rate` | Done, tested. **Report-only** — not wired into any `CapabilitySpec`'s gates | this session, see git log |
 | D2 `median_days_since_modified` | Done, tested | `1590803` |
 | D2 `past_due_close_date_rate` | Done, tested | `1590803` |
 | D2 `median_next_step_age_days` | **Deferred** — not implemented | doc-only in `031ad35` |
 | D3–D7 (18 remaining metrics) | Not started | — |
 
+`stage_fill_rate` does not exist and never will — `Opportunity.stage` is
+required/non-nullable, so there's no "missing" state to measure. See
+metric-definitions.md's D1 header for the full explanation. This was the
+other half of the "open question" this doc used to carry; it's resolved.
+
 Files:
-- `src/metrics/coverage.ts` — D1.
+- `src/metrics/coverage.ts` — D1 (all 7 metrics, including `owner_id_fill_rate`).
 - `src/metrics/freshness.ts` — D2 (two of three; see deferral below).
 - `src/metrics/shared.ts` — helpers used by both families (see below).
 - `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig`.
 - `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family.
 
-`npm run ci` green at handoff: adapters 14, kernel 22, readiness 109.
+`npm run ci` green at handoff: adapters 14, kernel 22, readiness 114.
 
 ---
 
@@ -47,6 +56,7 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **`next_step_fill_rate`:** whitespace-only or single-character values (`"-"`, `"."`) count as unfilled — `str.trim().length > 1`.
 - **`note_coverage_rate`:** presence only, no length/content judgment — that's `substantive_note_rate`'s job (D6), don't conflate them.
 - **`past_due_close_date_rate`:** past-due is `closeDate < asOf`, strict — exactly-`asOf` is not past-due (mirrors `close_date_fill_rate`'s existing exactly-`asOf`-counts-as-filled edge case). Null `closeDate` excluded from both numerator and denominator (that gap belongs to `close_date_fill_rate`, don't double-penalize it).
+- **`owner_id_fill_rate`:** empty-string and whitespace-only `ownerId` count as unfilled, same as `undefined` — `(ownerId?.trim().length ?? 0) > 0`, not a bare non-null check (same shape as `next_step_fill_rate`'s edge case, different field). Deliberately **not** added to any `CapabilitySpec.gates` in `rubric.ts` — report-only for now. If a capability should eventually gate on it, that's a separate decision, not implied by this metric existing.
 - **`shared.ts`** (`src/metrics/shared.ts`) holds `rateOverOpportunities` (the share-of-denominator-with-a-predicate pattern used by most D1 metrics and by `past_due_close_date_rate`), `median()`, and `DAY_MS`. Originally lived only in `coverage.ts`; extracted when D2 needed the same shape. `coverage.ts`'s behavior/output did not change in that extraction — confirm this stays true if you touch either file.
 - **Canonical model additions made to support D1** (not just Phase C internals — these are cross-package changes, already committed in `9200b08`): `AdapterCapabilities.activitySync: boolean` (`packages/adapters/src/types.ts`), and `OpportunityContactLink` + `Opportunity.contactLinks: readonly OpportunityContactLink[]` (`packages/adapters/src/model/canonical.ts`). Both went through full interface review before being written — see git history on those files if the rationale is needed again.
 
@@ -74,24 +84,19 @@ and wait for approval before writing any of it, same process as
 
 ---
 
-## Open question, not yet resolved
+## Open questions, not yet resolved
 
-**Were `stage_fill_rate` / `owner_id_fill_rate` intentionally dropped from
-D1, or just never specified?** Investigated, not answered:
+**The `metric-definitions.md` "runbook" reference.** Line 4 says "per the
+runbook's Step 7 prompt template" — describing a build-process document
+with numbered steps, distinct from this file (see the note at the top of
+this doc). Grepped the whole repo: no such file exists anywhere, under any
+name. Predates this doc entirely (from `c5c3015`), so it isn't something
+this rename broke — it was already dangling. Not resolved: create the
+stub, remove/soften the reference, or leave it as a deliberate forward
+pointer to future work. Needs a decision, not a guess.
 
-- `stage_fill_rate` has a real explanation: `Opportunity.stage` is
-  **required**, non-nullable — every opportunity has a value by
-  construction, so there's no "missing stage" state to measure. The
-  metric that actually covers stage data quality already exists:
-  D3's `stage_mapping_coverage` (mapped vs. unmapped/inferred), a
-  different question than presence. Reasonably explained, not a gap.
-- `owner_id_fill_rate` has **no such explanation**. `Opportunity.ownerId?:
-  string` is optional — it genuinely can be missing — and nothing in
-  D1–D7 measures that. D4's `owner_history_enabled` is unrelated (checks
-  whether field-history tracking is on, not whether `ownerId` itself is
-  populated). This looks like a real, unaddressed gap in the spec, not a
-  reasoned exclusion. Not scoped or built — needs an explicit decision
-  (add it to D1? D3? skip it and say why?) before anything is written.
+*(The `stage_fill_rate`/`owner_id_fill_rate` question that used to live here
+is resolved — see the status table above.)*
 
 ---
 
@@ -100,8 +105,9 @@ D1, or just never specified?** Investigated, not answered:
 - D3 consistency/hygiene (4 metrics), D4 history depth (3), D5 joinability
   (4, all gated on a second source being connected), D6 text substrate (4),
   D7 label availability (3) — 18 metrics total remaining.
-- The `stage_fill_rate` / `owner_id_fill_rate` question above, before or
-  alongside D3 (D3 is the nearest natural home for anything ownerId-related
-  if the answer is "add it").
+- The dangling "runbook" reference above, whenever it's convenient — it's
+  not blocking anything, just inaccurate.
+- Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
+  (currently report-only, by design, not oversight).
 - `median_next_step_age_days`'s `nextStepHistory` capability, if it's
   prioritized before the rest of D3–D7.

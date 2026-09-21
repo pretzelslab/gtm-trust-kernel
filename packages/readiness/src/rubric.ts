@@ -27,6 +27,7 @@ export type MetricId =
   // D1 coverage
   | 'close_date_fill_rate'
   | 'amount_fill_rate'
+  | 'owner_id_fill_rate'
   | 'next_step_fill_rate'
   | 'activity_capture_rate'
   | 'contact_linkage_rate'
@@ -118,7 +119,23 @@ export const THRESHOLDS: Readonly<Record<MetricId, Threshold>> = {
       '0.9 matches the file\'s own top candidate: value-weighted risk is meaningful there. Below 0.75, dollar-weighted views need a stated caveat rather than a pass.',
     remediation: 'Require Amount at stage entry, or accept count-weighted analysis only.',
   },
-
+  
+  owner_id_fill_rate: {
+    metric: 'owner_id_fill_rate',
+    unit: 'rate',
+    direction: 'higher_is_better',
+    viableAt: 0.95,
+    degradedAt: 0.85,
+    question: 'What share of open opportunities must have an owner before per-rep views and routing are trustworthy?',
+    candidates: [
+      { value: 0.95, implication: 'Ownership is system-enforced in most CRMs, so this is achievable.' },
+      { value: 0.85, implication: 'Some deals orphaned. Per-rep rollups carry a stated gap.' },
+    ],
+    rationale:
+      'Owner is usually required by the CRM itself, so gaps signal import or integration damage. Below 0.85, per-rep analysis and review routing are unreliable.',
+    remediation: 'Reassign ownerless open opportunities and check import/integration jobs that create records without an owner.',
+  },
+  
   next_step_fill_rate: {
     metric: 'next_step_fill_rate',
     unit: 'rate',
