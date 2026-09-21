@@ -83,6 +83,22 @@ export interface CoverageSample {
   readonly missingAccountCount: number;
   /** Count of sampled opportunities (open + closed) with no usable accountRef (absent, or ref.id empty/whitespace-only) — excluded from account hydration entirely, not counted in missingAccountCount. */
   readonly oppsWithoutAccountRef: number;
+  /**
+   * changedAt of the org's single earliest retained StageHistoryEntry
+   * (org-wide, not scoped to this sample's opportunities — see
+   * metric-definitions.md D4's stage_history_months for why), or null if
+   * the org has the capability enabled but zero history entries exist.
+   * Meaningless until stageHistoryHydrated is true.
+   */
+  readonly stageHistoryEarliestChangedAt: string | null;
+  /**
+   * True once hydrateStageHistory (coverageSample.ts) has run. Same
+   * gate-off-means-not_instrumented rule as accountsHydrated, applied here:
+   * stage_history_months must return not_instrumented, not a computed
+   * value, when this is false (after first checking
+   * capabilities.stageHistory itself, which is a separate, earlier gate).
+   */
+  readonly stageHistoryHydrated: boolean;
   readonly capabilities: AdapterCapabilities;
 }
 

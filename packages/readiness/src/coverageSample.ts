@@ -57,6 +57,8 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     activitiesByOpportunity: new Map(),
     accountsByRef: new Map(),
     accountsHydrated: false,
+    stageHistoryEarliestChangedAt: null,
+    stageHistoryHydrated: false,
     missingAccountCount: 0,
     oppsWithoutAccountRef,
     capabilities,
@@ -113,5 +115,44 @@ export async function hydrateAccounts(sample: CoverageSample, adapter: CrmAdapte
       missingAccountCount: sortedRefs.length - accountsByRef.size,
     },
     accountApiCallsConsumed,
+  };
+}
+
+export interface HydrateStageHistoryResult {
+  readonly sample: CoverageSample;
+  /** apiCallsConsumed from the single listStageHistory call, for budget reporting. */
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Minimal glue for stage_history_months (D4, docs/metric-definitions.md):
+ * fetches only the org's single earliest retained StageHistoryEntry, via
+ * one ascending listStageHistory page (no `since`, `limit: 1`) — this
+ * metric is org-wide, not scoped to the sample's opportunities (that
+ * scope question was resolved this session; see the doc), so no new
+ * by-ref batched adapter method is needed, and no full-org scan happens:
+ * the existing method's page is already sorted ascending by changedAt, so
+ * the first item of the first page IS the earliest entry.
+ *
+ * Does not special-case AdapterCapabilities.stageHistory itself — relies
+ * on CrmAdapter.listStageHistory's own contract ("must return empty, not
+ * throw, when capabilities().stageHistory is false", types.ts) rather
+ * than duplicating that check here. stage_history_months (metrics/history.ts)
+ * still gates on the capability before trusting this field, same as any
+ * other capability-gated metric.
+ */
+export async function hydrateStageHistory(
+  sample: CoverageSample,
+  adapter: CrmAdapter,
+): Promise<HydrateStageHistoryResult> {
+  const page = await adapter.listStageHistory({ limit: 1 });
+
+  return {
+    sample: {
+      ...sample,
+      stageHistoryEarliestChangedAt: page.items[0]?.changedAt ?? null,
+      stageHistoryHydrated: true,
+    },
+    apiCallsConsumed: page.apiCallsConsumed,
   };
 }

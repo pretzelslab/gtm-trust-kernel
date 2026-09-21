@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { MockAdapter, type MockFaults, type MockOrgData } from '@gtm-trust-kernel/adapters/mock.js';
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, CanonicalStage, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import { buildCoverageSample, hydrateAccounts } from '../src/coverageSample.js';
+import type {
+  Account,
+  CanonicalStage,
+  Opportunity,
+  RecordRef,
+  StageHistoryEntry,
+} from '@gtm-trust-kernel/adapters/model/canonical.js';
+import { buildCoverageSample, hydrateAccounts, hydrateStageHistory } from '../src/coverageSample.js';
 import { SAMPLE_STRATA, type SamplePlan, type SampleResult, type SampleStratum, type StratumSampleResult } from '../src/sample.js';
 
 const ORG = 'org-coverage-sample-test';
@@ -33,6 +39,15 @@ function account(id: string): Account {
     name: `Account ${id}`,
     createdAt: '2026-01-01T00:00:00.000Z',
     modifiedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function stageHistoryEntry(id: string, opportunityId: string, changedAt: string): StageHistoryEntry {
+  return {
+    ref: ref('stage_history', id),
+    opportunityRef: ref('opportunity', opportunityId),
+    toStage: 'discovery',
+    changedAt,
   };
 }
 
@@ -71,14 +86,19 @@ const CAPABILITIES: AdapterCapabilities = {
   accountBatchLimit: 200,
 };
 
-function makeAdapter(accounts: Account[], caps: Partial<AdapterCapabilities> = {}, faults: MockFaults = {}) {
+function makeAdapter(
+  accounts: Account[],
+  caps: Partial<AdapterCapabilities> = {},
+  faults: MockFaults = {},
+  stageHistory: StageHistoryEntry[] = [],
+) {
   const data: MockOrgData = {
     accounts,
     opportunities: [],
     contacts: [],
     activities: [],
     notes: [],
-    stageHistory: [],
+    stageHistory,
     ownerChanges: [],
   };
   return new MockAdapter(ORG, data, caps, faults);
@@ -190,5 +210,53 @@ describe('hydrateAccounts', () => {
     const sample = buildCoverageSample(result, adapter.capabilities());
 
     await expect(hydrateAccounts(sample, adapter)).rejects.toThrow();
+  });
+});
+
+describe('hydrateStageHistory', () => {
+  it('finds the earliest changedAt across the org, independent of insertion order', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { stageHistory: true }, {}, [
+      stageHistoryEntry('sh-2', 'open-1', '2025-06-01T00:00:00.000Z'),
+      stageHistoryEntry('sh-1', 'open-1', '2024-01-15T00:00:00.000Z'),
+      stageHistoryEntry('sh-3', 'open-1', '2025-12-01T00:00:00.000Z'),
+    ]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateStageHistory(sample, adapter);
+
+    expect(hydrated.stageHistoryEarliestChangedAt).toBe('2024-01-15T00:00:00.000Z');
+  });
+
+  it('returns null when the org has zero stage-history entries', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { stageHistory: true }, {}, []);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateStageHistory(sample, adapter);
+
+    expect(hydrated.stageHistoryEarliestChangedAt).toBeNull();
+  });
+
+  it('returns null when the adapter reports no stageHistory capability, relying on the adapter contract rather than duplicating the check', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { stageHistory: false }, {}, [
+      stageHistoryEntry('sh-1', 'open-1', '2024-01-15T00:00:00.000Z'),
+    ]);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+
+    const { sample: hydrated } = await hydrateStageHistory(sample, adapter);
+
+    expect(hydrated.stageHistoryEarliestChangedAt).toBeNull();
+  });
+
+  it('flips stageHistoryHydrated from false to true', async () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = makeAdapter([], { stageHistory: true }, {}, []);
+    const sample = buildCoverageSample(result, adapter.capabilities());
+    expect(sample.stageHistoryHydrated).toBe(false);
+
+    const { sample: hydrated } = await hydrateStageHistory(sample, adapter);
+    expect(hydrated.stageHistoryHydrated).toBe(true);
   });
 });

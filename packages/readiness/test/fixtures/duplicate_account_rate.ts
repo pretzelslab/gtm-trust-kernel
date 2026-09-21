@@ -49,6 +49,8 @@ function coverageSample(
     activitiesByOpportunity: new Map(),
     accountsByRef,
     accountsHydrated,
+    stageHistoryEarliestChangedAt: null,
+    stageHistoryHydrated: false,
     missingAccountCount,
     oppsWithoutAccountRef,
     capabilities: CAPABILITIES,

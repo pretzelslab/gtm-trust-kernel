@@ -130,3 +130,26 @@ export function median(values: readonly number[]): number {
   }
   return (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
+
+/**
+ * Whole calendar months between two ISO timestamps, partial months
+ * dropped (stage_history_months, D4): Jan 15 -> Jun 20 is 5 months; Jan 15
+ * -> Jun 10 is 4 (the Jan-15 boundary hasn't been reached again in June
+ * yet). Standard "age in whole months" rule, same as most date libraries'
+ * diff('months'): raw month difference, minus one if laterIso's
+ * day-of-month is earlier than earlierIso's — so a month lacking the
+ * earlier date's day-of-month (e.g. Feb has no 31st, or no 29th outside a
+ * leap year) is never counted as complete on that day-of-month alone.
+ * Uses UTC calendar fields throughout, independent of runtime timezone.
+ * Floored at 0 — callers pass (earlier, later) in that order; a caller
+ * that gets this backwards gets 0, not a negative count.
+ */
+export function wholeCalendarMonthsBetween(earlierIso: string, laterIso: string): number {
+  const earlier = new Date(earlierIso);
+  const later = new Date(laterIso);
+  let months = (later.getUTCFullYear() - earlier.getUTCFullYear()) * 12 + (later.getUTCMonth() - earlier.getUTCMonth());
+  if (later.getUTCDate() < earlier.getUTCDate()) {
+    months -= 1;
+  }
+  return Math.max(0, months);
+}

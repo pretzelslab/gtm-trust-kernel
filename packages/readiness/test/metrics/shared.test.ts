@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeDomain } from '../../src/metrics/shared.js';
+import { normalizeDomain, wholeCalendarMonthsBetween } from '../../src/metrics/shared.js';
 
 describe('normalizeDomain', () => {
   /**
@@ -44,5 +44,31 @@ describe('normalizeDomain', () => {
 
   it('does not collapse distinct tenants on a shared PaaS host to the same domain', () => {
     expect(normalizeDomain('acme.herokuapp.com')).not.toBe(normalizeDomain('beta.herokuapp.com'));
+  });
+});
+
+describe('wholeCalendarMonthsBetween', () => {
+  it('matches the definitional example: Jan 15 -> Jun 20 is 5 whole months (the Jan-15 boundary is reached in June)', () => {
+    expect(wholeCalendarMonthsBetween('2026-01-15T00:00:00.000Z', '2026-06-20T00:00:00.000Z')).toBe(5);
+  });
+
+  it('drops the partial month: Jan 15 -> Jun 10 is 4, not 5 (the Jan-15 boundary is not yet reached in June)', () => {
+    expect(wholeCalendarMonthsBetween('2026-01-15T00:00:00.000Z', '2026-06-10T00:00:00.000Z')).toBe(4);
+  });
+
+  it('same day of month is exactly one whole month: Jan 15 -> Feb 15', () => {
+    expect(wholeCalendarMonthsBetween('2026-01-15T00:00:00.000Z', '2026-02-15T00:00:00.000Z')).toBe(1);
+  });
+
+  it('month-end boundary: Jan 31 -> Feb 28 (non-leap year) is 0, since February has no 31st to complete the month on', () => {
+    expect(wholeCalendarMonthsBetween('2027-01-31T00:00:00.000Z', '2027-02-28T00:00:00.000Z')).toBe(0);
+  });
+
+  it('leap year boundary: Feb 29, 2028 -> Feb 28, 2029 is 11, not 12, since 2029 has no 29th to complete the year on', () => {
+    expect(wholeCalendarMonthsBetween('2028-02-29T00:00:00.000Z', '2029-02-28T00:00:00.000Z')).toBe(11);
+  });
+
+  it('is floored at 0 rather than going negative when later is before earlier', () => {
+    expect(wholeCalendarMonthsBetween('2026-06-20T00:00:00.000Z', '2026-01-15T00:00:00.000Z')).toBe(0);
   });
 });

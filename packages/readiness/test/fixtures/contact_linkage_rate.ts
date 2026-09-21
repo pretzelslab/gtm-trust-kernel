@@ -50,6 +50,8 @@ export function coverageSample(openOpportunities: readonly Opportunity[]): Cover
     activitiesByOpportunity: new Map(),
     accountsByRef: new Map(),
     accountsHydrated: false,
+    stageHistoryEarliestChangedAt: null,
+    stageHistoryHydrated: false,
     missingAccountCount: 0,
     oppsWithoutAccountRef: 0,
     capabilities: CAPABILITIES,

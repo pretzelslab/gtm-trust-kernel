@@ -29,7 +29,9 @@ repeated here.
 | D2 `median_next_step_age_days` | **Deferred** — not implemented | doc-only in `031ad35` |
 | D3 `stage_activity_contradiction_rate`, `round_amount_rate` | Done, tested | prior session, see git log |
 | D3 `stage_mapping_coverage`, `duplicate_account_rate` | **Done, tested.** D3 is now fully implemented (all 4 metrics) | this session ("D3 part 2b"), see git log |
-| D4–D7 (14 remaining metrics) | Not started | — |
+| D4 `owner_history_enabled`, `stage_history_months` | Done, tested | this session ("D4 part 1"), see git log |
+| D4 `close_date_history_enabled` | **Deferred** — not implemented | doc-only, this session |
+| D5–D7 (11 remaining metrics) | Not started | — |
 
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
 required/non-nullable, so there's no "missing" state to measure. See
@@ -40,11 +42,12 @@ Files:
 - `src/metrics/coverage.ts` — D1 (all 7 metrics, including `owner_id_fill_rate`).
 - `src/metrics/freshness.ts` — D2 (two of three; see deferral below).
 - `src/metrics/consistency.ts` — D3, **all 4 metrics done**: `stage_activity_contradiction_rate`, `round_amount_rate`, `stage_mapping_coverage`, `duplicate_account_rate`.
-- `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below), `normalizeDomain`, `DEFAULT_SHARED_PROVIDER_DENYLIST` (added this session, D3 part 2b).
-- `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig` (gained optional `sharedProviderDenylist` this session).
-- `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates its accounts (`hydrateAccounts`); see decisions below.
-- `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family. `test/metrics/shared.test.ts` is the exception (added this session) — it tests `normalizeDomain` directly since that helper isn't itself a metric and has no fixture file.
-- `test/coverageSample.test.ts` — builder + hydration tests (not per-metric, so it doesn't follow the `test/fixtures/` + `test/metrics/` split above).
+- `src/metrics/history.ts` — D4, **2 of 3 metrics done** (added this session, D4 part 1): `owner_history_enabled`, `stage_history_months`. `close_date_history_enabled` deferred, see below — not in this file.
+- `src/metrics/shared.ts` — helpers used across families, including `hasQualifyingActivity` (see below), `normalizeDomain`, `DEFAULT_SHARED_PROVIDER_DENYLIST` (D3 part 2b), `wholeCalendarMonthsBetween` (D4 part 1, this session).
+- `src/metrics/types.ts` — `MetricResult`, `CoverageSample`, `MetricConfig` (gained optional `sharedProviderDenylist` in D3 part 2b; `CoverageSample` gained `stageHistoryEarliestChangedAt`/`stageHistoryHydrated` this session).
+- `src/coverageSample.ts` — builds `CoverageSample` from a `SampleResult` (`buildCoverageSample`) and hydrates its accounts (`hydrateAccounts`) and, as of this session, its org-wide earliest stage-history entry (`hydrateStageHistory`); see decisions below.
+- `test/fixtures/*.ts`, `test/metrics/*.test.ts` — one golden-fixture file per metric, one test file per metric family. `test/metrics/shared.test.ts` is the exception (added D3 part 2b) — it tests `normalizeDomain`/`wholeCalendarMonthsBetween` directly since those are helpers, not metrics, and have no fixture file of their own.
+- `test/coverageSample.test.ts` — builder + hydration tests (not per-metric, so it doesn't follow the `test/fixtures/` + `test/metrics/` split above). Gained a `hydrateStageHistory` describe block this session.
 
 Cross-package: `packages/adapters` gained `CrmAdapter.getAccounts(refs)` this
 session (`src/types.ts`, `src/mock.ts`), the same kind of cross-package
@@ -52,7 +55,7 @@ addition D1's `activitySync`/`contactLinks` were — see git history on those
 files (`contract: add getAccounts batch read`) if the rationale is needed
 again.
 
-`npm run ci` green at handoff: adapters 20, kernel 22, readiness 154.
+`npm run ci` green at handoff: adapters 20, kernel 22, readiness 170.
 
 Cross-package, D3 part 2b: `tldts` (`7.4.13`, exact-pinned) added as a
 `packages/readiness` dependency — the only domain-normalization library in
@@ -67,7 +70,7 @@ above if this doc ever drifts, but treat this list as authoritative for
 *why*, not just *what*.
 
 - **Every metric is `(sample: CoverageSample, config: MetricConfig) => MetricResult`.** Pure function, no exceptions. `CoverageSample` is reused across D1 and D2 even where a metric doesn't need all of its fields (e.g. D2's two metrics ignore `notesByOpportunity`/`activitiesByOpportunity`) — a narrower per-family sample type was considered and deliberately rejected to avoid type proliferation for no behavioral gain.
-- **Capability gate-off → `not_instrumented`, never a computed score.** Established for `activity_capture_rate` (gated on `AdapterCapabilities.activitySync`). Same pattern intended for any future capability-gated metric (e.g. `close_date_history_enabled`, `owner_history_enabled` in D4 — those are boolean capability checks by definition, not rate computations, so confirm the pattern still applies before assuming it transfers directly).
+- **Capability gate-off → `not_instrumented`, never a computed score.** Established for `activity_capture_rate` (gated on `AdapterCapabilities.activitySync`). Confirmed this session for `stage_history_months` (D4), which is gated the same way. **Did not transfer to `owner_history_enabled` (D4)** — it's a pure capability-matrix *read*, not a rate computed *from* a capability gate, so there's no gate to fail: it always returns `'ok'` with `value: 1` or `value: 0`. The distinction: a gated metric needs the capability to compute something else; a capability-check metric's answer *is* the capability value, true or false either way.
 - **`activity_capture_rate` qualifying-activity definition** (metric-definitions.md D1, negotiated over several rounds — do not re-derive from first principles): `occurredAt` within `[asOf - 30d, asOf]` inclusive on both ends, and not before the opportunity's own `createdAt`. No completion-status filter (the model has no such field). No `ActivityKind` restriction — every kind qualifies, including `'other'`, because there is no separate `Task` representation in the canonical model.
 - **`activity_capture_rate` denominator exclusion:** opportunities created within the trailing **7 days** of `asOf` are excluded from the denominator entirely (not just failed) — they haven't had time to accrue activity. This was originally written as 30 days in the doc; the doc was wrong, not the code — corrected in the D1 commit.
 - **Filtered-sample `sampleSize` convention:** when a metric's real denominator is a filtered subset of the raw sample (not the full `openOpportunities` list), `sampleSize` in the `MetricResult` reports the *filtered* count, not the raw sample size. Established by `activity_capture_rate` (denominator = eligible opportunities after the 7-day exclusion) and carried into `past_due_close_date_rate` (denominator = opportunities with non-null `closeDate`).
@@ -92,6 +95,10 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **`normalizeDomain` (`src/metrics/shared.ts`, D3 part 2b):** the only domain-normalization function in the codebase — every domain-based metric must import it, not re-derive normalization. Implemented as a thin wrapper around `tldts`'s `getDomain(raw, { allowPrivateDomains: true })`, not a hand-rolled trim/lowercase/strip-protocol/strip-www/strip-path/strip-port/strip-trailing-dot pipeline — probed `tldts` directly against the full test table before writing the function and confirmed its default behavior already performs every one of those steps, so duplicating them would have been dead code. `allowPrivateDomains: true` is a deliberate choice (this session, per explicit instruction): without it, PSL private-section hosts (`herokuapp.com`, `github.io`, `blogspot.com`, etc.) collapse every tenant's subdomain down to the shared host domain, which would manufacture false-positive `duplicate_account_rate` groups for unrelated companies both hosted on e.g. Heroku. With it, `acme.herokuapp.com` and `beta.herokuapp.com` normalize to two different values. Covered by `test/metrics/shared.test.ts`'s table, which carries a header comment marking it as `normalizeDomain`'s behavioral contract: a `tldts` version bump that changes any row's expected output must be reviewed and the row updated deliberately, never auto-updated to match new library output.
 - **`DEFAULT_SHARED_PROVIDER_DENYLIST` (`src/metrics/shared.ts`) / `MetricConfig.sharedProviderDenylist` (D3 part 2b):** 11 default consumer/free-mail domains (gmail.com, googlemail.com, outlook.com, hotmail.com, live.com, yahoo.com, icloud.com, aol.com, proton.me, protonmail.com, gmx.com). `MetricConfig.sharedProviderDenylist`, when supplied, **replaces** the default rather than merging with it (same `??` pattern as `DEFAULT_SAMPLE_CONFIG` elsewhere in this package) — an org that wants to add one domain must currently repeat the full list; not treated as a problem worth solving until an actual caller needs it. Every denylist entry (default or config-supplied) is itself passed through `normalizeDomain` before comparison, so a config entry like `" Gmail.COM "` still matches a sampled account's `"gmail.com"` — verified by a dedicated test (`duplicateAccountRateConfigDenylistFixture`).
 - **`duplicate_account_rate` (D3 part 2b):** gated on `CoverageSample.accountsHydrated` (a build-order precondition, not an `AdapterCapabilities` flag) — `not_instrumented` when false, without reading `accountsByRef`, same rule as `CoverageSample`'s own docblock already specified for this metric. Operates over `sample.accountsByRef.values()` (the distinct hydrated accounts, one row per account — **not** `openOpportunities`/`closedOpportunities`), since the doc's "sampled accounts" language means accounts, not opportunities. Each account's `domain` goes through `normalizeDomain`; accounts with a `null` result, or a denylisted result, are excluded from the denominator and counted separately (`excludedNullDomain`, `excludedDenylisted`). Two `not_applicable` notes are distinguished: `"no hydrated accounts in sample"` (accountsByRef itself is empty) vs. `"no accounts with a resolvable, non-denylisted domain in sample"` (accounts exist but all were excluded) — same "distinguish the empty-denominator cause" convention `past_due_close_date_rate` established. **Group-counting decision (confirmed with the user this session, doc was silent — did not pick unilaterally):** every account in a duplicate group (size >= 2) counts toward the numerator, including the first-created member — not just members beyond the first. The `note` on the `'ok'` path additionally reports the duplicate-group count, so the alternate "beyond first" count (denominator members in groups minus group count) is derivable without a second metric or a rubric.ts change. Does not reuse `rateOverOpportunities` (it's typed to `Opportunity[]`; this is the first Account-shaped metric) — written inline rather than genericizing that helper for a single caller.
+- **`owner_history_enabled` (D4 part 1, `src/metrics/history.ts`):** pure `sample.capabilities.ownerHistory` read, first `unit: 'bool'` metric implemented — `value: 1` when true, `value: 0` when false, per the new cross-cutting rule in `metric-definitions.md`. Never `not_instrumented`: the capability read itself is the metric, so there's no gate to fail. **`sampleSize`/`lowConfidence` were not derived mechanically** from `LOW_CONFIDENCE_SAMPLE_SIZE` — both `owner_history_enabled` and `stage_history_months` report `sampleSize: 0` and hardcode `lowConfidence: false`, because neither is a statistical sample of records; mechanically applying `sampleSize < 30` would mark every result "low confidence" forever, which carries no differentiating information for these two metrics. This wasn't specified — flagging as a judgment call, worth revisiting if the report layer treats `lowConfidence` as an actionable warning rather than informational.
+- **`stage_history_months` (D4 part 1, `src/metrics/history.ts`):** scope ambiguity resolved this session — **org-wide**, not scoped to the sample's opportunities (see `metric-definitions.md`'s updated D4 entry for the reasoning: answerable in one bounded ascending `listStageHistory` page, `limit: 1`, no `since`; a sample-scoped version would need a new by-ref batched history method or an unbounded scan). Three-level gate cascade: `capabilities.stageHistory` false → `not_instrumented` (standard capability gate); `stageHistoryHydrated` false → `not_instrumented` (build-order precondition, same rule as `duplicate_account_rate`'s `accountsHydrated` gate); `stageHistoryEarliestChangedAt` null (hydrated, zero entries) → `ok`, `value: 0`, `note: "history enabled, no entries yet"` (this session's explicit decision — a freshly-enabled org isn't the same as a missing capability). Otherwise → `ok`, `value: wholeCalendarMonthsBetween(earliest, config.asOf)`.
+- **`wholeCalendarMonthsBetween` (`src/metrics/shared.ts`, D4 part 1):** whole calendar months between two ISO timestamps, partial months dropped — standard "age in whole months" rule (raw month difference, minus one if the later date's day-of-month is earlier than the earlier date's), same as most date libraries' `diff('months')`. Floored at 0. Month-end/leap-year behavior is a deliberate choice, not an oversight: Jan 31 → Feb 28 is 0 months (Feb has no 31st); Feb 29, 2028 → Feb 28, 2029 is 11, not 12 (2029 has no 29th) — both pinned by tests in `test/metrics/shared.test.ts`, same "behavioral contract" framing as `normalizeDomain`'s table.
+- **`hydrateStageHistory` (`src/coverageSample.ts`, D4 part 1):** minimal glue — one `adapter.listStageHistory({ limit: 1 })` call, no `since`, relying on the method's own ascending-sort contract so the first (and only) returned item is the org's earliest entry. Does **not** special-case `capabilities.stageHistory` itself — relies on `CrmAdapter.listStageHistory`'s existing contract ("must return empty, not throw, when the capability is false") rather than duplicating that check in two places; `stage_history_months` still gates on the capability before trusting the hydrated field. **No new adapter method added** (per this session's explicit scope) and **not wired into the dry-run budget** (`SamplePlan.plannedAccountApiCalls`-equivalent) — this session scoped the glue as CoverageSample-only, not a budget-system update; worth doing if this ships for real quota planning, since account hydration's budget integration (D3 part 2a) didn't get a stage-history counterpart.
 
 ---
 
@@ -114,6 +121,32 @@ To unblock: this needs a canonical-model / adapter-contract change first
 `Opportunity`), which is a multi-file, cross-package change — show the plan
 and wait for approval before writing any of it, same process as
 `OpportunityContactLink`.
+
+---
+
+## Deferred: `close_date_history_enabled`
+
+Not implemented. Same fix shape as `median_next_step_age_days` above. Root
+cause: no adapter capability represents "field-history tracking on Close
+Date" today. `AdapterCapabilities.stageHistory`/`ownerHistory` don't cover
+it, and `StageHistoryEntry.closeDateAtChange` (a snapshot of the close
+date *at a stage change*, not field-history on Close Date itself) is
+explicitly disallowed as a stand-in by this metric's own definition in
+`metric-definitions.md` — using it would be exactly the "infer from
+whether history records happen to exist" that entry's own rule forbids.
+
+To unblock: needs a new `AdapterCapabilities` field (shape TBD — a boolean
+flag at minimum, and depending on how `rubric.ts`'s slip-detection use
+case evolves, possibly a new history record type mirroring
+`StageHistoryEntry`/`OwnerChange`), which is a multi-file, cross-package
+change — show the plan and wait for approval before writing any of it,
+same process as `OpportunityContactLink` and the `nextStepHistory`
+capability above.
+
+Already wired as a gate in one of `rubric.ts`'s `CapabilitySpec`s
+(alongside `close_date_fill_rate` and `past_due_close_date_rate`) — the
+threshold entry exists and is unaffected by this deferral; only the
+metric's implementation is blocked.
 
 ---
 
@@ -143,6 +176,19 @@ and wait for approval before writing any of it, same process as
   which currently *replaces* the default rather than merging with it (see
   decisions above). Revisit if an org needs "default plus a few extras"
   often enough to justify a merge option.
+- **`owner_history_enabled`/`stage_history_months` and `lowConfidence`.**
+  Both hardcode `sampleSize: 0`/`lowConfidence: false` rather than deriving
+  it from `LOW_CONFIDENCE_SAMPLE_SIZE` (see decisions above) — a judgment
+  call, not specified by the user. Revisit if the report layer wants some
+  other signal for "this number rests on very little underlying data"
+  (e.g. `stage_history_months` found its answer from exactly one boundary
+  record).
+- **`stage_history_months` and the dry-run budget.** `hydrateStageHistory`'s
+  one `listStageHistory` call is not reflected in `SamplePlan`'s planned
+  API call estimate or the confirmation-prompt display, unlike account
+  hydration (D3 part 2a). Minor (it's exactly one bounded call, not a
+  chunked scan) but inconsistent with the existing quota-discipline
+  display; revisit if this ships for real quota planning.
 
 (The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
@@ -154,20 +200,22 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
-- **D3 is now complete (all 4 metrics).** Next up: D4 history depth (3
-  metrics), D5 joinability (4, all gated on a second source being
-  connected), D6 text substrate (4), D7 label availability (3) — 14
-  metrics total remaining (recounted directly against
-  `metric-definitions.md`'s 28 `###` entries this session; the prior "16"
-  was stale, still counting D3's 2 as remaining after they'd shipped).
+- **D3 and D4 are as complete as they'll get in v0.1** (D4:
+  `owner_history_enabled`/`stage_history_months` done, `close_date_history_enabled`
+  deferred pending a new adapter capability). Next up: D5 joinability (4,
+  all gated on a second source being connected), D6 text substrate (4),
+  D7 label availability (3) — 11 metrics total remaining.
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
-- `median_next_step_age_days`'s `nextStepHistory` capability, if it's
-  prioritized before the rest of D4–D7.
+- `median_next_step_age_days`'s `nextStepHistory` capability and
+  `close_date_history_enabled`'s new capability — both blocked on the same
+  shape of canonical-model/adapter-contract change, if either is
+  prioritized before the rest of D5–D7.
 - The `excludedCount`-as-`note` tech debt, now at its second use
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if
   `duplicate_account_rate`'s heavier note turns out to need it sooner.
-- The three `duplicate_account_rate` open questions above (beyond-first
-  variant, cross-TLD, regional shared-provider domains) — none blocking,
+- The three `duplicate_account_rate` open questions (beyond-first variant,
+  cross-TLD, regional shared-provider domains), plus the two new D4 open
+  questions (`lowConfidence` hardcoding, dry-run budget) — none blocking,
   all deferred to v0.2 or later.

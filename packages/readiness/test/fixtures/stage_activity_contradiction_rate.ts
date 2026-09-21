@@ -72,6 +72,8 @@ export function coverageSample(
     activitiesByOpportunity,
     accountsByRef: new Map(),
     accountsHydrated: false,
+    stageHistoryEarliestChangedAt: null,
+    stageHistoryHydrated: false,
     missingAccountCount: 0,
     oppsWithoutAccountRef: 0,
     capabilities,

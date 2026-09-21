@@ -191,12 +191,40 @@ field-history tracking active on the Close Date field for this org.
 per-opportunity computation. If the adapter can't answer the capability
 question directly, treat as `false` (assume not enabled) rather than
 attempting to infer it from whether any history records happen to exist.
+**Status: deferred.** No adapter capability for this exists yet in v0.1.
+`AdapterCapabilities.stageHistory`/`ownerHistory` don't cover it, and
+`StageHistoryEntry.closeDateAtChange` is a snapshot of the close date *at
+a stage change*, not field-history on the Close Date field itself — using
+it as a stand-in would be exactly the "infer from whether history records
+happen to exist" this entry's own rule above forbids. Requires a new
+`AdapterCapabilities` field (shape TBD), field-history backed the same way
+`stageHistory`/`ownerHistory` are, before this metric can return anything
+but `not_instrumented`. Not implemented until that capability lands — same
+deferral shape as `median_next_step_age_days` (D2).
 **Threshold:** `close_date_history_enabled`.
 
 ### stage_history_months
 **Definition:** number of full calendar months between the org's earliest
-retained Stage-field history entry (across any opportunity in the sample)
-and today.
+retained Stage-field history entry, **org-wide**, and the sample's `asOf`
+time.
+**Resolved ambiguity (today):** this is org-wide, not scoped to the
+sample's opportunities — a prior version of this sentence read "the org's
+earliest... entry (across any opportunity in the sample)", which
+contradicted itself (org-wide vs. sample-scoped). Org-wide was chosen
+because it's answerable in one bounded, ascending-sorted
+`listStageHistory` page (`limit: 1`, no `since`) — the first item of the
+first page is definitionally the earliest entry in the whole org. A
+sample-scoped version would need either a new by-ref batched history
+method (mirroring `getAccounts`) or an unbounded scan, which the scope
+doc's "never full-scan a production org" rule forbids.
+**Whole calendar months:** partial months are dropped, not rounded — e.g.
+Jan 15 -> Jun 20 is 5 months; Jan 15 -> Jun 10 is 4 (the Jan-15 boundary
+hasn't been reached again in June yet). See `wholeCalendarMonthsBetween`
+(`src/metrics/shared.ts`) for the exact rule, including its month-end and
+leap-year behavior.
+**Capability on, zero entries retained** (e.g. a freshly-enabled org):
+`value: 0`, `note: "history enabled, no entries yet"` — distinct from the
+capability being off.
 **Threshold:** `stage_history_months`.
 
 ### owner_history_enabled
@@ -336,3 +364,7 @@ as a segment metric in implementation).
   an absent reading as blocked, so a metric should only return one of these
   statuses when it genuinely cannot compute a number, not as a way to signal
   a bad result.
+- A metric with `rubric.ts`'s `unit: 'bool'` reports `MetricResult.value`
+  as `1` (true) or `0` (false), never a JS boolean — `value`'s type is
+  `number | null`. Established by `owner_history_enabled` (D4), the first
+  `unit: 'bool'` metric implemented.
