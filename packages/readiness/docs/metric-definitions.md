@@ -85,10 +85,15 @@ metric's. Don't double-penalize a missing field in two metrics.
 ### median_next_step_age_days
 **Definition:** median, across sampled open opportunities with a non-empty
 Next Step, of `today - <date Next Step field was last modified>`.
-**Data requirement:** needs field-level modification timestamp, not just
-the opportunity's overall `LastModifiedDate`. If the adapter can't report
-per-field modification dates, fall back to `LastModifiedDate` and flag the
-metric's output as `approximate: true`.
+**Data requirement:** needs a real field-level modification timestamp for
+Next Step, not just the opportunity's overall `LastModifiedDate`. No
+fallback: if the adapter can't report a per-field Next Step change date,
+this metric returns `not_instrumented` rather than an approximate value
+computed from `LastModifiedDate`.
+**Status: deferred.** No adapter capability for this exists yet in v0.1.
+Requires a `nextStepHistory` capability, field-history backed the same way
+`stageHistory`/`ownerHistory` are, before this metric can return anything
+but `not_instrumented`. Not implemented until that capability lands.
 **Threshold:** `median_next_step_age_days`.
 
 ---
