@@ -136,9 +136,13 @@ a shared-provider denylist (gmail.com, outlook.com, yahoo.com, and similar
 consumer/free-mail domains, which produce false positives).
 **Normalization:** reduced to registrable domain (Public Suffix List, via
 `tldts`), not just lowercase + strip-subdomains — needed for correctness on
-multi-part TLDs (`sub.acme.co.uk` -> `acme.co.uk`, not `co.uk`). Single
-shared implementation: `normalizeDomain` in `src/metrics/shared.ts`; every
-domain-based metric must import it, not re-derive normalization.
+multi-part TLDs (`sub.acme.co.uk` -> `acme.co.uk`, not `co.uk`). `tldts`
+runs with `allowPrivateDomains: true`, so a PaaS tenant subdomain
+(`herokuapp.com`, `github.io`, `vercel.app`) stays distinct per tenant
+rather than collapsing every tenant on that host into one false-positive
+duplicate group. Single shared implementation: `normalizeDomain` in
+`src/metrics/shared.ts`; every domain-based metric must import it, not
+re-derive normalization.
 **Denominator:** sampled accounts (the distinct hydrated accounts backing
 the sample's opportunities, one row per account — not one row per
 opportunity) with a resolvable, non-denylisted normalized domain. Accounts

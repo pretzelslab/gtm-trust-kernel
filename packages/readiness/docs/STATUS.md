@@ -29,7 +29,7 @@ repeated here.
 | D2 `median_next_step_age_days` | **Deferred** — not implemented | doc-only in `031ad35` |
 | D3 `stage_activity_contradiction_rate`, `round_amount_rate` | Done, tested | prior session, see git log |
 | D3 `stage_mapping_coverage`, `duplicate_account_rate` | **Done, tested.** D3 is now fully implemented (all 4 metrics) | this session ("D3 part 2b"), see git log |
-| D4–D7 (16 remaining metrics) | Not started | — |
+| D4–D7 (14 remaining metrics) | Not started | — |
 
 `stage_fill_rate` does not exist and never will — `Opportunity.stage` is
 required/non-nullable, so there's no "missing" state to measure. See
@@ -156,8 +156,10 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 - **D3 is now complete (all 4 metrics).** Next up: D4 history depth (3
   metrics), D5 joinability (4, all gated on a second source being
-  connected), D6 text substrate (4), D7 label availability (3) — 16
-  metrics total remaining.
+  connected), D6 text substrate (4), D7 label availability (3) — 14
+  metrics total remaining (recounted directly against
+  `metric-definitions.md`'s 28 `###` entries this session; the prior "16"
+  was stale, still counting D3's 2 as remaining after they'd shipped).
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
 - `median_next_step_age_days`'s `nextStepHistory` capability, if it's
