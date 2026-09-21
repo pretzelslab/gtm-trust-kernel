@@ -238,6 +238,155 @@ export interface CrmAdapter {
   applyFieldWrite(w: FieldWrite): Promise<WriteOutcome>;
 }
 
+/**
+ * Second source (D5 cross-system joinability): an engagement tool or a
+ * billing/product system, connected alongside the CRM adapter. Design
+ * locked in packages/readiness/docs/second-source-adapter-design.md —
+ * see that doc for the decisions behind this shape. Deliberately a
+ * separate interface from CrmAdapter/AdapterCapabilities, not an
+ * extension: a different object model, and a connection lifecycle where
+ * it may not exist at all (unlike a CRM capability flag being false).
+ */
+
+export type SecondSourceObjectType = 'contact' | 'account' | 'activity';
+
+/**
+ * Opaque, second-source-qualified record ref. Not RecordRef: RecordRef.crm
+ * is typed CrmVendor ('salesforce' | 'hubspot' | 'mock'), a closed union
+ * of CRM vendors that doesn't fit a non-CRM source. `source` is an open
+ * string since no real second-source vendor is implemented yet.
+ */
+export type SecondSourceRef = {
+  readonly source: string;
+  readonly orgId: string;
+  readonly objectType: SecondSourceObjectType;
+  readonly id: string;
+};
+
+export interface SecondSourceCapabilities {
+  /** Informational, may drive report copy. */
+  readonly kind: 'engagement' | 'billing';
+  /**
+   * Per-record-type availability. A metric gates on the specific flag(s)
+   * it needs (e.g. account_resolution_rate only needs hasAccounts), not
+   * on "is a second source connected" alone. When a flag is false, the
+   * corresponding list-or-get-by-ref method returns empty rather than
+   * throwing — callers MUST gate on the flag itself and MUST NOT infer
+   * capability from an empty result (same reasoning as activitySync:
+   * without checking the flag, silence isn't a reliable signal).
+   */
+  readonly hasContacts: boolean;
+  readonly hasAccounts: boolean;
+  readonly hasActivities: boolean;
+  /**
+   * Max refs per getContactsByRef()/getAccountsByRef()/
+   * getActivitiesByRef() call. Advisory only, same contract as
+   * CrmAdapter's childRecordBatchLimit — the adapter does not enforce or
+   * truncate at this limit; chunking is the caller's job.
+   */
+  readonly refBatchLimit: number;
+  /**
+   * Max Activity records returned per contact/account ref by a single
+   * getActivitiesByRef() call. Enforced by the adapter, same contract as
+   * CrmAdapter's notesPerOpportunityLimit/activitiesPerOpportunityLimit:
+   * truncation keeps the newest records and drops the oldest, and the
+   * truncated ref is reported rather than silently undercounted.
+   */
+  readonly activitiesPerRefLimit: number;
+  /**
+   * Hard cap on total records pulled per record type across an entire D5
+   * run's listContacts()/listAccounts()/listActivities() pagination.
+   * Applies independently per type. Unlike activitiesPerRefLimit, this is
+   * caller-enforced, not adapter-enforced: the caller (D5 orchestration)
+   * MUST stop paging once it reaches this many items for a type, even if
+   * nextCursor is still present — never stream to the end of the second
+   * source's table. Not enforced by the mock; part 2 must test that
+   * orchestration enforces it.
+   */
+  readonly maxSampleSizePerType: number;
+}
+
+export interface SecondSourceContact {
+  readonly ref: SecondSourceRef;
+  readonly email: string | null;
+  readonly modifiedAt: string;
+}
+
+export interface SecondSourceAccount {
+  readonly ref: SecondSourceRef;
+  readonly domain: string | null;
+  readonly modifiedAt: string;
+}
+
+export interface SecondSourceActivity {
+  readonly ref: SecondSourceRef;
+  readonly contactRef: SecondSourceRef | null;
+  readonly accountRef: SecondSourceRef | null;
+  readonly occurredAt: string;
+  readonly kind: 'call' | 'email' | 'meeting' | 'other';
+  readonly createdAt: string;
+  readonly lastModifiedAt: string;
+}
+
+/**
+ * Result of a batched by-ref second-source read. Not a SyncPage: a
+ * bounded batch read, not a cursor-paginated stream. Shared across all
+ * three getXByRef methods for shape consistency with GetChildRecordsResult;
+ * truncatedRefIds is only ever non-empty for getActivitiesByRef (contacts
+ * and accounts have no per-ref collection to truncate — one ref resolves
+ * to at most one record, same as CrmAdapter's GetAccountsResult).
+ */
+export interface GetSecondSourceRecordsResult<T> {
+  /**
+   * Records found, sorted by ref.id ascending — deterministic and
+   * independent of backend/storage order. Refs that don't resolve are
+   * simply absent; never throws for a not-found ref. A ref repeated in
+   * the request is processed once, not duplicated.
+   */
+  readonly items: readonly T[];
+  /**
+   * ref.ids whose related-activity count was capped at
+   * activitiesPerRefLimit — more records exist than were returned for
+   * that ref. Same "at least N, never exact" contract as
+   * GetChildRecordsResult.truncatedOpportunityIds, including the
+   * keep-newest/drop-oldest truncation-order requirement.
+   */
+  readonly truncatedRefIds: ReadonlySet<string>;
+  /** Vendor API calls consumed by this call. 0 for an empty refs array. */
+  readonly apiCallsConsumed: number;
+}
+
+export interface SecondSourceAdapter {
+  capabilities(): SecondSourceCapabilities;
+
+  /**
+   * Since-window + cursor pagination, same shape as CrmAdapter's
+   * listNotes/listActivities. capabilities().maxSampleSizePerType is
+   * caller-enforced, not checked by these methods. Returns empty (not
+   * throwing) when the corresponding has* capability is false.
+   */
+  listContacts(w: SyncWindow): Promise<SyncPage<SecondSourceContact>>;
+  listAccounts(w: SyncWindow): Promise<SyncPage<SecondSourceAccount>>;
+  listActivities(w: SyncWindow): Promise<SyncPage<SecondSourceActivity>>;
+
+  /**
+   * Same contract as CrmAdapter.getAccounts: missing refs are absent from
+   * the result, never thrown; results sorted by ref.id. Returns empty
+   * (not throwing) when capabilities().hasContacts/hasAccounts is false.
+   */
+  getContactsByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceContact>>;
+  getAccountsByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceAccount>>;
+
+  /**
+   * Per-ref batch read with enforced per-ref truncation — same contract
+   * shape as CrmAdapter.getActivitiesByOpportunity, but keyed by a
+   * contact or account ref instead of an opportunity ref (matched on
+   * whichever the given ref's objectType is). Returns empty (not
+   * throwing) when capabilities().hasActivities is false.
+   */
+  getActivitiesByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceActivity>>;
+}
+
 export class AdapterError extends Error {
   constructor(
     message: string,

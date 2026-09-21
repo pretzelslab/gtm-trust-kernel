@@ -10,7 +10,8 @@
     "./model/canonical.js": "./src/model/canonical.ts",
     "./model/trust.js": "./src/model/trust.ts",
     "./test/fixtures.js": "./test/fixtures.ts",
-    "./test/contract/adapter.contract.js": "./test/contract/adapter.contract.ts"
+    "./test/contract/adapter.contract.js": "./test/contract/adapter.contract.ts",
+    "./test/contract/secondSource.contract.js": "./test/contract/secondSource.contract.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

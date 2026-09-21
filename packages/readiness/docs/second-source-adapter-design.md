@@ -150,14 +150,24 @@ export interface SecondSourceCapabilities {
   readonly maxSampleSizePerType: number;
 }
 
+// Second correction (found during part 1 implementation): added
+// modifiedAt to Contact/Account below. Without a timestamp, listContacts/
+// listAccounts' SyncWindow.since filter (and SyncPage.watermark) would
+// have nothing to filter or sort by — the incremental-sync contract these
+// methods share with CrmAdapter can't function on a field-less record.
+// SecondSourceActivity already had timestamps (occurredAt/createdAt/
+// lastModifiedAt) and needed no change.
+
 export interface SecondSourceContact {
   readonly ref: SecondSourceRef;
   readonly email: string | null;
+  readonly modifiedAt: string;
 }
 
 export interface SecondSourceAccount {
   readonly ref: SecondSourceRef;
   readonly domain: string | null;
+  readonly modifiedAt: string;
 }
 
 export interface SecondSourceActivity {
@@ -208,7 +218,10 @@ export interface GetSecondSourceRecordsResult<T> {
   /**
    * Same truncation contract as CrmAdapter's GetChildRecordsResult:
    * keep-newest, drop-oldest, reported here rather than silently
-   * undercounted.
+   * undercounted. Shared across all three getXByRef methods for shape
+   * consistency, but only ever non-empty for getActivitiesByRef — a
+   * contact/account ref resolves to at most one record (same as
+   * CrmAdapter.getAccounts), so there's nothing to truncate there.
    */
   readonly truncatedRefIds: ReadonlySet<string>;
   readonly apiCallsConsumed: number;

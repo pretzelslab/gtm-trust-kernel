@@ -26,6 +26,13 @@ import type {
   FieldWrite,
   GetAccountsResult,
   GetChildRecordsResult,
+  GetSecondSourceRecordsResult,
+  SecondSourceAccount,
+  SecondSourceActivity,
+  SecondSourceAdapter,
+  SecondSourceCapabilities,
+  SecondSourceContact,
+  SecondSourceRef,
   SyncPage,
   SyncWindow,
   WriteOutcome,
@@ -240,5 +247,131 @@ export class MockAdapter implements CrmAdapter {
     const outcome: WriteOutcome = { status: 'applied', newConcurrencyToken: newToken };
     this.appliedKeys.set(key, outcome);
     return outcome;
+  }
+}
+
+/**
+ * In-memory mock second-source adapter (D5 cross-system joinability).
+ * Design locked in packages/readiness/docs/second-source-adapter-design.md.
+ *
+ * No fault injection (MockFaults-equivalent) — deliberately deferred, see
+ * that design note / packages/readiness/docs/STATUS.md. Does not enforce
+ * capabilities().maxSampleSizePerType: that cap is caller-enforced by
+ * design (D5 orchestration), not the adapter's job — see the type's
+ * docblock in types.ts.
+ */
+export interface MockSecondSourceOrgData {
+  contacts: SecondSourceContact[];
+  accounts: SecondSourceAccount[];
+  activities: SecondSourceActivity[];
+}
+
+export class MockSecondSourceAdapter implements SecondSourceAdapter {
+  constructor(
+    private data: MockSecondSourceOrgData,
+    private caps: Partial<SecondSourceCapabilities> = {},
+  ) {}
+
+  capabilities(): SecondSourceCapabilities {
+    return {
+      kind: 'engagement',
+      hasContacts: true,
+      hasAccounts: true,
+      hasActivities: true,
+      refBatchLimit: 200,
+      activitiesPerRefLimit: 200,
+      maxSampleSizePerType: 500,
+      ...this.caps,
+    };
+  }
+
+  private page<T>(items: readonly T[], w: SyncWindow, ts: (x: T) => string): SyncPage<T> {
+    const filtered = w.since ? items.filter((x) => ts(x) >= w.since!) : items.slice();
+    const sorted = [...filtered].sort((a, b) => ts(a).localeCompare(ts(b)));
+    const start = w.cursor ? Number(w.cursor) : 0;
+    const slice = sorted.slice(start, start + w.limit);
+    const next = start + w.limit < sorted.length ? String(start + w.limit) : undefined;
+    const watermark = slice.length ? ts(slice[slice.length - 1]!) : (w.since ?? '1970-01-01T00:00:00Z');
+    return { items: slice, nextCursor: next, watermark, apiCallsConsumed: 1 };
+  }
+
+  async listContacts(w: SyncWindow): Promise<SyncPage<SecondSourceContact>> {
+    if (!this.capabilities().hasContacts) {
+      return { items: [], watermark: w.since ?? '', apiCallsConsumed: 0 };
+    }
+    return this.page(this.data.contacts, w, (c) => c.modifiedAt);
+  }
+
+  async listAccounts(w: SyncWindow): Promise<SyncPage<SecondSourceAccount>> {
+    if (!this.capabilities().hasAccounts) {
+      return { items: [], watermark: w.since ?? '', apiCallsConsumed: 0 };
+    }
+    return this.page(this.data.accounts, w, (a) => a.modifiedAt);
+  }
+
+  async listActivities(w: SyncWindow): Promise<SyncPage<SecondSourceActivity>> {
+    if (!this.capabilities().hasActivities) {
+      return { items: [], watermark: w.since ?? '', apiCallsConsumed: 0 };
+    }
+    return this.page(this.data.activities, w, (a) => a.lastModifiedAt);
+  }
+
+  private getByRef<T extends { ref: SecondSourceRef }>(
+    allRecords: readonly T[],
+    refs: readonly SecondSourceRef[],
+    has: boolean,
+  ): GetSecondSourceRecordsResult<T> {
+    if (refs.length === 0 || !has) {
+      return { items: [], truncatedRefIds: new Set(), apiCallsConsumed: refs.length === 0 ? 0 : 1 };
+    }
+    const idSet = new Set(refs.map((r) => r.id));
+    const found = allRecords.filter((r) => idSet.has(r.ref.id));
+    const sorted = [...found].sort((a, b) => a.ref.id.localeCompare(b.ref.id));
+    return { items: sorted, truncatedRefIds: new Set(), apiCallsConsumed: 1 };
+  }
+
+  async getContactsByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceContact>> {
+    return this.getByRef(this.data.contacts, refs, this.capabilities().hasContacts);
+  }
+
+  async getAccountsByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceAccount>> {
+    return this.getByRef(this.data.accounts, refs, this.capabilities().hasAccounts);
+  }
+
+  async getActivitiesByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceActivity>> {
+    if (refs.length === 0 || !this.capabilities().hasActivities) {
+      return { items: [], truncatedRefIds: new Set(), apiCallsConsumed: refs.length === 0 ? 0 : 1 };
+    }
+
+    // A repeated ref is processed once, not duplicated — same dedupe rule as getAccounts.
+    const dedupedRefs: SecondSourceRef[] = [];
+    const seen = new Set<string>();
+    for (const r of refs) {
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        dedupedRefs.push(r);
+      }
+    }
+
+    const limit = this.capabilities().activitiesPerRefLimit;
+    const items: SecondSourceActivity[] = [];
+    const truncatedRefIds = new Set<string>();
+
+    for (const parentRef of dedupedRefs) {
+      const related = this.data.activities.filter((a) =>
+        parentRef.objectType === 'contact' ? a.contactRef?.id === parentRef.id : a.accountRef?.id === parentRef.id,
+      );
+      const sorted = [...related].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+      if (sorted.length > limit) {
+        truncatedRefIds.add(parentRef.id);
+      }
+      // Keep-newest, drop-oldest — same truncation order as
+      // CrmAdapter.getActivitiesByOpportunity, and for the same reason:
+      // callers of this window (activity_attribution_rate) care about
+      // recency more than completeness.
+      items.push(...sorted.slice(Math.max(0, sorted.length - limit)));
+    }
+
+    return { items, truncatedRefIds, apiCallsConsumed: 1 };
   }
 }

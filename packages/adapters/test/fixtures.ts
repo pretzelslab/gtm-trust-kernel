@@ -10,11 +10,26 @@ import type {
   StageHistoryEntry,
 } from '../src/model/canonical.js';
 import { TrustTier, tag } from '../src/model/trust.js';
-import { MockAdapter, type MockFaults, type MockOrgData } from '../src/mock.js';
+import { MockAdapter, MockSecondSourceAdapter, type MockFaults, type MockOrgData, type MockSecondSourceOrgData } from '../src/mock.js';
+import type {
+  SecondSourceAccount,
+  SecondSourceActivity,
+  SecondSourceCapabilities,
+  SecondSourceContact,
+  SecondSourceRef,
+} from '../src/types.js';
 
-const ORG = 'org-test';
+export const ORG = 'org-test';
 const ref = (objectType: RecordRef['objectType'], id: string): RecordRef => ({
   crm: 'mock',
+  orgId: ORG,
+  objectType,
+  id,
+});
+
+export const SECOND_SOURCE = 'mock-second-source';
+const secondSourceRef = (objectType: SecondSourceRef['objectType'], id: string): SecondSourceRef => ({
+  source: SECOND_SOURCE,
   orgId: ORG,
   objectType,
   id,
@@ -167,6 +182,42 @@ export function makeOrgData(): MockOrgData {
 
 export function makeMockAdapter(faults: MockFaults = {}) {
   return new MockAdapter(ORG, makeOrgData(), {}, faults);
+}
+
+export function makeSecondSourceOrgData(): MockSecondSourceOrgData {
+  const contacts: SecondSourceContact[] = [
+    {
+      ref: secondSourceRef('contact', 'con-1'),
+      email: 'dana@northwind.example',
+      modifiedAt: iso(20),
+    },
+  ];
+
+  const accounts: SecondSourceAccount[] = [
+    {
+      ref: secondSourceRef('account', 'acc-1'),
+      domain: 'northwind.example',
+      modifiedAt: iso(15),
+    },
+  ];
+
+  const activities: SecondSourceActivity[] = [
+    {
+      ref: secondSourceRef('activity', 'ss-act-1'),
+      contactRef: secondSourceRef('contact', 'con-1'),
+      accountRef: secondSourceRef('account', 'acc-1'),
+      occurredAt: iso(18),
+      kind: 'email',
+      createdAt: iso(18),
+      lastModifiedAt: iso(18),
+    },
+  ];
+
+  return { contacts, accounts, activities };
+}
+
+export function makeMockSecondSourceAdapter(caps: Partial<SecondSourceCapabilities> = {}) {
+  return new MockSecondSourceAdapter(makeSecondSourceOrgData(), caps);
 }
 
 export function makeEvidenceSet(data = makeOrgData()): EvidenceSet {

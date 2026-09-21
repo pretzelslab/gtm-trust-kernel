@@ -23,8 +23,15 @@ import type {
   StageConfidence,
   StageHistoryEntry,
 } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
-import type { MockOrgData } from '@gtm-trust-kernel/adapters/mock.js';
+import type {
+  AdapterCapabilities,
+  SecondSourceAccount,
+  SecondSourceActivity,
+  SecondSourceCapabilities,
+  SecondSourceContact,
+  SecondSourceRef,
+} from '@gtm-trust-kernel/adapters/types.js';
+import type { MockOrgData, MockSecondSourceOrgData } from '@gtm-trust-kernel/adapters/mock.js';
 
 export type FixtureName = 'healthy' | 'fresh' | 'legacy';
 
@@ -38,6 +45,17 @@ export interface MockOrgFixture {
   readonly asOf: string;
   readonly capabilities: AdapterCapabilities;
   readonly data: MockOrgData;
+  /**
+   * D5 cross-system joinability. undefined means no second source
+   * connected — the actual not_instrumented gate-off case (see
+   * metric-definitions.md's D5 intro). Mirrors capabilities/data's shape
+   * (raw config + data, not a pre-built adapter) so a caller constructs
+   * MockSecondSourceAdapter the same way cli.ts constructs MockAdapter.
+   */
+  readonly secondSource?: {
+    readonly capabilities: Partial<SecondSourceCapabilities>;
+    readonly data: MockSecondSourceOrgData;
+  };
 }
 
 const DAY_MS = 86_400_000;
@@ -48,6 +66,38 @@ function daysBefore(asOf: string, days: number): string {
 
 function ref(orgId: string, objectType: RecordRef['objectType'], id: string): RecordRef {
   return { crm: 'mock', orgId, objectType, id };
+}
+
+const SECOND_SOURCE = 'mock-second-source';
+
+function secondSourceRef(orgId: string, objectType: SecondSourceRef['objectType'], id: string): SecondSourceRef {
+  return { source: SECOND_SOURCE, orgId, objectType, id };
+}
+
+function makeSecondSourceContact(orgId: string, id: string, email: string | null, modifiedAt: string): SecondSourceContact {
+  return { ref: secondSourceRef(orgId, 'contact', id), email, modifiedAt };
+}
+
+function makeSecondSourceAccount(orgId: string, id: string, domain: string | null, modifiedAt: string): SecondSourceAccount {
+  return { ref: secondSourceRef(orgId, 'account', id), domain, modifiedAt };
+}
+
+function makeSecondSourceActivity(
+  orgId: string,
+  id: string,
+  contactRef: SecondSourceRef | null,
+  accountRef: SecondSourceRef | null,
+  occurredAt: string,
+): SecondSourceActivity {
+  return {
+    ref: secondSourceRef(orgId, 'activity', id),
+    contactRef,
+    accountRef,
+    occurredAt,
+    kind: 'email',
+    createdAt: occurredAt,
+    lastModifiedAt: occurredAt,
+  };
 }
 
 const OPEN_STAGES: readonly CanonicalStage[] = CANONICAL_STAGE_ORDER;
@@ -254,6 +304,22 @@ function generateHealthy(): MockOrgFixture {
     activities.push(makeActivity(orgId, `act-overflow-${i}`, overflowOppRef, daysBefore(asOf, i % 20)));
   }
 
+  // D5 second source: good overlap. Reuses 13 of the 15 CRM accounts'
+  // domains/emails verbatim (acc-13/acc-14 deliberately left unmatched —
+  // "good overlap" isn't "total"), so a future matching implementation
+  // resolves them deterministically.
+  const secondSourceAccounts: SecondSourceAccount[] = [];
+  const secondSourceContacts: SecondSourceContact[] = [];
+  const secondSourceActivities: SecondSourceActivity[] = [];
+  for (let i = 0; i < 13; i++) {
+    const domain = `northco${i}.com`;
+    const contactRef = secondSourceRef(orgId, 'contact', `ss-con-${i}`);
+    const accountRef = secondSourceRef(orgId, 'account', `ss-acc-${i}`);
+    secondSourceAccounts.push(makeSecondSourceAccount(orgId, `ss-acc-${i}`, domain, daysBefore(asOf, 30)));
+    secondSourceContacts.push(makeSecondSourceContact(orgId, `ss-con-${i}`, `lead${i}@${domain}`, daysBefore(asOf, 30)));
+    secondSourceActivities.push(makeSecondSourceActivity(orgId, `ss-act-${i}`, contactRef, accountRef, daysBefore(asOf, i % 10)));
+  }
+
   return {
     name: 'healthy',
     orgId,
@@ -262,6 +328,10 @@ function generateHealthy(): MockOrgFixture {
     asOf,
     capabilities: BASE_CAPABILITIES,
     data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges },
+    secondSource: {
+      capabilities: { kind: 'engagement', hasContacts: true, hasAccounts: true, hasActivities: true },
+      data: { contacts: secondSourceContacts, accounts: secondSourceAccounts, activities: secondSourceActivities },
+    },
   };
 }
 
@@ -338,6 +408,10 @@ function generateFresh(): MockOrgFixture {
     asOf,
     capabilities: BASE_CAPABILITIES, // stageHistory: true, but data.stageHistory is empty below.
     data: { accounts, opportunities, contacts, activities, notes, stageHistory: [], ownerChanges },
+    // secondSource intentionally omitted: this is D5's "no second source
+    // connected" fixture — layers onto "newly onboarded" (a fresh org
+    // hasn't connected one yet either), rather than adding a 4th fixture
+    // name. See second-source-adapter-design.md.
   };
 }
 
@@ -416,6 +490,17 @@ function generateLegacy(): MockOrgFixture {
     }
   }
 
+  // D5 second source: poor overlap, no activities. Only acc-4/con-4 (the
+  // one unique, non-denylisted domain — legacypartner.com) resolves; the
+  // shared oldco.com pair, the denylisted gmail.com pair, and the
+  // domain-less account all deliberately have no second-source match.
+  // hasActivities: false mirrors this org's activitySync: false on the
+  // CRM side — no engagement-tool activity log for a legacy org.
+  const secondSourceAccounts: SecondSourceAccount[] = [makeSecondSourceAccount(orgId, 'ss-acc-4', 'legacypartner.com', daysBefore(asOf, 1000))];
+  const secondSourceContacts: SecondSourceContact[] = [
+    makeSecondSourceContact(orgId, 'ss-con-4', 'person4@legacypartner.com', daysBefore(asOf, 1000)),
+  ];
+
   return {
     name: 'legacy',
     orgId,
@@ -432,6 +517,10 @@ function generateLegacy(): MockOrgFixture {
       accountBatchLimit: 50,
     },
     data: { accounts, opportunities, contacts, activities: [], notes: [], stageHistory, ownerChanges },
+    secondSource: {
+      capabilities: { kind: 'billing', hasContacts: true, hasAccounts: true, hasActivities: false },
+      data: { contacts: secondSourceContacts, accounts: secondSourceAccounts, activities: [] },
+    },
   };
 }
 
