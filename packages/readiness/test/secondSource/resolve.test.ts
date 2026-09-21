@@ -75,6 +75,25 @@ describe('resolveSecondSource preconditions', () => {
   });
 });
 
+describe('resolveSecondSource capabilities', () => {
+  it('captures the second-source adapter\'s capabilities onto the resolution, for D5 metrics to gate on', async () => {
+    const sample = baseSample(new Map(), new Map());
+    const adapter = makeSecondSourceAdapter([], []);
+    const resolution = await resolveSecondSource(sample, adapter);
+    expect(resolution.capabilities.hasContacts).toBe(true);
+    expect(resolution.capabilities.hasAccounts).toBe(true);
+    expect(resolution.capabilities.hasActivities).toBe(true);
+  });
+
+  it('reflects a capability override (e.g. hasActivities: false) on the resolution', async () => {
+    const sample = baseSample(new Map(), new Map());
+    const data: MockSecondSourceOrgData = { contacts: [], accounts: [], activities: [] };
+    const adapter = new MockSecondSourceAdapter(data, { hasActivities: false });
+    const resolution = await resolveSecondSource(sample, adapter);
+    expect(resolution.capabilities.hasActivities).toBe(false);
+  });
+});
+
 describe('resolveSecondSource matching', () => {
   it('resolves a CRM contact that matches exactly one second-source contact by email', async () => {
     const sample = baseSample(new Map([['con-1', crmContact('con-1', 'dana@example.com')]]), new Map());

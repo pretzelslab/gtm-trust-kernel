@@ -45,9 +45,15 @@ export interface NormalizedAccount {
 
 export interface SecondSourceSampleResult {
   readonly contacts: readonly HashedContact[];
+  /** True when the second source had more contacts than maxSampleSizePerType — contacts is a floor, not the complete set. */
+  readonly contactsTruncated: boolean;
   readonly accounts: readonly NormalizedAccount[];
+  /** Same as contactsTruncated, for accounts. */
+  readonly accountsTruncated: boolean;
   /** Unmodified — SecondSourceActivity carries no raw email/domain field, so there's nothing to sanitize. */
   readonly activities: readonly SecondSourceActivity[];
+  /** Same as contactsTruncated, for activities. */
+  readonly activitiesTruncated: boolean;
   readonly apiCallsConsumed: number;
 }
 
@@ -55,25 +61,35 @@ async function paginate<TRaw, TOut>(
   list: (w: SyncWindow) => Promise<{ items: readonly TRaw[]; nextCursor?: string; apiCallsConsumed: number }>,
   cap: number,
   transform: (raw: TRaw) => TOut,
-): Promise<{ items: TOut[]; apiCallsConsumed: number }> {
+): Promise<{ items: TOut[]; apiCallsConsumed: number; truncated: boolean }> {
   const items: TOut[] = [];
   let apiCallsConsumed = 0;
   let cursor: string | undefined;
+  let truncated = false;
 
   while (items.length < cap) {
     const page = await list({ limit: PAGE_SIZE, cursor });
     apiCallsConsumed += page.apiCallsConsumed;
 
+    let consumedFromPage = 0;
     for (const raw of page.items) {
       if (items.length >= cap) break;
       items.push(transform(raw));
+      consumedFromPage += 1;
     }
 
-    if (!page.nextCursor || items.length >= cap) break;
+    if (items.length >= cap) {
+      // Hit the cap: truncated iff there was more data beyond what we took
+      // — items left unconsumed in this page, or another page still pending.
+      truncated = consumedFromPage < page.items.length || Boolean(page.nextCursor);
+      break;
+    }
+
+    if (!page.nextCursor) break;
     cursor = page.nextCursor;
   }
 
-  return { items, apiCallsConsumed };
+  return { items, apiCallsConsumed, truncated };
 }
 
 /**
@@ -115,8 +131,11 @@ export async function sampleSecondSource(adapter: SecondSourceAdapter, salt: str
 
   return {
     contacts: contactsResult.items,
+    contactsTruncated: contactsResult.truncated,
     accounts: accountsResult.items,
+    accountsTruncated: accountsResult.truncated,
     activities: activitiesResult.items,
+    activitiesTruncated: activitiesResult.truncated,
     apiCallsConsumed: contactsResult.apiCallsConsumed + accountsResult.apiCallsConsumed + activitiesResult.apiCallsConsumed,
   };
 }

@@ -15,7 +15,7 @@
  * never merged").
  */
 
-import type { SecondSourceAdapter, SecondSourceRef } from '@gtm-trust-kernel/adapters/types.js';
+import type { SecondSourceAdapter, SecondSourceCapabilities, SecondSourceRef } from '@gtm-trust-kernel/adapters/types.js';
 import { normalizeDomain } from '../metrics/shared.js';
 import type { CoverageSample } from '../metrics/types.js';
 import { generateRunSalt, hashEmail } from './hash.js';
@@ -35,6 +35,15 @@ export interface SecondSourceResolution {
   readonly accountMatches: ReadonlyMap<string, readonly SecondSourceRef[]>;
   /** The second source's own independent sample, for D5 part 2b's activity_attribution_rate/temporal_anomaly_rate denominators. */
   readonly secondSourceSample: SecondSourceSampleResult;
+  /**
+   * Captured once via adapter.capabilities() at the start of this call —
+   * D5 metrics gate per-type on hasContacts/hasAccounts/hasActivities
+   * against this, not against secondSourceSample's presence/absence
+   * (which reflects only whether any records existed, not whether the
+   * type is readable at all — same has-flag-vs-empty-result distinction
+   * established in second-source-adapter-design.md decision 5).
+   */
+  readonly capabilities: SecondSourceCapabilities;
 }
 
 function addMatch(bucket: Map<string, SecondSourceRef[]>, key: string, ref: SecondSourceRef): void {
@@ -95,5 +104,5 @@ export async function resolveSecondSource(sample: CoverageSample, adapter: Secon
     }
   }
 
-  return { contactMatches, accountMatches, secondSourceSample };
+  return { contactMatches, accountMatches, secondSourceSample, capabilities: adapter.capabilities() };
 }

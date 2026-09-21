@@ -77,6 +77,39 @@ describe('sampleSecondSource pagination cap', () => {
   });
 });
 
+describe('sampleSecondSource truncated flags', () => {
+  it('sets contactsTruncated/accountsTruncated/activitiesTruncated true when the cap was hit', async () => {
+    const adapter = makeAdapter({ contacts: 5, accounts: 5, activities: 5 }, { maxSampleSizePerType: 3 });
+    const result = await sampleSecondSource(adapter, 'salt');
+    expect(result.contactsTruncated).toBe(true);
+    expect(result.accountsTruncated).toBe(true);
+    expect(result.activitiesTruncated).toBe(true);
+  });
+
+  it('leaves the flags false when every record fit under the cap', async () => {
+    const adapter = makeAdapter({ contacts: 2, accounts: 2, activities: 2 }, { maxSampleSizePerType: 200 });
+    const result = await sampleSecondSource(adapter, 'salt');
+    expect(result.contactsTruncated).toBe(false);
+    expect(result.accountsTruncated).toBe(false);
+    expect(result.activitiesTruncated).toBe(false);
+  });
+
+  it('leaves the flag false when the record count exactly equals the cap — genuinely exhausted, not truncated', async () => {
+    const adapter = makeAdapter({ contacts: 3, accounts: 0, activities: 0 }, { maxSampleSizePerType: 3 });
+    const result = await sampleSecondSource(adapter, 'salt');
+    expect(result.contacts).toHaveLength(3);
+    expect(result.contactsTruncated).toBe(false);
+  });
+
+  it('flags are independent per type', async () => {
+    const adapter = makeAdapter({ contacts: 5, accounts: 2, activities: 0 }, { maxSampleSizePerType: 3 });
+    const result = await sampleSecondSource(adapter, 'salt');
+    expect(result.contactsTruncated).toBe(true);
+    expect(result.accountsTruncated).toBe(false);
+    expect(result.activitiesTruncated).toBe(false);
+  });
+});
+
 describe('sampleSecondSource sanitization at ingestion', () => {
   it('hashes contact emails instead of carrying the raw value', async () => {
     const adapter = makeAdapter({ contacts: 1, accounts: 0, activities: 0 });

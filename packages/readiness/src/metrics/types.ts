@@ -10,6 +10,7 @@
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { Account, Activity, Contact, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
+import type { SecondSourceResolution } from '../secondSource/resolve.js';
 
 /**
  * A metric fails to produce a number for exactly one of these two reasons.
@@ -155,4 +156,13 @@ export interface MetricConfig {
    * omitted.
    */
   readonly sharedProviderDenylist?: readonly string[];
+  /**
+   * D5's joinability resolution (src/secondSource/resolve.ts), set only
+   * when a second source is connected and resolveSecondSource has run —
+   * undefined is the not_instrumented gate every D5 metric checks first.
+   * Not part of CoverageSample deliberately: CoverageSample stays
+   * CRM-only, same architectural split established when SecondSourceRef
+   * was kept separate from RecordRef (see second-source-adapter-design.md).
+   */
+  readonly secondSourceResolution?: SecondSourceResolution;
 }

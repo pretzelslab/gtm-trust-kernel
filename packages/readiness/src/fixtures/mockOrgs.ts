@@ -481,7 +481,14 @@ function generateLegacy(): MockOrgFixture {
           closeDate,
           ownerId: n % 5 === 0 ? undefined : `rep-${n % 4}`,
           nextStep: n % 3 === 0 ? undefined : n % 7 === 0 ? '-' : `Chase ${id}`,
-          contactRefs: n % 3 === 0 ? [ref(orgId, 'contact', `con-${n % accounts.length}`)] : [],
+          // (n + 1) % accounts.length, not n % accounts.length: n % 3 === 0
+          // always makes n % 6 land on con-0/con-3 — the two contacts
+          // deliberately seeded with no email (i % 3 === 0, above) — which
+          // structurally zeroed out contact_identity_resolution_rate's
+          // denominator (D5 part 2b) regardless of sampling. Shifting by
+          // one keeps the same 1-in-3 linkage frequency but spreads
+          // references across contacts that do have an email.
+          contactRefs: n % 3 === 0 ? [ref(orgId, 'contact', `con-${(n + 1) % accounts.length}`)] : [],
           createdAt,
           modifiedAt: daysBefore(asOf, 60 + (n % 300)),
         }),

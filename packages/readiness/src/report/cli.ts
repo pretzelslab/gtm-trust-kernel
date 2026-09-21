@@ -14,7 +14,7 @@
 import { parseArgs } from 'node:util';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { MockAdapter } from '@gtm-trust-kernel/adapters/mock.js';
+import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import { FIXTURE_NAMES, MOCK_ORG_FIXTURES, type FixtureName } from '../fixtures/mockOrgs.js';
 import { buildReportData, type ReportData } from './buildReport.js';
 import { renderComparisonHtml, renderReportHtml } from './render.js';
@@ -26,7 +26,10 @@ function isFixtureName(name: string): name is FixtureName {
 async function buildOne(name: FixtureName): Promise<ReportData> {
   const fixture = MOCK_ORG_FIXTURES[name];
   const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
-  return buildReportData(adapter, {
+  const secondSourceAdapter = fixture.secondSource
+    ? new MockSecondSourceAdapter(fixture.secondSource.data, fixture.secondSource.capabilities)
+    : undefined;
+  return buildReportData(adapter, secondSourceAdapter, {
     orgLabel: fixture.label,
     orgDescription: fixture.description,
     asOf: fixture.asOf,

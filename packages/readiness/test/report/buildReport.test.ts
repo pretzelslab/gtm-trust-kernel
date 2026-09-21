@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MockAdapter } from '@gtm-trust-kernel/adapters/mock.js';
+import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import { MOCK_ORG_FIXTURES, type FixtureName } from '../../src/fixtures/mockOrgs.js';
 import { buildReportData, type ReportData } from '../../src/report/buildReport.js';
 import { THRESHOLDS } from '../../src/rubric.js';
@@ -24,7 +24,10 @@ const D6_D7_METRICS = [
 async function buildFor(name: FixtureName): Promise<ReportData> {
   const fixture = MOCK_ORG_FIXTURES[name];
   const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
-  return buildReportData(adapter, {
+  const secondSourceAdapter = fixture.secondSource
+    ? new MockSecondSourceAdapter(fixture.secondSource.data, fixture.secondSource.capabilities)
+    : undefined;
+  return buildReportData(adapter, secondSourceAdapter, {
     orgLabel: fixture.label,
     orgDescription: fixture.description,
     asOf: fixture.asOf,
@@ -71,8 +74,8 @@ describe('buildReportData shape', () => {
     }
   });
 
-  it('shows all 4 D5 metrics as not_instrumented with "no second source connected"', async () => {
-    const data = await buildFor('healthy');
+  it('shows all 4 D5 metrics as not_instrumented with "no second source connected" when none is configured (fresh)', async () => {
+    const data = await buildFor('fresh');
     for (const metric of D5_METRICS) {
       const row = data.metrics.find((m) => m.metric === metric)!;
       expect(row.status).toBe('not_instrumented');
@@ -129,5 +132,43 @@ describe('fixture differentiation (the 3 fixtures must not accidentally look ide
     const [healthy, legacy] = await Promise.all([buildFor('healthy'), buildFor('legacy')]);
     expect(legacy.org.capabilityVerdictCounts).not.toEqual(healthy.org.capabilityVerdictCounts);
     expect(legacy.org.capabilityVerdictCounts.blocked).toBeGreaterThanOrEqual(healthy.org.capabilityVerdictCounts.blocked);
+  });
+
+  it('D5: healthy resolves and attributes at a high rate; legacy resolves poorly with activity/temporal not_instrumented; fresh is all not_instrumented', async () => {
+    const [healthy, legacy, fresh] = await Promise.all([buildFor('healthy'), buildFor('legacy'), buildFor('fresh')]);
+    const row = (d: ReportData, m: (typeof D5_METRICS)[number]) => d.metrics.find((x) => x.metric === m)!;
+
+    expect(row(healthy, 'contact_identity_resolution_rate').status).toBe('ok');
+    expect(row(healthy, 'contact_identity_resolution_rate').value!).toBeGreaterThan(0.5);
+    expect(row(healthy, 'account_resolution_rate').status).toBe('ok');
+    expect(row(healthy, 'account_resolution_rate').value!).toBeGreaterThan(0.5);
+    expect(row(healthy, 'activity_attribution_rate').status).toBe('ok');
+    expect(row(healthy, 'activity_attribution_rate').value!).toBeGreaterThan(0.5);
+
+    // Legacy's tiny sample (2 distinct emailed contacts, 1 resolving) gives
+    // exactly 0.5 — "low" here means "below its own rubric.ts degradedAt",
+    // not an arbitrary fraction.
+    expect(row(legacy, 'contact_identity_resolution_rate').status).toBe('ok');
+    expect(row(legacy, 'contact_identity_resolution_rate').value!).toBeLessThan(0.6); // degradedAt
+    expect(row(legacy, 'account_resolution_rate').status).toBe('ok');
+    expect(row(legacy, 'account_resolution_rate').value!).toBeLessThan(0.7); // degradedAt
+    expect(row(legacy, 'activity_attribution_rate').status).toBe('not_instrumented');
+    expect(row(legacy, 'temporal_anomaly_rate').status).toBe('not_instrumented');
+
+    for (const metric of D5_METRICS) {
+      expect(row(fresh, metric).status).toBe('not_instrumented');
+      expect(row(fresh, metric).note).toBe('no second source connected');
+    }
+  });
+});
+
+describe('D5 no-raw-PII (re-verifies second-source-adapter-design.md decision 4 against real ReportData/--json)', () => {
+  it('never carries a raw second-source contact email anywhere in ReportData, including its JSON serialization', async () => {
+    const data = await buildFor('healthy');
+    const serialized = JSON.stringify(data);
+    // healthy's second-source fixture seeds lead{i}@northco{i}.com emails (src/fixtures/mockOrgs.ts) — none may appear raw.
+    for (let i = 0; i < 13; i++) {
+      expect(serialized).not.toContain(`lead${i}@northco${i}.com`);
+    }
   });
 });

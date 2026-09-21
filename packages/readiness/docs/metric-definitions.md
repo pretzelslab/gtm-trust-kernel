@@ -284,6 +284,18 @@ per run and held in memory, shared with `contact_identity_resolution_rate`/
 `account_resolution_rate` rather than recomputed for this metric — never
 persisted, never merged into a combined record (same in-memory-only,
 discard-at-end-of-run rule as the hash keys above).
+**Multi-candidate rule, locked (D5 part 2b):** an activity's matched
+contact/account can be linked to more than one sampled CRM opportunity
+(e.g. an account with several open deals). The activity attributes if
+*at least one* candidate opportunity's window contains it — same "at
+least one, no dedup" style as the resolution matching above, not "exactly
+one" or "the most recent one."
+**Gating, locked (D5 part 2b):** gates on `hasActivities`, AND on
+(`hasContacts` OR `hasAccounts`) — if the second source has neither
+contact nor account data, there is nothing to attribute through at all,
+so this is `not_instrumented` (note: "no contact or account data in
+second source to attribute through"), not a rate degraded toward zero. A
+low rate must never stand in for a missing capability.
 **Threshold:** `activity_attribution_rate`.
 
 ### temporal_anomaly_rate
@@ -294,6 +306,28 @@ relative to the sampling run time.
 **Denominator:** the sum of both sources' sampled records — CRM records and
 second-source records counted together, with no CRM-only carve-out. A
 record from either source can independently trip the numerator.
+**Scope, locked (D5 part 2b):** "sampled records" means CRM Opportunities
++ CRM Activities + second-source Activities — CRM and second-source
+Contacts/Accounts are excluded from both the denominator and every check.
+Second-source Contacts/Accounts have no `createdAt` at all (only
+`modifiedAt`), so the created-after-modified check couldn't apply to them
+regardless of scope; the close-date check is activity-specific by
+definition. Per record type:
+- CRM Opportunity: created-after-modified (`createdAt`/`modifiedAt`) and
+  future-dated (`createdAt`/`modifiedAt`) apply. `closeDate` is
+  deliberately excluded from the future-dated check — a forecasted future
+  close date on an open deal is expected, not an anomaly. The close-date
+  check doesn't apply to an Opportunity itself (it's about an *Activity*
+  dated after its opportunity's close date).
+- CRM Activity: no `createdAt`/`modifiedAt` field exists on this type, so
+  created-after-modified never applies. Close-date and future-dated
+  (`occurredAt`) both apply, using the CRM opportunity(ies) it's already
+  linked to via `relatedTo`.
+- Second-source Activity: all three checks apply — created-after-modified
+  (`createdAt`/`lastModifiedAt`), close-date (via the contact/account
+  resolution above — same "at least one candidate opportunity" rule as
+  `activity_attribution_rate`), and future-dated (`occurredAt`,
+  `createdAt`, and `lastModifiedAt`, all checked).
 **Resolved ambiguity (today):** this replaced a boolean
 (`temporal_alignment_ok`) because a handful of anomalous rows shouldn't
 block the whole capability — only a high *rate* of them should. See

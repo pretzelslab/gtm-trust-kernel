@@ -9,8 +9,8 @@
  * everything past sampling is deterministic given the adapter's data.
  */
 
-import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import { buildCoverageSample, hydrateAccounts, hydrateActivities, hydrateNotes, hydrateStageHistory } from '../coverageSample.js';
+import type { CrmAdapter, SecondSourceAdapter } from '@gtm-trust-kernel/adapters/types.js';
+import { buildCoverageSample, hydrateAccounts, hydrateActivities, hydrateContacts, hydrateNotes, hydrateStageHistory } from '../coverageSample.js';
 import type { CoverageSample, MetricConfig, MetricResult } from '../metrics/types.js';
 import {
   closeDateFillRate,
@@ -24,6 +24,8 @@ import {
 import { medianDaysSinceModified, pastDueCloseDateRate } from '../metrics/freshness.js';
 import { stageActivityContradictionRate, roundAmountRate, stageMappingCoverage, duplicateAccountRate } from '../metrics/consistency.js';
 import { ownerHistoryEnabled, stageHistoryMonths } from '../metrics/history.js';
+import { accountResolutionRate, activityAttributionRate, contactIdentityResolutionRate, temporalAnomalyRate } from '../metrics/joinability.js';
+import { resolveSecondSource } from '../secondSource/resolve.js';
 import { runSample } from '../sample.js';
 import type { SampleConfig, StopReason } from '../sample.js';
 import {
@@ -87,10 +89,12 @@ const DIMENSION_BY_METRIC: Readonly<Record<MetricId, MetricDimension>> = {
 };
 
 // ---------------------------------------------------------------------------
-// The 15 implemented metric functions, plus explicit reasons for the 13
-// that aren't. Three buckets for "not implemented": explicit deferrals (2),
-// D5 (4, blocked on a second-source adapter that doesn't exist), and D6/D7
-// (7, simply not built yet).
+// The 19 implemented metric functions (D1-D5), plus explicit reasons for
+// the 9 that aren't: explicit deferrals (2) and D6/D7 (7, simply not built
+// yet). D5's 4 gate on config.secondSourceResolution internally (see
+// joinability.ts) rather than being excluded from IMPLEMENTED — same
+// pattern as any other capability-gated metric (e.g. activityCaptureRate
+// gating on sample.capabilities.activitySync).
 // ---------------------------------------------------------------------------
 
 type MetricFn = (sample: CoverageSample, config: MetricConfig) => MetricResult;
@@ -111,6 +115,10 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
   round_amount_rate: roundAmountRate,
   owner_history_enabled: ownerHistoryEnabled,
   stage_history_months: stageHistoryMonths,
+  contact_identity_resolution_rate: contactIdentityResolutionRate,
+  account_resolution_rate: accountResolutionRate,
+  activity_attribution_rate: activityAttributionRate,
+  temporal_anomaly_rate: temporalAnomalyRate,
 };
 
 const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
@@ -119,13 +127,6 @@ const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
   median_next_step_age_days:
     'Deferred: no adapter can report a per-field "Next Step last changed" timestamp yet; needs a nextStepHistory capability (docs/STATUS.md).',
 };
-
-const D5_METRICS: ReadonlySet<MetricId> = new Set([
-  'contact_identity_resolution_rate',
-  'account_resolution_rate',
-  'activity_attribution_rate',
-  'temporal_anomaly_rate',
-]);
 
 // ---------------------------------------------------------------------------
 // Report shape
@@ -199,7 +200,11 @@ function capabilitiesGating(metric: MetricId): readonly CapabilityRef[] {
   return CAPABILITIES.filter((c) => c.gates.includes(metric)).map((c) => ({ id: c.id, label: c.label }));
 }
 
-export async function buildReportData(adapter: CrmAdapter, options: BuildReportOptions): Promise<ReportData> {
+export async function buildReportData(
+  adapter: CrmAdapter,
+  secondSourceAdapter: SecondSourceAdapter | undefined,
+  options: BuildReportOptions,
+): Promise<ReportData> {
   const sampleConfig: SampleConfig = {
     seed: options.seed ?? 'report',
     perStratumSampleSize: options.perStratumSampleSize ?? 20,
@@ -220,7 +225,16 @@ export async function buildReportData(adapter: CrmAdapter, options: BuildReportO
   sample = (await hydrateNotes(sample, adapter)).sample;
   sample = (await hydrateActivities(sample, adapter)).sample;
 
-  const metricConfig: MetricConfig = { asOf: options.asOf };
+  // D5: only hydrate contacts / resolve the second source when one is
+  // actually connected — otherwise this is pure wasted I/O for data
+  // nothing downstream reads (see docs/STATUS.md, D5 part 2a).
+  let secondSourceResolution: MetricConfig['secondSourceResolution'];
+  if (secondSourceAdapter) {
+    sample = (await hydrateContacts(sample, adapter)).sample;
+    secondSourceResolution = await resolveSecondSource(sample, secondSourceAdapter);
+  }
+
+  const metricConfig: MetricConfig = { asOf: options.asOf, secondSourceResolution };
   const readings = new Map<MetricId, MetricReading>();
   const rows: MetricRow[] = [];
 
@@ -265,8 +279,8 @@ export async function buildReportData(adapter: CrmAdapter, options: BuildReportO
     }
 
     const deferredReason = DEFERRED_REASONS[metric];
-    const status: MetricRowStatus = deferredReason ? 'deferred' : D5_METRICS.has(metric) ? 'not_instrumented' : 'not_implemented';
-    const note = deferredReason ?? (D5_METRICS.has(metric) ? 'no second source connected' : 'Not yet implemented.');
+    const status: MetricRowStatus = deferredReason ? 'deferred' : 'not_implemented';
+    const note = deferredReason ?? 'Not yet implemented.';
 
     rows.push({
       metric,
