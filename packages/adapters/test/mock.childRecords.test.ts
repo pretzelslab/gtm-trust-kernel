@@ -80,10 +80,10 @@ describe('MockAdapter getNotesByOpportunity/getActivitiesByOpportunity truncatio
     expect(result.truncatedOpportunityIds.has('opp-1')).toBe(true);
   });
 
-  it('returns the oldest-first note within the cap (sorted by createdAt ascending)', async () => {
+  it('truncates oldest-first: keeps the newest note within the cap, not the oldest', async () => {
     const adapter = new MockAdapter(ORG, makeData(), { notesPerOpportunityLimit: 1 });
     const result = await adapter.getNotesByOpportunity([ref('opportunity', 'opp-1')]);
-    expect(result.items[0]!.ref.id).toBe('note-1'); // iso(3), earlier than note-2's iso(1)
+    expect(result.items[0]!.ref.id).toBe('note-2'); // iso(1), more recent than note-1's iso(3) — note-1 (older) is the one dropped
   });
 
   it('caps activities at activitiesPerOpportunityLimit and reports it truncated', async () => {
@@ -92,6 +92,12 @@ describe('MockAdapter getNotesByOpportunity/getActivitiesByOpportunity truncatio
 
     expect(result.items).toHaveLength(1);
     expect(result.truncatedOpportunityIds.has('opp-1')).toBe(true);
+  });
+
+  it('truncates oldest-first: keeps the newest activity within the cap, not the oldest', async () => {
+    const adapter = new MockAdapter(ORG, makeData(), { activitiesPerOpportunityLimit: 1 });
+    const result = await adapter.getActivitiesByOpportunity([ref('opportunity', 'opp-1')]);
+    expect(result.items[0]!.ref.id).toBe('act-2'); // iso(2), more recent than act-1's iso(5) — act-1 (older) is the one dropped
   });
 
   it('does not report truncation when the limit is not exceeded', async () => {

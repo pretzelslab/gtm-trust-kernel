@@ -161,7 +161,13 @@ export class MockAdapter implements CrmAdapter {
       if (sorted.length > perOpportunityLimit) {
         truncatedOpportunityIds.add(oppId);
       }
-      items.push(...sorted.slice(0, perOpportunityLimit));
+      // Truncate oldest-first: keep the newest perOpportunityLimit records
+      // (the tail of the ascending-sorted array), not the oldest — a
+      // trailing-window reader (activity_capture_rate's 30 days,
+      // stage_activity_contradiction_rate's 21) needs recent records more
+      // than old ones. The kept slice stays ascending-sorted, matching the
+      // contract's "sorted by ... date ascending" for returned items.
+      items.push(...sorted.slice(Math.max(0, sorted.length - perOpportunityLimit)));
     }
 
     return { items, truncatedOpportunityIds, apiCallsConsumed: 1 };

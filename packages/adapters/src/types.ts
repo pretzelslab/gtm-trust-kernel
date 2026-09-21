@@ -71,7 +71,13 @@ export interface AdapterCapabilities {
    * adapter does enforce: an opportunity with more related notes than this
    * has its result capped, and its ref.id reported in
    * GetChildRecordsResult.truncatedOpportunityIds so the count is never
-   * silently undercounted as exact.
+   * silently undercounted as exact. When capping, an adapter MUST truncate
+   * oldest-first — keep the newest notesPerOpportunityLimit records, drop
+   * the oldest — never the reverse. Readers of these records care about
+   * recency (activity_capture_rate's trailing 30 days,
+   * stage_activity_contradiction_rate's trailing 21), so an adapter that
+   * truncates newest-first would silently make truncation worse than no
+   * cap at all for exactly the callers who need recent data most.
    */
   readonly notesPerOpportunityLimit: number;
   /** Same contract as notesPerOpportunityLimit, for getActivitiesByOpportunity(). */
@@ -138,7 +144,11 @@ export interface GetChildRecordsResult<T> {
    * activitiesPerOpportunityLimit) — more records exist than were
    * returned for that opportunity. Callers must treat that opportunity's
    * count as "at least N", never exact, and should surface the
-   * truncation rather than silently undercounting.
+   * truncation rather than silently undercounting. When an opportunity is
+   * truncated, the surviving records MUST be the newest
+   * notesPerOpportunityLimit/activitiesPerOpportunityLimit, not the
+   * oldest — see notesPerOpportunityLimit's docblock (AdapterCapabilities)
+   * for why.
    */
   readonly truncatedOpportunityIds: ReadonlySet<string>;
   /** Vendor API calls consumed by this call. 0 for an empty refs array. */
@@ -197,6 +207,8 @@ export interface CrmAdapter {
    * truncated — respecting that limit is the caller's job. Not gated on any
    * capability: notes are always readable regardless of activitySync
    * (that flag is about auto-capture of Activities, unrelated to Notes).
+   * Per-opportunity truncation at capabilities().notesPerOpportunityLimit
+   * IS enforced by the adapter, oldest-first — see that field's docblock.
    */
   getNotesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Note>>;
 

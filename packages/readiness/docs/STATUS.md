@@ -73,7 +73,7 @@ kind of cross-package addition D1's `activitySync`/`contactLinks` were.
 two, reporting a capped opportunity in `GetChildRecordsResult.truncatedOpportunityIds`,
 now actually consumed downstream as of this session).
 
-`npm run ci` green at handoff: adapters 30, kernel 22, readiness 198.
+`npm run ci` green at handoff: adapters 31, kernel 22, readiness 198.
 
 Cross-package, D3 part 2b: `tldts` (`7.4.13`, exact-pinned) added as a
 `packages/readiness` dependency — the only domain-normalization library in
@@ -122,6 +122,7 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **`CoverageSample.notesTruncatedOpportunityIds` / `activitiesTruncatedOpportunityIds`** (this session): `hydrateNotes`/`hydrateActivities` now union `GetChildRecordsResult.truncatedOpportunityIds` across every chunk and carry the result forward on `CoverageSample`, instead of discarding it. Placeholder empty `Set()` until the corresponding hydration step runs, same pattern as every other hydrated field.
 - **`applyTruncationFloor` (`src/metrics/shared.ts`, this session):** the only place `MetricResult.floor` is ever set. Checks a metric's *actual computed denominator* (not the raw sample — e.g. `activity_capture_rate`'s 7-day-exclusion-filtered `eligible` list, `stage_activity_contradiction_rate`'s late-stage-filtered `lateStage` list) against the truncated-id set, so an opportunity truncated but excluded from THIS metric's denominator anyway (confirmed with the healthy fixture's `opp-0`: truncated for both notes and activities, but `stage_activity_contradiction_rate` correctly shows `floor: false` since `opp-0` is `prospecting`-stage, outside that metric's late-stage denominator) doesn't wrongly flag it. No-op when status isn't `'ok'` or nothing in the denominator was truncated. Wired into the 3 affected metrics: `note_coverage_rate`, `activity_capture_rate` (`coverage.ts`), `stage_activity_contradiction_rate` (`consistency.ts`). **Flags regardless of whether truncation could plausibly change the value** — none of these 3 is count-based (all are presence/rate checks, and the per-opportunity cap defaults to 200, so a truncated opportunity's presence answer is never actually wrong) — this is a deliberate, general data-completeness signal for any reader of the result, not a correction to a wrong number.
 - **Report layer (`buildReport.ts`/`render.ts`, this session):** `MetricRow` gained a non-optional `floor: boolean` (always `false` for deferred/D5/not-implemented rows, `result.floor ?? false` otherwise). `render.ts` shows a `≥` prefix on the formatted value plus a distinct "FLOOR" pill (own color, hover tooltip) in both the single-report metrics table and the `--all` comparison matrix. The `healthy` fixture (`src/fixtures/mockOrgs.ts`) now seeds `opp-0` with 205 notes and 205 activities — comfortably over the 200 default per-opportunity cap — specifically so a real report run demonstrates the badge, not just unit-test fixtures. Verified end to end: `note_coverage_rate`/`activity_capture_rate` show `floor: true` on the healthy report; `stage_activity_contradiction_rate` correctly does not.
+- **Mock truncation order fixed: oldest-first, not newest-first** (`packages/adapters/src/mock.ts`, this session). `getChildRecordsByOpportunity` previously sorted ascending and kept the FIRST `perOpportunityLimit` items — the oldest ones, dropping the newest. Fixed to keep the LAST `perOpportunityLimit` items of the ascending-sorted array instead (still returned in ascending order, per the contract) — i.e. truncation now drops old records first, keeping recent ones. This matters concretely, not just cosmetically: `activity_capture_rate`'s 30-day and `stage_activity_contradiction_rate`'s 21-day trailing windows are exactly the callers most likely to need the newest records and least likely to care about old ones — the previous behavior could silently drop a genuinely-qualifying recent activity while keeping stale ones nobody asked about. Documented as a MUST on both `AdapterCapabilities.notesPerOpportunityLimit`'s docblock and `GetChildRecordsResult.truncatedOpportunityIds`'s, so a future real adapter (Salesforce, HubSpot) implements the same order, not an arbitrary one — the contract suite doesn't force a specific truncation-selection order (forcing an actual truncation scenario needs adapter-specific seeded data, same reasoning as why the numeric cap itself isn't tested at the shared-contract level), so this is enforced by written contract + the mock's own tests, not by `adapter.contract.ts`.
 - **`hydrateNotes`/`hydrateActivities` (`src/coverageSample.ts`, this session):** same shape as `hydrateStageHistory` — chunk the sorted, deduped opportunity-ref set at `capabilities().childRecordBatchLimit`, call the adapter, group results back by opportunity. **Deliberately no new `notesHydrated`/`activitiesHydrated` boolean or gate on `CoverageSample`** (a live option, given `accountsHydrated`'s precedent) — decided against it: `notesByOpportunity`/`activitiesByOpportunity` were never documented with `accountsByRef`'s "empty and meaningless until hydrated" caveat, `note_coverage_rate` has no capability to gate on (presence-of-notes is unconditionally meaningful), and `activity_capture_rate`/`stage_activity_contradiction_rate` already gate on `capabilities.activitySync` *before* ever reading the map — a second gate would be redundant, not additive. Verified directly: a dedicated test (`coverageSample.test.ts`, "activitySync capability gate survives real hydration") hydrates real activity data with `activitySync: false` and confirms both metrics still return `not_instrumented`, not a computed value.
 - **`buildReport.ts`'s 3 caveat notes (D1 gap, flagged when the visual report shipped) are removed**, not just silenced — the code that added `"Known gap: CoverageSample does not yet hydrate notes/activities..."` to `note_coverage_rate`/`activity_capture_rate`/`stage_activity_contradiction_rate`'s rows is deleted, since `buildReportData` now calls `hydrateNotes`/`hydrateActivities` for real. Rerunning the report against `healthy`/`fresh` now shows real coverage numbers (e.g. `note_coverage_rate` ~0.8 instead of a caveat) instead of the placeholder 0%/caveat pairing; `legacy` (which seeds no notes) correctly still shows 0%, now for a real reason.
 
@@ -218,14 +219,6 @@ metric's implementation is blocked.
   as above, but larger in practice — these two calls scale with the
   number of `childRecordBatchLimit`-sized chunks of sampled opportunities,
   not a single bounded call. Not reflected in `SamplePlan` at all yet.
-- **`applyTruncationFloor`'s "most relevant records" assumption.** The
-  mock selects which records survive truncation by sorting ascending and
-  slicing — the oldest N, not necessarily the most useful N. A real
-  adapter would need to define its own truncation-selection order (e.g.
-  most-recent-first might serve `activity_capture_rate` better than
-  oldest-first, since it only cares about the trailing 30 days). Not
-  resolved this session — `floor: true` discloses that the value may be
-  incomplete, but says nothing about which records were kept.
 
 (The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
@@ -254,10 +247,9 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   `duplicate_account_rate`'s heavier note turns out to need it sooner.
 - The three `duplicate_account_rate` open questions (beyond-first variant,
   cross-TLD, regional shared-provider domains), the two D4 open questions
-  (`lowConfidence` hardcoding, dry-run budget), and the two remaining
-  note/activity-hydration open questions (dry-run budget not accounting
-  for these calls; the mock's oldest-first truncation-selection order,
-  which may not be the most useful order for a trailing-window metric
-  like `activity_capture_rate`) — none blocking, all deferred to v0.2 or
-  later. `truncatedOpportunityIds` itself is no longer on this list — it's
-  consumed now (`applyTruncationFloor`, see decisions above).
+  (`lowConfidence` hardcoding, dry-run budget), and one remaining
+  note/activity-hydration open question (dry-run budget not accounting
+  for `hydrateNotes`/`hydrateActivities`'s calls) — none blocking, all
+  deferred to v0.2 or later. `truncatedOpportunityIds` consumption
+  (`applyTruncationFloor`) and the mock's truncation-selection order are
+  both resolved now — see decisions above.
