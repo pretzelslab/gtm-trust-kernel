@@ -34,7 +34,8 @@ repeated here.
 | D5 part 1: `SecondSourceAdapter` contract + `MockSecondSourceAdapter` + fixtures | Done, tested. **No D5 metric code** — adapter/mock/contract-test/fixture scaffolding only | this session ("D5 part 1"), see git log |
 | D5 part 2a: joinability orchestration (independent second-source sampling, hashing at ingestion, contact/account resolution) | Done, tested | prior session ("D5 part 2a"), see git log |
 | D5 part 2b: the 4 D5 metrics + `buildReportData`/`cli.ts`/`--json` wiring | **Done, tested. D5 is now fully implemented** — all 4 metrics live in the report, no longer greyed out | this session ("D5 part 2b"), see git log |
-| D6 (4), D7 (3) | Not started | — |
+| D6 (4 metrics), D7's `closed_deal_count_12m`/`outcome_evidence_retention_rate` | **Scoped and locked** in `metric-definitions.md` this session — no code written, ready for implementation | doc-only, this session |
+| D7 `win_rate_dispersion` | **Deferred** — blocked on a new adapter method (per-opportunity stage history), bundled with the two D2/D4 deferrals below into one adapter-contract change | doc-only, this session |
 
 `notesByOpportunity`/`activitiesByOpportunity` hydration — the gap flagged
 when the visual report shipped (`note_coverage_rate`,
@@ -246,6 +247,8 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **Floor extended uniformly to all 4 D5 metrics, not just `activity_attribution_rate`/`temporal_anomaly_rate` as first scoped.** Confirmed with the user: `SecondSourceSampleResult` gained `contactsTruncated`/`accountsTruncated` alongside the already-planned `activitiesTruncated` (`src/secondSource/sample.ts`, same keep-newest-style truncation signal as the rest of D5 — computed by `paginate`'s existing loop, not a new mechanism). Applied per which inputs each metric actually reads: `contact_identity_resolution_rate` → `contactsTruncated`; `account_resolution_rate` → `accountsTruncated`; `activity_attribution_rate` → any of the three (it reads activities AND the contact/account matches used to attribute them); `temporal_anomaly_rate` → `activitiesTruncated` only (per the scope lock above, it never reads second-source contacts/accounts at all, so their truncation is irrelevant to it). Same "general data-completeness signal, not a proven-direction correction" philosophy `applyTruncationFloor` established for D1 — `src/metrics/joinability.ts`'s local `withFloorIf` generalizes that to a plain per-type boolean instead of a per-record truncated-id set, since D5's truncation signal isn't per-record.
 - **`MetricConfig.secondSourceResolution?: SecondSourceResolution`** (`metrics/types.ts`, D5 part 2b): threads the D5 orchestration output into every metric function via the existing `(sample, config) => MetricResult` signature, unchanged for every other metric. Deliberately not added to `CoverageSample` — keeps `CoverageSample` CRM-only, same architectural split as `SecondSourceRef` staying separate from `RecordRef` (D5 part 1). Creates a type-only circular import between `metrics/types.ts` and `secondSource/resolve.ts` (each references the other's type) — confirmed this compiles cleanly (`import type` is erased before runtime, so there's no actual circular value dependency), not a design smell to fix.
 - **`buildReportData(adapter, secondSourceAdapter, options)`** (D5 part 2b, `report/buildReport.ts`): new second positional parameter, `SecondSourceAdapter | undefined` — not folded into `BuildReportOptions`, matching how `adapter` itself is already separate from options. `hydrateContacts`/`resolveSecondSource` are only called when `secondSourceAdapter` is provided — skipped entirely otherwise, so the no-second-source path costs zero extra I/O (unlike `hydrateAccounts`/`hydrateNotes`/`hydrateActivities`, which run unconditionally regardless of capability gates, because D1-D4 metrics that always run depend on them; nothing depends on `hydrateContacts` except D5, so there's no equivalent reason to pay for it when D5 can't use it). `cli.ts` constructs `MockSecondSourceAdapter` from `fixture.secondSource.data`/`.capabilities` when present. The `D5_METRICS` fallback set and its branch in `buildReportData` are deleted — dead code once D5 joined `IMPLEMENTED`. No `render.ts` changes: row styling is purely `status`-driven, so `ok` D5 rows render live automatically.
+- **D6/D7 scoping session (doc-only, no code): six decisions locked into `metric-definitions.md`, full rationale there, summarized here.** (1) `substantive_note_rate`/`median_note_length_chars` are scoped to open **and** closed sampled opportunities' notes, not open-only — `note_coverage_rate`'s own denominator is open-only, but `substantive_note_rate` gates `enablement_answer_engine`, which reasons over closed-won/lost history, so open-only would have measured the wrong population. (2) `pii_density` now names its population precisely: Note `body`, Activity `subject`/`body`, and Opportunity `nextStep`, counted **per record** (a record with multiple matching fields still counts once), denominator excludes records with no candidate field set at all; card-like matches require a Luhn check, not just a digit-count pattern; the result must report counts only, never a matched value, and the existing D5 no-raw-PII test must be extended to cover it. (3) `untrusted_text_ratio` is no longer capability-gated — it reads `TrustedText.tier === TrustTier.ExternallySourced` directly (Note `body` + Activity `subject`/`body`, not `nextStep`), since every `TrustedText` is guaranteed a `tier` at ingestion; the old "adapter can't distinguish origin → `not_instrumented`" framing described a gate that can't occur in this model and was removed. Its output must caveat that it reflects the adapter's own ingestion-time tier assignment, not verified ground truth. (4) `closed_deal_count_12m` trusts `sample.ts`'s existing `CLOSED_WINDOW_MONTHS` window rather than re-deriving it, and gets a new `floor: true` path: it must be set whenever either the `closed_won` or `closed_lost` reservoir stratum is full (`underfilled: false`), since a full reservoir means `closedOpportunities.length` is a sample-size ceiling, not the org's true volume. This needs two new `CoverageSample` fields carrying both strata's `underfilled` flags forward — `buildCoverageSample` currently discards them. (5) `outcome_evidence_retention_rate` ships as scoped, gets `applyTruncationFloor` for consistency with `note_coverage_rate`/`activity_capture_rate` even though truncation can't change its presence-check answer, and shares decision 4's window-trust reasoning. (6) `win_rate_dispersion` is **blocked, not shipped** — see "Deferred" below.
+- **Why `win_rate_dispersion` is deferred, not scoped-and-ready like the other 6:** it needs win rate grouped by every canonical stage a *closed* deal passed through, but a closed `Opportunity.stage` only ever holds `closed_won`/`closed_lost` — intermediate stages only exist in `StageHistoryEntry`, and there is no by-opportunity-ref adapter method to fetch them (`listStageHistory` is an unfiltered stream; D4's `hydrateStageHistory` only fetches one org-wide earliest entry). Confirmed this requires a new `getStageHistoryByOpportunity(oppRefs)` adapter method — cross-package, plan-and-wait, same as the two existing deferrals. Bundled with them below rather than scoped as a third standalone deferral.
 
 ---
 
@@ -268,6 +271,11 @@ To unblock: this needs a canonical-model / adapter-contract change first
 `Opportunity`), which is a multi-file, cross-package change — show the plan
 and wait for approval before writing any of it, same process as
 `OpportunityContactLink`.
+
+**Bundled this session** with `close_date_history_enabled` and D7's
+`win_rate_dispersion` (see below) into one adapter-contract change, rather
+than three separate plan-and-wait sessions — all three need a new
+history-tracking capability/method added to `packages/adapters`.
 
 ---
 
@@ -294,6 +302,44 @@ Already wired as a gate in one of `rubric.ts`'s `CapabilitySpec`s
 (alongside `close_date_fill_rate` and `past_due_close_date_rate`) — the
 threshold entry exists and is unaffected by this deferral; only the
 metric's implementation is blocked.
+
+**Bundled this session** with `median_next_step_age_days` above and D7's
+`win_rate_dispersion` below into one adapter-contract change — see that
+metric's entry for why.
+
+---
+
+## Deferred: `win_rate_dispersion`
+
+Not implemented (D7, scoped this session — see `metric-definitions.md`).
+Root cause: a closed `Opportunity.stage` is only ever
+`closed_won`/`closed_lost` — the canonical model retains no field for which
+intermediate pipeline stages (`prospecting` → ... → `negotiation`) a deal
+passed through before closing. That information only exists in
+`StageHistoryEntry.toStage`, keyed by `opportunityRef` (D4's
+`stageHistory` capability). `CrmAdapter.listStageHistory` is a
+since-window/cursor stream with no ref filter — the same shape gap
+`getAccounts`/`getContactsByRef`/`getNotesByOpportunity` were each added to
+close for accounts/contacts/notes — and D4's existing `hydrateStageHistory`
+glue (`coverageSample.ts`) only fetches one org-wide earliest entry, which
+is all `stage_history_months` needs but nowhere near a full per-opportunity
+transition sequence for every sampled closed deal. Scanning
+`listStageHistory` unfiltered and matching client-side against sampled refs
+would violate the "never full-scan a production org" rule that justified
+the earlier by-ref additions, so that's not an option either.
+
+To unblock: needs a new `getStageHistoryByOpportunity(oppRefs)` method on
+`CrmAdapter` (`packages/adapters`), same shape as `getNotesByOpportunity` —
+a cross-package, multi-file change. Show the plan and wait for approval
+before writing any of it, same process as `OpportunityContactLink`.
+
+**Bundled this session** with the two D2/D4 deferrals above into one
+adapter-contract change covering three additions to `packages/adapters` at
+once: `getStageHistoryByOpportunity` (this metric), a `nextStepHistory`
+capability (`median_next_step_age_days`), and a `closeDateHistory`-shaped
+capability (`close_date_history_enabled`). Scoped together because all
+three are "add a history-tracking capability + adapter method" changes to
+the same package — one plan-and-wait session, not three.
 
 ---
 
@@ -367,18 +413,33 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   done** (part 1: adapter/mock/contract/fixtures; part 2a:
   sampling/hashing/resolution orchestration; part 2b, this session: the 4
   metrics + report wiring), the only dimension besides D1/D3 with zero
-  deferrals. D6 text substrate (4) and D7 label availability (3) are the
-  only dimensions with zero metrics implemented — next up, no plan agreed
-  yet.
+  deferrals. **D6 (4 metrics) and D7 (3 metrics) are scoped and locked in
+  `metric-definitions.md` this session — zero code written.** 6 of the 7
+  are ready for implementation (`substantive_note_rate`,
+  `median_note_length_chars`, `pii_density`, `untrusted_text_ratio`,
+  `closed_deal_count_12m`, `outcome_evidence_retention_rate`); D7's
+  `win_rate_dispersion` is deferred, bundled into the same
+  adapter-contract change as D2's `median_next_step_age_days` and D4's
+  `close_date_history_enabled` (see "Deferred" sections below). No
+  implementation plan for the 6 shippable metrics has been agreed yet —
+  next up.
 - **`GetSecondSourceRecordsResult.truncatedRefIds`'s always-empty field on
   `getContactsByRef`/`getAccountsByRef`** (see decisions above) — minor
   cleanup candidate, not blocking.
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
-- `median_next_step_age_days`'s `nextStepHistory` capability and
-  `close_date_history_enabled`'s new capability — both blocked on the same
-  shape of canonical-model/adapter-contract change, if either is
-  prioritized before the rest of D5–D7.
+- The bundled adapter-contract change blocking `median_next_step_age_days`
+  (D2), `close_date_history_enabled` (D4), and `win_rate_dispersion` (D7):
+  `nextStepHistory` capability, a `closeDateHistory`-shaped capability, and
+  `getStageHistoryByOpportunity(oppRefs)` — three additions to
+  `packages/adapters`, scoped together, none started.
+- Fixture gaps the 6 shippable D6/D7 metrics need before they're testable,
+  not yet built: no fixture currently produces `ExternallySourced` text
+  (`makeNote` hardcodes `TrustTier.UserAuthored`; `makeActivity` never sets
+  `subject`/`body` and hardcodes `direction: 'outbound'`) or any
+  PII-pattern-matching text, and no fixture's closed strata fill the
+  reservoir (`underfilled: false`) to exercise `closed_deal_count_12m`'s
+  new floor path.
 - The `excludedCount`-as-`note` tech debt, now at its second use
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if
