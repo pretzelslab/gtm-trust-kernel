@@ -44,7 +44,7 @@ role on it.
 **Qualifying activity:** has a real timestamp; is not a system-generated
 task from a workflow rule; is not a mass-email send record; is not a
 field-history entry.
-**Denominator exclusion:** opportunities created inside the trailing 30-day
+**Denominator exclusion:** opportunities created inside the trailing 7-day
 window are excluded — they haven't had time to accrue activity yet.
 **Capability-matrix gate:** if the adapter's capability matrix reports no
 activity-sync capability for this org, this metric returns `not_instrumented`

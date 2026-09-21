@@ -64,6 +64,7 @@ export class MockAdapter implements CrmAdapter {
     return {
       stageHistory: true,
       ownerHistory: true,
+      activitySync: true,
       incrementalSync: true,
       bulkRead: true,
       writeGranularity: 'field',

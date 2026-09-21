@@ -29,6 +29,12 @@ export interface AdapterCapabilities {
   readonly stageHistory: boolean;
   /** Can report owner change history. */
   readonly ownerHistory: boolean;
+  /**
+   * Auto-captures activities via email/calendar sync (e.g. Salesforce
+   * Einstein Activity Capture), rather than relying on manual logging.
+   * Gates activity_capture_rate: without it, silence isn't a reliable signal.
+   */
+  readonly activitySync: boolean;
   /** Supports change-data-capture or a modified-since watermark for deltas. */
   readonly incrementalSync: boolean;
   /** Supports bulk read for backfill. */

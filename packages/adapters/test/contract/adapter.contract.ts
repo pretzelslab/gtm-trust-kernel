@@ -31,6 +31,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       const c = adapter.capabilities();
       expect(typeof c.stageHistory).toBe('boolean');
       expect(typeof c.ownerHistory).toBe('boolean');
+      expect(typeof c.activitySync).toBe('boolean');
       expect(typeof c.incrementalSync).toBe('boolean');
       expect(['field', 'record', 'none']).toContain(c.writeGranularity);
       expect(['daily_quota', 'per_second', 'none']).toContain(c.rateLimit.kind);

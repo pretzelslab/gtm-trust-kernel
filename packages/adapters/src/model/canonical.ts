@@ -75,6 +75,23 @@ export interface Account {
   readonly dedupeKey?: string;
 }
 
+/**
+ * A contact's association with an opportunity (Salesforce's
+ * OpportunityContactRole junction object; HubSpot's deal-to-contact
+ * associations). Distinct from Contact.accountRef, which is account-level
+ * and says nothing about which deals a contact is actually involved in.
+ */
+export interface OpportunityContactLink {
+  readonly contactRef: RecordRef;
+  /**
+   * Named buying-group role, when the vendor tracks one (Salesforce's
+   * "Decision Maker", "Economic Buyer", etc). Optional because not every
+   * CRM has named roles — HubSpot associations frequently don't.
+   */
+  readonly role?: string;
+  readonly isPrimary?: boolean;
+}
+
 export interface Opportunity {
   readonly ref: RecordRef;
   readonly accountRef: RecordRef;
@@ -91,6 +108,7 @@ export interface Opportunity {
   readonly isWon?: boolean;
   readonly forecastCategory?: string;
   readonly nextStep?: TrustedText;
+  readonly contactLinks: readonly OpportunityContactLink[];
   readonly createdAt: string;
   readonly modifiedAt: string;
   /**
