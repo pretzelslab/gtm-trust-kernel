@@ -3,7 +3,7 @@
  */
 
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
-import { DAY_MS, rateOverOpportunities } from './shared.js';
+import { DAY_MS, hasQualifyingActivity, rateOverOpportunities } from './shared.js';
 
 export function closeDateFillRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
   return rateOverOpportunities('close_date_fill_rate', sample.openOpportunities, (o) => o.closeDate != null);
@@ -91,11 +91,7 @@ export function activityCaptureRate(sample: CoverageSample, config: MetricConfig
   );
 
   return rateOverOpportunities('activity_capture_rate', eligible, (o) => {
-    const createdAt = new Date(o.createdAt).getTime();
     const activities = sample.activitiesByOpportunity.get(o.ref.id) ?? [];
-    return activities.some((a) => {
-      const occurredAt = new Date(a.occurredAt).getTime();
-      return occurredAt >= windowStart && occurredAt <= asOf && occurredAt >= createdAt;
-    });
+    return hasQualifyingActivity(o, activities, windowStart, asOf);
   });
 }

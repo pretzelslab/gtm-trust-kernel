@@ -2,12 +2,33 @@
  * Helpers shared by more than one metric family (D1 coverage, D2 freshness).
  */
 
-import type { Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Activity, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
 import type { MetricResult } from './types.js';
 import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
 
 export const DAY_MS = 86_400_000;
+
+/**
+ * The qualifying-activity predicate, negotiated for activity_capture_rate
+ * (metric-definitions.md D1) and reused as-is by stage_activity_contradiction_rate
+ * (D3) with a different window length: occurredAt within [windowStart, asOf]
+ * inclusive on both ends, and not before the opportunity's own createdAt. No
+ * completion-status filter, no ActivityKind restriction. windowStart/asOf are
+ * epoch ms — callers compute their own window length from asOf.
+ */
+export function hasQualifyingActivity(
+  opportunity: Opportunity,
+  activities: readonly Activity[],
+  windowStart: number,
+  asOf: number,
+): boolean {
+  const createdAt = new Date(opportunity.createdAt).getTime();
+  return activities.some((a) => {
+    const occurredAt = new Date(a.occurredAt).getTime();
+    return occurredAt >= windowStart && occurredAt <= asOf && occurredAt >= createdAt;
+  });
+}
 
 /** Share of some denominator of opportunities meeting a per-metric predicate. */
 export function rateOverOpportunities(
