@@ -393,6 +393,11 @@ the same package — one plan-and-wait session, not three.
   repo yet calls a real model with it. Full redaction module is
   post-deadline scope, same as `narrative.ts` above.
 
+- **npx packaging not built.** No `bin` entry, no compiled output,
+  `@gtm-trust-kernel/adapters` unpublished (clean install fails), test
+  fixtures + internal docs leak into the tarball (no `files` allowlist).
+  Full packaging plan required before public release.
+
 ---
 
 ## Open questions, not yet resolved
