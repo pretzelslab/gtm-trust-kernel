@@ -513,8 +513,11 @@ export const THRESHOLDS: Readonly<Record<MetricId, Threshold>> = {
     metric: 'closed_deal_count_12m',
     unit: 'count',
     direction: 'higher_is_better',
-    viableAt: 60,
-    degradedAt: 25,
+    viableAt: 40,
+    degradedAt: 20,
+    // Ceiling-aware: 2 strata × default perStratumSampleSize 20 = 40 max
+    // sampled; thresholds calibrated to that ceiling pending CLI flag for
+    // larger samples.
     question: 'How many closed deals in 12 months are needed to calibrate or evaluate anything?',
     candidates: [
       { value: 200, implication: 'Enough to slice by stage and segment.' },

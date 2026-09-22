@@ -494,10 +494,10 @@ added to the repo and confirmed to match: its Step 7 is exactly the
     numerator unchanged, none of the 4 new templates matches a PII pattern.
   - `untrusted_text_ratio`: **6/312** (was 6/290) — same pooling, same
     reasoning; numerator (the 3 seeded inbound activities' fields) unchanged.
-  - `substantive_note_rate` (1.0), `median_note_length_chars` (60, still
-    `tier: 'blocked'` — a pre-existing, unrelated gap, not something this
-    session's change caused or was scoped to fix) — both shift with the
-    larger note pool but have no pinned value in this doc to reconcile;
+  - `substantive_note_rate` (1.0), `median_note_length_chars` (60, `tier:
+    'blocked'` at the time — this was flagged as a pre-existing, unrelated
+    gap and later fixed the same day; see the entry below) — both shift with
+    the larger note pool but have no pinned value in this doc to reconcile;
     `buildReport.test.ts` only asserts `status === 'ok'` / `value !== null`
     for these, which held before and after.
   - Confirmed **unaffected**, exactly matching this doc's already-written
@@ -507,8 +507,55 @@ added to the repo and confirmed to match: its Step 7 is exactly the
     contacts/accounts/second-source data, never CRM notes), `duplicate_account_rate`
     0/`viable` (reads `accountsByRef`), `stage_mapping_coverage` 1.0/`viable`
     (reads `stageConfidence`, not notes), `closed_deal_count_12m` 24/`blocked`
-    (pure `closedOpportunities.length`, unrelated pre-existing tier, not
-    touched by this fix either).
+    at the time (pure `closedOpportunities.length`, unrelated pre-existing
+    tier, not touched by this fix — but see the entry below for a later,
+    separate fix to *this* metric's rubric.ts thresholds).
+- **Two more `healthy`/`volume` `tier: 'blocked'` findings, both fixed same
+  day as the entry above: `closed_deal_count_12m` and
+  `median_note_length_chars`.** For each, the question asked was: fixture
+  bug, an unreachable-by-design threshold, or correct as-is?
+  - **`median_note_length_chars` — (a) fixture bug, confirmed exactly.**
+    `healthy` read `value: 60, tier: 'blocked'` (`rubric.ts`: `viableAt: 200,
+    degradedAt: 80`). Root cause: `opp-0`'s 205 `note-overflow-*` bodies
+    (seeded pre-D6, solely to demonstrate D1's per-opportunity truncation
+    `floor` badge) were one fixed string, `"Overflow note {i}, seeded to
+    exceed the per-opportunity cap."` — 58-60 chars depending on `{i}`'s
+    digit count. Once D6's `allSampledNotes` started pooling every sampled
+    note org-wide, those 205 notes (67% of the 306-note pool) set the whole
+    org's median almost exactly at their own length, drowning out the real,
+    varied-length note content. **Fixed:** `opp-0`'s bodies now cycle through
+    4 varied, realistic templates (83-102 chars each); count stays 205 (still
+    over the 200 cap — the truncation-floor badge this block exists for is
+    unaffected, since that check is presence/count-based, not length-based).
+    Re-verified against a real `report --fixture healthy --json` run:
+    `median_note_length_chars` **101**, `tier: 'degraded'` (was 60/`blocked`)
+    — a real, non-dominated value, still below `viableAt: 200` but no longer
+    an artifact of one unrelated seeding block. `note_coverage_rate` (0.82,
+    `floor: true`) and `activity_capture_rate` (0.88, `floor: true`) on
+    `opp-0` unaffected, as expected (presence-only checks); `pii_density`
+    (3/422), `untrusted_text_ratio` (6/312), `substantive_note_rate` (1.0)
+    all unchanged from the entry above — content length changed, not count,
+    tier, or PII/trust-tier status.
+  - **`closed_deal_count_12m` — (b) threshold unreachable by design, for any
+    org, not just `healthy`.** `healthy` read `value: 24, tier: 'blocked'`
+    (`rubric.ts`: `viableAt: 60, degradedAt: 25`). Root cause: `cli.ts`'s
+    `buildOne` never passes `perStratumSampleSize` to `buildReportData`, so
+    every real `report` run uses `buildReport.ts`'s hardcoded default of 20;
+    with exactly 2 closed strata (`closed_won`/`closed_lost`), the sampled
+    ceiling is `2 x 20 = 40` — strictly below `viableAt: 60`. Proven, not
+    inferred: `volume`'s *real* closed-deal count is 60 (30+30, exactly at
+    the old `viableAt`), yet it reported `value: 40, floor: true,
+    tier: 'degraded'` — never `viable`, no matter how much real volume an
+    org has. **Fixed (with explicit user sign-off — `rubric.ts` thresholds
+    are otherwise protected, see this repo's root `CLAUDE.md`):**
+    `viableAt: 60 -> 40`, `degradedAt: 25 -> 20`, with a comment noting the
+    calibration is ceiling-aware pending a CLI flag for larger samples.
+    Re-verified: `volume` (`value: 40, floor: true`) now reads exactly
+    `tier: 'viable'`; `healthy` (`value: 24`) now reads `tier: 'degraded'`
+    (up from `blocked`) — both changes are exactly what recalibrating to the
+    real sampling ceiling predicts. No test pinned the old threshold values
+    or asserted `tier` for this metric, so nothing needed updating there;
+    `npm run ci` stayed green (59/22/287) across both fixes in this entry.
 - The `excludedCount`-as-`note` tech debt, now at its second use
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if

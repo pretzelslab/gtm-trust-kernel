@@ -352,9 +352,31 @@ function generateHealthy(): MockOrgFixture {
   // One opportunity deliberately seeded well over notesPerOpportunityLimit/
   // activitiesPerOpportunityLimit (200 each), so the report's "floor" badge
   // has something real to demonstrate rather than only unit-test fixtures.
+  //
+  // Note bodies use 4 varied, realistic-length templates (83-102 chars),
+  // not one fixed ~60-char filler string — the fixed string dragged D6's
+  // org-wide median_note_length_chars down to ~60 (these 205 notes are 67%
+  // of the whole healthy note pool once D6 started pooling every sampled
+  // note), reading as a data-quality problem the fixture never intended.
+  // See docs/STATUS.md. Count stays 205 (still over the 200 cap) so the
+  // truncation-floor badge this block exists for is unaffected.
   const overflowOppRef = ref(orgId, 'opportunity', 'opp-0');
+  const overflowNoteTemplates = [
+    'Confirmed budget approval with the CFO; next step is legal review of the MSA terms.',
+    'Spoke with the champion re: Q4 close timeline, need an exec sponsor intro before advancing.',
+    'Walked the security team through our SOC 2 report; they flagged two questions for follow-up next week.',
+    'Demo went well with the broader buying committee, but procurement wants a competitive bake-off first.',
+  ];
   for (let i = 0; i < 205; i++) {
-    notes.push(makeNote(orgId, `note-overflow-${i}`, overflowOppRef, `Overflow note ${i}, seeded to exceed the per-opportunity cap.`, daysBefore(asOf, i % 30)));
+    notes.push(
+      makeNote(
+        orgId,
+        `note-overflow-${i}`,
+        overflowOppRef,
+        overflowNoteTemplates[i % overflowNoteTemplates.length]!,
+        daysBefore(asOf, i % 30),
+      ),
+    );
     activities.push(makeActivity(orgId, `act-overflow-${i}`, overflowOppRef, daysBefore(asOf, i % 20)));
   }
 
