@@ -11,13 +11,12 @@ const D5_METRICS = [
   'temporal_anomaly_rate',
 ] as const;
 
-const D6_D7_METRICS = [
+const D6_D7_IMPLEMENTED_METRICS = [
   'substantive_note_rate',
   'median_note_length_chars',
   'pii_density',
   'untrusted_text_ratio',
   'closed_deal_count_12m',
-  'win_rate_dispersion',
   'outcome_evidence_retention_rate',
 ] as const;
 
@@ -64,9 +63,9 @@ describe('buildReportData shape', () => {
     }
   });
 
-  it('shows the 2 explicit deferrals as status "deferred" with a reason', async () => {
+  it('shows the 3 explicit deferrals as status "deferred" with a reason', async () => {
     const data = await buildFor('healthy');
-    for (const metric of ['close_date_history_enabled', 'median_next_step_age_days'] as const) {
+    for (const metric of ['close_date_history_enabled', 'median_next_step_age_days', 'win_rate_dispersion'] as const) {
       const row = data.metrics.find((m) => m.metric === metric)!;
       expect(row.status).toBe('deferred');
       expect(row.value).toBeNull();
@@ -84,12 +83,12 @@ describe('buildReportData shape', () => {
     }
   });
 
-  it('shows the 7 D6/D7 metrics with no implementation as not_implemented', async () => {
+  it('shows the 6 shippable D6/D7 metrics as ok with a real computed value against the healthy fixture', async () => {
     const data = await buildFor('healthy');
-    for (const metric of D6_D7_METRICS) {
+    for (const metric of D6_D7_IMPLEMENTED_METRICS) {
       const row = data.metrics.find((m) => m.metric === metric)!;
-      expect(row.status).toBe('not_implemented');
-      expect(row.value).toBeNull();
+      expect(row.status).toBe('ok');
+      expect(row.value).not.toBeNull();
     }
   });
 

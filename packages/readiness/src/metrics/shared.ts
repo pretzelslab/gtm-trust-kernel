@@ -155,6 +155,72 @@ export function wholeCalendarMonthsBetween(earlierIso: string, laterIso: string)
 }
 
 /**
+ * Luhn checksum, used only to validate a card-like digit run before
+ * pii_density (D6) counts it — a bare 13-19 digit match on its own is not
+ * sufficient (metric-definitions.md D6), since that shape also matches
+ * plenty of non-card numbers (long internal IDs, concatenated phone
+ * numbers). `digits` must already be a string of digit characters only —
+ * callers extract the run via regex before calling this.
+ */
+export function luhnValid(digits: string): boolean {
+  let sum = 0;
+  let shouldDouble = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let digit = digits.charCodeAt(i) - 48; // '0'.charCodeAt(0) === 48
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+  return sum % 10 === 0;
+}
+
+/**
+ * Email: standard address shape.
+ *
+ * Phone: MUST have an internal separator (space, dash, dot, parentheses) or
+ * a leading '+' international prefix — a bare, unbroken digit run never
+ * matches here, so it can't also double-count as SSN-like or card-like
+ * (metric-definitions.md D6, locked this session; the single biggest
+ * source of false positives before this tightening).
+ *
+ * SSN-like: hyphenated only, exactly ###-##-####. A bare 9-digit run does
+ * NOT match — same false-positive reasoning as phone above.
+ *
+ * Card-like: 13-19 contiguous digits, but a digit-count match alone is not
+ * sufficient — every candidate run is additionally Luhn-validated
+ * (luhnValid above) before it counts.
+ */
+const PII_EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+const PII_PHONE_RE = /(\+\d[\d\s().-]{6,16}\d)|(\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4})/;
+const PII_SSN_RE = /\b\d{3}-\d{2}-\d{4}\b/;
+const PII_CARD_DIGIT_RUN_RE = /\b\d{13,19}\b/g;
+
+/**
+ * pii_density's (D6) sole detection function — returns whether ANY pattern
+ * matched, never which one or the matched text itself: the metric reports
+ * counts only, never a matched value (metric-definitions.md D6's output
+ * constraint; verified by extending the existing no-raw-PII test).
+ */
+export function detectPii(text: string): boolean {
+  if (PII_EMAIL_RE.test(text)) {
+    return true;
+  }
+  if (PII_PHONE_RE.test(text)) {
+    return true;
+  }
+  if (PII_SSN_RE.test(text)) {
+    return true;
+  }
+  const cardCandidates = text.match(PII_CARD_DIGIT_RUN_RE) ?? [];
+  return cardCandidates.some((candidate) => luhnValid(candidate));
+}
+
+/**
  * The only place MetricResult.floor is ever set. Checks whether any
  * opportunity in a metric's ACTUAL computed denominator (not the raw
  * sample — a metric's own filtering, e.g. activity_capture_rate's 7-day

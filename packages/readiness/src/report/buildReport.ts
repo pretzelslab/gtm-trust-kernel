@@ -25,6 +25,8 @@ import { medianDaysSinceModified, pastDueCloseDateRate } from '../metrics/freshn
 import { stageActivityContradictionRate, roundAmountRate, stageMappingCoverage, duplicateAccountRate } from '../metrics/consistency.js';
 import { ownerHistoryEnabled, stageHistoryMonths } from '../metrics/history.js';
 import { accountResolutionRate, activityAttributionRate, contactIdentityResolutionRate, temporalAnomalyRate } from '../metrics/joinability.js';
+import { medianNoteLengthChars, piiDensity, substantiveNoteRate, untrustedTextRatio } from '../metrics/textSubstrate.js';
+import { closedDealCountTwelveMonths, outcomeEvidenceRetentionRate } from '../metrics/labels.js';
 import { resolveSecondSource } from '../secondSource/resolve.js';
 import { runSample } from '../sample.js';
 import type { SampleConfig, StopReason } from '../sample.js';
@@ -89,10 +91,11 @@ const DIMENSION_BY_METRIC: Readonly<Record<MetricId, MetricDimension>> = {
 };
 
 // ---------------------------------------------------------------------------
-// The 19 implemented metric functions (D1-D5), plus explicit reasons for
-// the 9 that aren't: explicit deferrals (2) and D6/D7 (7, simply not built
-// yet). D5's 4 gate on config.secondSourceResolution internally (see
-// joinability.ts) rather than being excluded from IMPLEMENTED — same
+// The 25 implemented metric functions (D1-D5, plus D6's 4 and D7's 2
+// shippable metrics), plus explicit reasons for the 3 that aren't: all
+// deferred, pending the same bundled adapter-contract change (see
+// docs/STATUS.md). D5's 4 gate on config.secondSourceResolution internally
+// (see joinability.ts) rather than being excluded from IMPLEMENTED — same
 // pattern as any other capability-gated metric (e.g. activityCaptureRate
 // gating on sample.capabilities.activitySync).
 // ---------------------------------------------------------------------------
@@ -119,6 +122,12 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
   account_resolution_rate: accountResolutionRate,
   activity_attribution_rate: activityAttributionRate,
   temporal_anomaly_rate: temporalAnomalyRate,
+  substantive_note_rate: substantiveNoteRate,
+  median_note_length_chars: medianNoteLengthChars,
+  pii_density: piiDensity,
+  untrusted_text_ratio: untrustedTextRatio,
+  closed_deal_count_12m: closedDealCountTwelveMonths,
+  outcome_evidence_retention_rate: outcomeEvidenceRetentionRate,
 };
 
 const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
@@ -126,6 +135,8 @@ const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
     'Deferred: no adapter capability exists yet for Close Date field history (docs/STATUS.md).',
   median_next_step_age_days:
     'Deferred: no adapter can report a per-field "Next Step last changed" timestamp yet; needs a nextStepHistory capability (docs/STATUS.md).',
+  win_rate_dispersion:
+    'Deferred: no adapter method exists yet to read stage-transition history by opportunity ref; bundled with the two deferrals above into one adapter-contract change (docs/STATUS.md).',
 };
 
 // ---------------------------------------------------------------------------

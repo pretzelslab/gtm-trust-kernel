@@ -364,14 +364,32 @@ ones.
 **Threshold:** `median_note_length_chars`.
 
 ### pii_density
-**Definition:** share of sampled free-text **records** — Notes (`body`),
-Activities (`subject` and/or `body`), and Opportunities (`nextStep`), drawn
-from both open and closed sampled opportunities, same population as
-`substantive_note_rate` — containing at least one regex-detected PII
-pattern: email address, phone number, SSN-like 9-digit pattern, or
-credit-card-like 13-19 digit pattern **validated by a Luhn checksum** (cuts
-false positives on arbitrary long digit runs — a bare digit-count match is
-not sufficient).
+**Definition:** share of sampled free-text **records** containing at least
+one regex-detected PII pattern. **Pooled denominator, not three separate
+rates:** Notes (`body`), Activities (`subject` and/or `body`), and
+Opportunities (`nextStep`) — three structurally different record types,
+drawn from both open and closed sampled opportunities (same population as
+`substantive_note_rate`) — are counted into one flat numerator/denominator
+pair, not reported as three per-type rates and not weighted by type. A
+mixed-type denominator is a deliberate choice here (unlike every other v0.1
+metric, which reads one record type): this is a coarse, top-of-report flag,
+not a gate, and the report has no per-record-type breakdown for it in v0.1.
+**Patterns, locked (today):**
+- Email: standard email-address shape.
+- Phone: **must have an internal separator (space, dash, dot, or
+  parentheses) or a leading `+` international prefix.** A bare, unbroken
+  run of digits (e.g. 10 digits with no separators) does NOT match as
+  phone-like — that shape is reserved for the SSN-like and card-like
+  patterns below, so one digit run is never claimed by two patterns.
+- SSN-like: **hyphenated only**, exactly `###-##-####`. A bare 9-digit run
+  with no hyphens does NOT match — that was the single biggest source of
+  false positives (internal IDs, truncated phone numbers, etc.) and is
+  deliberately excluded, at the cost of missing an SSN typed without
+  hyphens.
+- Card-like: 13-19 contiguous digits **validated by a Luhn checksum** — a
+  bare digit-count match is not sufficient; this is what lets a normal
+  dollar amount or a long internal ID coexist in the same corpus without
+  tripping the pattern.
 **Resolved ambiguity — unit of measure (today):** counted **per record, not
 per field**. A record counts once toward the numerator if *any* of its
 free-text fields matches a pattern — an Activity matching on both `subject`
@@ -384,12 +402,19 @@ from the denominator entirely, not counted as a non-match.
 change is that no capability's verdict depends on it. PII density varies
 legitimately by industry (healthcare, fintech) and shouldn't penalize
 readiness.
+**Test coverage must include negative cases**, not just positive matches —
+at minimum: an internal-ID-shaped string (digits only, no separators, so it
+trips neither the tightened SSN pattern nor the phone pattern) and a plain
+dollar-amount-shaped string (e.g. "$45,000" or "45000.00" — must not
+Luhn-validate as card-like, and must not match phone/SSN either). These
+prove the tightened patterns actually exclude the false positives they were
+tightened for, not just that they still catch the positive cases.
 **Output constraint:** the result must report **counts only** (matching
 record count and denominator) and must never surface a matched substring or
 the offending field's raw value, in `note` or anywhere else in
 `MetricResult`. The existing "no raw PII in ReportData/--json" test
 (`test/report/buildReport.test.ts`, added for D5) must be extended to also
-cover `pii_density`'s output once implemented.
+cover `pii_density`'s output.
 **Threshold:** `pii_density` (flag).
 
 ### untrusted_text_ratio
@@ -494,12 +519,20 @@ and `close_date_history_enabled` as one adapter-contract change.
 **Definition:** share of sampled closed opportunities (won or lost, trailing
 12 months) that still have at least one Note or Activity record retrievable
 — i.e., not purged by a data-retention policy after closing.
-**Resolved ambiguity — truncation floor (today):** reads the same
-`notesByOpportunity`/`activitiesByOpportunity` maps as `note_coverage_rate`/
-`activity_capture_rate` and gets the same `applyTruncationFloor` treatment
-for consistency, even though truncation can't change a presence check's
-answer — same rationale already established for those two metrics: a
-general data-completeness signal, not a correction to a wrong number.
+**Resolved ambiguity — no truncation floor, reversing this doc's earlier
+draft (today):** reads the same `notesByOpportunity`/`activitiesByOpportunity`
+maps as `note_coverage_rate`/`activity_capture_rate`, but does **not** get
+`applyTruncationFloor`, unlike those two. An earlier draft of this entry
+called for applying it "for consistency," on the reasoning that truncation
+can't turn a real "≥1 record" into a wrong "0" — but that reasoning is
+equally true of `note_coverage_rate`/`activity_capture_rate` themselves, and
+they still get the floor as a deliberate general data-completeness signal,
+not because their arithmetic can be wrong. This entry makes the opposite
+deliberate choice for this metric specifically: the ≥1 predicate is
+unaffected by truncation, full stop, and that's reason enough not to flag
+it here, even though the same fact didn't stop the floor from applying
+elsewhere. Not a logical necessity either way — a policy call, made this
+way for this metric.
 **Resolved ambiguity — window (today):** same as `closed_deal_count_12m` —
 trusts `closedOpportunities`' existing trailing-12-month window from
 `sample.ts`, no independent re-derivation against `closeDate`/`config.asOf`.
