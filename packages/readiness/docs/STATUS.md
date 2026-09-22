@@ -462,6 +462,28 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   `nextStepHistory` capability, a `closeDateHistory`-shaped capability, and
   `getStageHistoryByOpportunity(oppRefs)` — three additions to
   `packages/adapters`, scoped together, none started.
+- **`healthy`'s `outcome_evidence_retention_rate` reads 0% (`tier:
+  "blocked"`), found while spot-checking D6/D7 phase 3, not fixed.** Root
+  cause: `generateHealthy()` (`src/fixtures/mockOrgs.ts`) only ever pushes
+  notes/activities inside its `if (!isClosed) { ... }` block — every one of
+  `healthy`'s 24 closed opportunities (12 `closed_won` + 12 `closed_lost`)
+  has zero notes and zero activities by construction, `opp-0`'s
+  notes/activities overflow-seeding included (that opportunity is in an
+  open stage). This makes an otherwise-"good hygiene" fixture read as
+  having purged 100% of its closed-deal evidence, which undercuts the
+  fixture's own "Healthy" framing for this one metric. Deliberately not
+  fixed this session — seeding closed-opportunity notes/activities in
+  `healthy` would also shift `stage_mapping_coverage`/`duplicate_account_rate`
+  (both read `closedOpportunities` too) and potentially the D5
+  spot-check numbers already written into this doc's decisions above, all
+  of which would need re-verification; out of scope for a fixture-support
+  phase that was asked to add specific new content, not audit existing
+  content. To fix next session: seed a majority (not all — the metric
+  should read a real, non-zero-but-imperfect rate, not 100% either) of
+  `healthy`'s closed opportunities with at least one note or activity, then
+  re-verify every already-documented `healthy` spot-check number in this
+  file and in `test/report/buildReport.test.ts`'s fixture-differentiation
+  tests.
 - The `excludedCount`-as-`note` tech debt, now at its second use
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if
