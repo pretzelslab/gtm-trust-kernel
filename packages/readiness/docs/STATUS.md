@@ -370,6 +370,20 @@ the same package — one plan-and-wait session, not three.
 
 ---
 
+## Known Gaps
+
+- **`narrative.ts` not built — no-raw-records property is currently moot.**
+  `claude/gtm-readiness-scope.md`'s Phase E specifies an LLM narrative pass
+  (`report/narrative.ts`, takes only computed numbers, must not see raw
+  records — asserted by its own test once it exists) on top of `render.ts`.
+  Neither the module nor that test exist in this repo; `src/report/` has
+  only `buildReport.ts`, `cli.ts`, `render.ts`. Phase C (readiness) has
+  stayed deterministic-only throughout, per this repo's root `CLAUDE.md`
+  rule 5. Scoped as a post-deadline feature — not started, not planned this
+  session; revisit with its own plan-and-wait when it's actually scheduled.
+
+---
+
 ## Open questions, not yet resolved
 
 - **`round_amount_rate` and negative amounts.** Currently left in the
@@ -556,6 +570,25 @@ added to the repo and confirmed to match: its Step 7 is exactly the
     real sampling ceiling predicts. No test pinned the old threshold values
     or asserted `tier` for this metric, so nothing needed updating there;
     `npm run ci` stayed green (59/22/287) across both fixes in this entry.
+- **Status-table verification pass (this session): rubric truth table
+  re-run, `render.ts` gained its first tests.** `test/rubric.test.ts`'s full
+  92-test suite re-run and confirmed green — completeness (thresholds/
+  rationale/remediation per metric), threshold-ordering-per-direction, and
+  capability-gate coverage, including the `closed_deal_count_12m` threshold
+  edit above. `render.ts`'s docblock has long claimed "self-contained ...
+  works offline" but was, in its own words, "Not covered by tests" — new
+  `test/report/render.test.ts` (2 tests) now asserts both `renderReportHtml`
+  and `renderComparisonHtml` (the `--all` path) against the `healthy`
+  fixture: no `http://`/`https://`/external `<script src=`/`<link href=`/
+  `@import`/`fetch(` (offline-safety), and a well-formed shell (`<!doctype
+  html>`, one `<html>`/`</html>` pair, exactly one inline `<style>` block,
+  non-empty `<body>`). Deliberately string-only checks, no `jsdom`/
+  `linkedom` dependency added — sufficient to catch a regression that
+  introduces a network call or a malformed shell, not a full DOM parse.
+  `npm run ci`: 287 -> 289 (the 2 new tests), adapters/kernel unchanged
+  (59/22). The third check in this pass — a "no raw records reach the LLM
+  narrative pass" test — has no module to test against; see "Known Gaps"
+  above.
 - The `excludedCount`-as-`note` tech debt, now at its second use
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if
