@@ -33,9 +33,9 @@ import type {
 } from '@gtm-trust-kernel/adapters/types.js';
 import type { MockOrgData, MockSecondSourceOrgData } from '@gtm-trust-kernel/adapters/mock.js';
 
-export type FixtureName = 'healthy' | 'fresh' | 'legacy';
+export type FixtureName = 'healthy' | 'fresh' | 'legacy' | 'volume';
 
-export const FIXTURE_NAMES: readonly FixtureName[] = ['healthy', 'fresh', 'legacy'];
+export const FIXTURE_NAMES: readonly FixtureName[] = ['healthy', 'fresh', 'legacy', 'volume'];
 
 export interface MockOrgFixture {
   readonly name: FixtureName;
@@ -155,23 +155,48 @@ function makeContact(orgId: string, id: string, accountRef: RecordRef, email: st
   return { ref: ref(orgId, 'contact', id), accountRef, name: `Contact ${id}`, email, createdAt, modifiedAt: createdAt };
 }
 
-function makeActivity(orgId: string, id: string, opportunityRef: RecordRef, occurredAt: string): Activity {
+interface MakeActivityOptions {
+  readonly kind?: Activity['kind'];
+  readonly direction?: Activity['direction'];
+  readonly subject?: string;
+  readonly body?: string;
+  /** Tier applied to both subject and body when either is provided. Defaults to UserAuthored. */
+  readonly tier?: TrustTier;
+}
+
+/**
+ * subject/body/tier are new, optional, and additive (D6 fixture support,
+ * this session) — every pre-existing call site is unaffected. Fixtures
+ * building content, this project's own — do not touch the mock's ingestion,
+ * since MockAdapter never runs inferTier itself.
+ */
+function makeActivity(
+  orgId: string,
+  id: string,
+  opportunityRef: RecordRef,
+  occurredAt: string,
+  options: MakeActivityOptions = {},
+): Activity {
+  const tier = options.tier ?? TrustTier.UserAuthored;
   return {
     ref: ref(orgId, 'activity', id),
     relatedTo: [opportunityRef],
-    kind: 'call',
-    direction: 'outbound',
+    kind: options.kind ?? 'call',
+    direction: options.direction ?? 'outbound',
     occurredAt,
     participantIds: [],
+    subject: options.subject ? tag(tier, options.subject, { recordId: `activity:${id}`, field: 'subject', capturedAt: occurredAt }) : undefined,
+    body: options.body ? tag(tier, options.body, { recordId: `activity:${id}`, field: 'body', capturedAt: occurredAt }) : undefined,
   };
 }
 
-function makeNote(orgId: string, id: string, opportunityRef: RecordRef, body: string, createdAt: string): Note {
+/** tier is new, optional, and additive (D6 fixture support, this session) — every pre-existing call site keeps its UserAuthored default. */
+function makeNote(orgId: string, id: string, opportunityRef: RecordRef, body: string, createdAt: string, tier: TrustTier = TrustTier.UserAuthored): Note {
   return {
     ref: ref(orgId, 'note', id),
     relatedTo: [opportunityRef],
     createdAt,
-    body: tag(TrustTier.UserAuthored, body, { recordId: `note:${id}`, field: 'body', capturedAt: createdAt }),
+    body: tag(tier, body, { recordId: `note:${id}`, field: 'body', capturedAt: createdAt }),
   };
 }
 
@@ -304,6 +329,53 @@ function generateHealthy(): MockOrgFixture {
     notes.push(makeNote(orgId, `note-overflow-${i}`, overflowOppRef, `Overflow note ${i}, seeded to exceed the per-opportunity cap.`, daysBefore(asOf, i % 30)));
     activities.push(makeActivity(orgId, `act-overflow-${i}`, overflowOppRef, daysBefore(asOf, i % 20)));
   }
+
+  // D6 text substrate: real, non-trivial data for untrusted_text_ratio and
+  // pii_density, so a real `report --fixture healthy` run demonstrates both
+  // with actual matches rather than reading 0/not_applicable off empty
+  // fixture text — same "make the report prove it, not just unit tests"
+  // reasoning as opp-0's overflow seeding above.
+  //
+  // 3 inbound-email activities, ExternallySourced — untrusted_text_ratio's
+  // only source of non-UserAuthored text in this fixture (every note body
+  // and every other activity in this generator stays UserAuthored/
+  // undefined, per the mock's existing convention).
+  activities.push(
+    makeActivity(orgId, 'act-inbound-1', ref(orgId, 'opportunity', 'opp-1'), daysBefore(asOf, 3), {
+      kind: 'email',
+      direction: 'inbound',
+      subject: 'Re: proposal questions',
+      body: 'Thanks for sending this over. Can we push the call to next week while legal reviews the redlines?',
+      tier: TrustTier.ExternallySourced,
+    }),
+  );
+  activities.push(
+    makeActivity(orgId, 'act-inbound-2', ref(orgId, 'opportunity', 'opp-2'), daysBefore(asOf, 5), {
+      kind: 'email',
+      direction: 'inbound',
+      subject: 'Budget approved',
+      body: 'Good news — finance signed off. Let\'s get the paperwork moving.',
+      tier: TrustTier.ExternallySourced,
+    }),
+  );
+  activities.push(
+    makeActivity(orgId, 'act-inbound-3', ref(orgId, 'opportunity', 'opp-3'), daysBefore(asOf, 8), {
+      kind: 'email',
+      direction: 'inbound',
+      subject: 'Question on renewal terms',
+      body: 'Our procurement team has a few questions before they can sign off on the renewal terms.',
+      tier: TrustTier.ExternallySourced,
+    }),
+  );
+
+  // pii_density: 3 positive matches (email, phone, card — all
+  // well-known placeholder values, never real PII), plus 1 deliberate
+  // negative case (a plain dollar amount) so the report doesn't imply every
+  // digit run is treated as PII.
+  notes.push(makeNote(orgId, 'note-pii-email', ref(orgId, 'opportunity', 'opp-5'), 'Follow up with buyer directly at jane.doe@example.com if the champion goes dark.', daysBefore(asOf, 10)));
+  notes.push(makeNote(orgId, 'note-pii-phone', ref(orgId, 'opportunity', 'opp-6'), 'Reach the economic buyer at (415) 555-0100 for a final signature.', daysBefore(asOf, 12)));
+  notes.push(makeNote(orgId, 'note-pii-card', ref(orgId, 'opportunity', 'opp-7'), 'Billing confirmed card on file ending 4111111111111111, renews automatically next cycle.', daysBefore(asOf, 14)));
+  notes.push(makeNote(orgId, 'note-pii-negative-amount', ref(orgId, 'opportunity', 'opp-8'), 'Final negotiated deal size is $45,000 with net 30 payment terms.', daysBefore(asOf, 16)));
 
   // D5 second source: good overlap. Reuses 13 of the 15 CRM accounts'
   // domains/emails verbatim (acc-13/acc-14 deliberately left unmatched —
@@ -532,8 +604,94 @@ function generateLegacy(): MockOrgFixture {
   };
 }
 
+// ---------------------------------------------------------------------------
+// volume: ordinary D1-D5 hygiene (deliberately unremarkable — this fixture
+// exists for exactly one purpose), but 30 closed_won + 30 closed_lost
+// opportunities — over buildReportData's default perStratumSampleSize (20,
+// report/buildReport.ts) for BOTH closed strata, so a real
+// `report --fixture volume --json` run exercises closed_deal_count_12m's
+// floor path (both closedWonUnderfilled/closedLostUnderfilled false) end to
+// end, not just a synthetic unit-test CoverageSample. See docs/STATUS.md's
+// D7 decisions for why none of healthy/fresh/legacy (12/4/6 per closed
+// stage) can demonstrate this.
+// ---------------------------------------------------------------------------
+
+function generateVolume(): MockOrgFixture {
+  const orgId = 'org-volume';
+  const asOf = '2026-09-20T00:00:00.000Z';
+
+  const accounts: Account[] = [];
+  const contacts: Contact[] = [];
+  for (let i = 0; i < 15; i++) {
+    const domain = `volumeco${i}.com`;
+    accounts.push(makeAccount(orgId, `acc-${i}`, domain, daysBefore(asOf, 900)));
+    contacts.push(makeContact(orgId, `con-${i}`, ref(orgId, 'account', `acc-${i}`), `lead${i}@${domain}`, daysBefore(asOf, 900)));
+  }
+
+  const opportunities: Opportunity[] = [];
+  const activities: Activity[] = [];
+  const notes: Note[] = [];
+  const stageHistory: StageHistoryEntry[] = [];
+
+  let n = 0;
+  const perOpenStratum = 15;
+  const perClosedStratum = 30;
+  const allStages = [...OPEN_STAGES, ...CLOSED_STAGES];
+
+  for (const stage of allStages) {
+    const count = OPEN_STAGES.includes(stage) ? perOpenStratum : perClosedStratum;
+    for (let i = 0; i < count; i++) {
+      const id = `opp-${n}`;
+      const accountRef = ref(orgId, 'account', `acc-${n % accounts.length}`);
+      const isClosed = CLOSED_STAGES.includes(stage);
+      const createdAt = daysBefore(asOf, 400 + (n % 60));
+      const closeDate = isClosed ? daysBefore(asOf, 5 + (n % 300)) : daysBefore(asOf, -(10 + (n % 60)));
+
+      opportunities.push(
+        makeOpportunity({
+          id,
+          orgId,
+          stage,
+          stageConfidence: 'mapped',
+          vendorStageLabel: stage,
+          accountRef,
+          amount: 1000 * (10 + (n % 90)),
+          closeDate,
+          ownerId: `rep-${n % 8}`,
+          nextStep: isClosed ? undefined : `Follow up on ${id}`,
+          contactRefs: [ref(orgId, 'contact', `con-${n % accounts.length}`)],
+          createdAt,
+          modifiedAt: daysBefore(asOf, n % 10),
+        }),
+      );
+
+      if (!isClosed) {
+        activities.push(makeActivity(orgId, `act-${n}`, ref(orgId, 'opportunity', id), daysBefore(asOf, n % 20)));
+      }
+      notes.push(makeNote(orgId, `note-${n}`, ref(orgId, 'opportunity', id), `Standard progress note for deal ${id}.`, daysBefore(asOf, n % 30)));
+      stageHistory.push(makeStageHistoryEntry(orgId, `sh-${n}`, ref(orgId, 'opportunity', id), stage, createdAt));
+
+      n++;
+    }
+  }
+
+  stageHistory.push(makeStageHistoryEntry(orgId, 'sh-earliest', ref(orgId, 'opportunity', 'opp-0'), 'prospecting', daysBefore(asOf, 640)));
+
+  return {
+    name: 'volume',
+    orgId,
+    label: 'Volume',
+    description: 'Ordinary field hygiene; exists solely to exceed the default per-stratum sample size on both closed strata (closed_deal_count_12m\'s floor path).',
+    asOf,
+    capabilities: BASE_CAPABILITIES,
+    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges: [] },
+    // No second source: this fixture's only job is the D7 floor path, not D5.
+  };
+}
+
 export const MOCK_ORG_FIXTURES: Readonly<Record<FixtureName, MockOrgFixture>> = {
   healthy: generateHealthy(),
   fresh: generateFresh(),
   legacy: generateLegacy(),
+  volume: generateVolume(),
 };

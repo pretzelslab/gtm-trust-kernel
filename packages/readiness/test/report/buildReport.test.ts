@@ -101,7 +101,7 @@ describe('buildReportData shape', () => {
   });
 });
 
-describe('fixture differentiation (the 3 fixtures must not accidentally look identical)', () => {
+describe('fixture differentiation (the 4 fixtures must not accidentally look identical)', () => {
   it('stage_history_months differs across all 3 fixtures: viable, "no entries yet", and gated off entirely', async () => {
     const [healthy, fresh, legacy] = await Promise.all([buildFor('healthy'), buildFor('fresh'), buildFor('legacy')]);
     const row = (d: ReportData) => d.metrics.find((m) => m.metric === 'stage_history_months')!;
@@ -159,9 +159,21 @@ describe('fixture differentiation (the 3 fixtures must not accidentally look ide
       expect(row(fresh, metric).note).toBe('no second source connected');
     }
   });
+
+  it('closed_deal_count_12m: healthy has no floor (well under the default per-stratum sample size); volume\'s reservoir fills on both closed strata', async () => {
+    const [healthy, volume] = await Promise.all([buildFor('healthy'), buildFor('volume')]);
+    const row = (d: ReportData) => d.metrics.find((m) => m.metric === 'closed_deal_count_12m')!;
+
+    expect(row(healthy).floor).toBe(false);
+    expect(row(healthy).value).toBeLessThan(40); // healthy seeds 12 per closed stage, well under the 20-per-stratum default
+
+    expect(row(volume).floor).toBe(true);
+    expect(row(volume).value).toBe(40); // 20 (perStratumSampleSize default) x 2 closed strata — a sample-size ceiling, not volume's real 60
+    expect(row(volume).note).toContain('sample-size ceiling');
+  });
 });
 
-describe('D5 no-raw-PII (re-verifies second-source-adapter-design.md decision 4 against real ReportData/--json)', () => {
+describe('no-raw-PII (D5 second-source-adapter-design.md decision 4, and D6 pii_density\'s output constraint, both re-verified against real ReportData/--json)', () => {
   it('never carries a raw second-source contact email anywhere in ReportData, including its JSON serialization', async () => {
     const data = await buildFor('healthy');
     const serialized = JSON.stringify(data);
@@ -169,5 +181,19 @@ describe('D5 no-raw-PII (re-verifies second-source-adapter-design.md decision 4 
     for (let i = 0; i < 13; i++) {
       expect(serialized).not.toContain(`lead${i}@northco${i}.com`);
     }
+  });
+
+  it('never carries any of pii_density\'s real seeded matches (email/phone/card) anywhere in ReportData, including its JSON serialization', async () => {
+    const data = await buildFor('healthy');
+    const serialized = JSON.stringify(data);
+    // healthy seeds these specific matches for pii_density (src/fixtures/mockOrgs.ts) — the metric must report counts only.
+    expect(serialized).not.toContain('jane.doe@example.com');
+    expect(serialized).not.toContain('(415) 555-0100');
+    expect(serialized).not.toContain('4111111111111111');
+    expect(serialized).not.toContain('123-45-6789');
+
+    const row = data.metrics.find((m) => m.metric === 'pii_density')!;
+    expect(row.status).toBe('ok');
+    expect(row.value).toBeGreaterThan(0); // real matches exist — a passing test here isn't just "nothing to find"
   });
 });
