@@ -1,6 +1,6 @@
-import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CanonicalStage, Opportunity, RecordRef, StageConfidence } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { CoverageSample } from '../../src/metrics/types.js';
+import { makeCoverageSample } from '../support/coverageSample.js';
 
 const ORG = 'org-stage-mapping-test';
 const ASOF = '2026-06-15T00:00:00.000Z';
@@ -8,23 +8,6 @@ const ASOF = '2026-06-15T00:00:00.000Z';
 function ref(objectType: RecordRef['objectType'], id: string): RecordRef {
   return { crm: 'mock', orgId: ORG, objectType, id };
 }
-
-const CAPABILITIES: AdapterCapabilities = {
-  stageHistory: true,
-  ownerHistory: true,
-  activitySync: true,
-  incrementalSync: true,
-  bulkRead: true,
-  writeGranularity: 'field',
-  nativeConcurrencyCheck: false,
-  rateLimit: { kind: 'none', value: 0 },
-  stageMap: {},
-  accountBatchLimit: 200,
-  contactBatchLimit: 200,
-  childRecordBatchLimit: 200,
-  notesPerOpportunityLimit: 200,
-  activitiesPerOpportunityLimit: 200,
-};
 
 function opportunity(
   id: string,
@@ -48,24 +31,7 @@ function opportunity(
 }
 
 function coverageSample(open: readonly Opportunity[], closed: readonly Opportunity[]): CoverageSample {
-  return {
-    openOpportunities: open,
-    closedOpportunities: closed,
-    notesByOpportunity: new Map(),
-    activitiesByOpportunity: new Map(),
-    notesTruncatedOpportunityIds: new Set(),
-    activitiesTruncatedOpportunityIds: new Set(),
-    accountsByRef: new Map(),
-    accountsHydrated: false,
-    stageHistoryEarliestChangedAt: null,
-    stageHistoryHydrated: false,
-    missingAccountCount: 0,
-    oppsWithoutAccountRef: 0,
-    contactsByRef: new Map(),
-    contactsHydrated: false,
-    missingContactCount: 0,
-    capabilities: CAPABILITIES,
-  };
+  return makeCoverageSample({ openOpportunities: open, closedOpportunities: closed });
 }
 
 /**

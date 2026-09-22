@@ -7,10 +7,11 @@
  */
 
 import type { Account, Activity, Contact, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import type { AdapterCapabilities, SecondSourceCapabilities, SecondSourceRef } from '@gtm-trust-kernel/adapters/types.js';
+import type { SecondSourceCapabilities, SecondSourceRef } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample, MetricConfig } from '../../src/metrics/types.js';
 import type { SecondSourceResolution } from '../../src/secondSource/resolve.js';
 import type { SecondSourceSampleResult } from '../../src/secondSource/sample.js';
+import { makeCoverageSample } from '../support/coverageSample.js';
 
 export const ORG = 'org-joinability-test';
 export const SOURCE = 'mock-second-source';
@@ -23,23 +24,6 @@ export function ref(objectType: RecordRef['objectType'], id: string): RecordRef 
 export function ssRef(objectType: SecondSourceRef['objectType'], id: string): SecondSourceRef {
   return { source: SOURCE, orgId: ORG, objectType, id };
 }
-
-const CAPABILITIES: AdapterCapabilities = {
-  stageHistory: true,
-  ownerHistory: true,
-  activitySync: true,
-  incrementalSync: true,
-  bulkRead: true,
-  writeGranularity: 'field',
-  nativeConcurrencyCheck: false,
-  rateLimit: { kind: 'none', value: 0 },
-  stageMap: {},
-  accountBatchLimit: 200,
-  contactBatchLimit: 200,
-  childRecordBatchLimit: 200,
-  notesPerOpportunityLimit: 200,
-  activitiesPerOpportunityLimit: 200,
-};
 
 export function opportunity(o: {
   id: string;
@@ -112,24 +96,14 @@ export function coverageSample(overrides: {
   accountsByRef?: ReadonlyMap<string, Account>;
   accountsHydrated?: boolean;
 }): CoverageSample {
-  return {
-    openOpportunities: overrides.openOpportunities ?? [],
-    closedOpportunities: overrides.closedOpportunities ?? [],
-    notesByOpportunity: new Map(),
-    activitiesByOpportunity: overrides.activitiesByOpportunity ?? new Map(),
-    notesTruncatedOpportunityIds: new Set(),
-    activitiesTruncatedOpportunityIds: new Set(),
-    accountsByRef: overrides.accountsByRef ?? new Map(),
-    accountsHydrated: overrides.accountsHydrated ?? true,
-    stageHistoryEarliestChangedAt: null,
-    stageHistoryHydrated: false,
-    missingAccountCount: 0,
-    oppsWithoutAccountRef: 0,
-    contactsByRef: overrides.contactsByRef ?? new Map(),
-    contactsHydrated: overrides.contactsHydrated ?? true,
-    missingContactCount: 0,
-    capabilities: CAPABILITIES,
-  };
+  // D5 fixtures default accountsHydrated/contactsHydrated to true (unlike
+  // makeCoverageSample's own false default) — D5 metrics assume both
+  // already ran, so every existing call site relies on that.
+  return makeCoverageSample({
+    accountsHydrated: true,
+    contactsHydrated: true,
+    ...overrides,
+  });
 }
 
 export function secondSourceCapabilities(overrides: Partial<SecondSourceCapabilities> = {}): SecondSourceCapabilities {

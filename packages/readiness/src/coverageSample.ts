@@ -40,10 +40,21 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 export function buildCoverageSample(result: SampleResult, capabilities: AdapterCapabilities): CoverageSample {
   const openOpportunities: Opportunity[] = [];
   const closedOpportunities: Opportunity[] = [];
+  // Default true (underfilled) matches every stratum's real default: a
+  // reservoir that never saw a closed_won/closed_lost record at all is,
+  // definitionally, not full.
+  let closedWonUnderfilled = true;
+  let closedLostUnderfilled = true;
 
   for (const stratumResult of result.strata) {
     const bucket = CLOSED_STAGES.has(stratumResult.stratum) ? closedOpportunities : openOpportunities;
     bucket.push(...stratumResult.opportunities);
+
+    if (stratumResult.stratum === 'closed_won') {
+      closedWonUnderfilled = stratumResult.underfilled;
+    } else if (stratumResult.stratum === 'closed_lost') {
+      closedLostUnderfilled = stratumResult.underfilled;
+    }
   }
 
   const oppsWithoutAccountRef = [...openOpportunities, ...closedOpportunities].filter((o) => !hasAccountRef(o)).length;
@@ -64,6 +75,8 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     contactsByRef: new Map(),
     contactsHydrated: false,
     missingContactCount: 0,
+    closedWonUnderfilled,
+    closedLostUnderfilled,
     capabilities,
   };
 }

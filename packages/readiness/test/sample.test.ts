@@ -165,3 +165,46 @@ describe('classifyStratum', () => {
     expect(classifyStratum(outsideDeal, ASOF)).toBeNull();
   });
 });
+
+describe('runSample closed-stratum window (regression, not just classifyStratum)', () => {
+  /**
+   * closed_deal_count_12m and outcome_evidence_retention_rate (D7,
+   * metric-definitions.md) both trust that every opportunity runSample ever
+   * places in the closed_won/closed_lost strata already falls inside
+   * CLOSED_WINDOW_MONTHS of asOf, rather than re-deriving that window
+   * themselves. classifyStratum's own unit test above proves the
+   * classification function is correct in isolation; this proves runSample's
+   * actual end-to-end output honors it too, straddling the boundary with a
+   * mix of in-window and just-outside-window deals in the same run.
+   */
+  it('never returns a closed_won/closed_lost opportunity with a closeDate outside CLOSED_WINDOW_MONTHS of asOf', async () => {
+    const cutoff = new Date(ASOF);
+    cutoff.setUTCMonth(cutoff.getUTCMonth() - CLOSED_WINDOW_MONTHS);
+    const justOutside = new Date(cutoff.getTime() - 86_400_000).toISOString();
+    const justInside = cutoff.toISOString();
+
+    const data = buildOrgData(0);
+    let order = 0;
+    for (const stage of ['closed_won', 'closed_lost'] as const) {
+      data.opportunities.push(makeClosedOpportunity(stage, `${stage}-inside`, order++, justInside));
+      data.opportunities.push(makeClosedOpportunity(stage, `${stage}-outside`, order++, justOutside));
+      // A few comfortably-inside deals too, so the reservoir has more than one candidate per stratum.
+      for (let i = 0; i < 3; i++) {
+        data.opportunities.push(makeClosedOpportunity(stage, `${stage}-mid-${i}`, order++, isoDaysBeforeAsOf(60 + i)));
+      }
+    }
+    const adapter = new MockAdapter(ORG, data);
+
+    const result = await runSample(adapter, { ...baseConfig, perStratumSampleSize: 10, seed: 'window-seed' }, alwaysConfirm);
+    if ('cancelled' in result) throw new Error('unexpected cancellation in test');
+
+    const cutoffMs = cutoff.getTime();
+    for (const stratumResult of result.strata) {
+      if (stratumResult.stratum !== 'closed_won' && stratumResult.stratum !== 'closed_lost') continue;
+      for (const o of stratumResult.opportunities) {
+        expect(o.ref.id).not.toMatch(/-outside$/);
+        expect(new Date(o.closeDate!).getTime()).toBeGreaterThanOrEqual(cutoffMs);
+      }
+    }
+  });
+});

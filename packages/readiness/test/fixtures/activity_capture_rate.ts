@@ -1,6 +1,7 @@
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { Activity, ActivityKind, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { CoverageSample } from '../../src/metrics/types.js';
+import { makeCoverageSample, DEFAULT_TEST_CAPABILITIES } from '../support/coverageSample.js';
 
 const ORG = 'org-coverage-test';
 const ASOF = '2026-06-15T00:00:00.000Z';
@@ -14,23 +15,6 @@ function daysFromAsOf(days: number): string {
 function ref(objectType: RecordRef['objectType'], id: string): RecordRef {
   return { crm: 'mock', orgId: ORG, objectType, id };
 }
-
-const CAPABILITIES: AdapterCapabilities = {
-  stageHistory: true,
-  ownerHistory: true,
-  activitySync: true,
-  incrementalSync: true,
-  bulkRead: true,
-  writeGranularity: 'field',
-  nativeConcurrencyCheck: false,
-  rateLimit: { kind: 'none', value: 0 },
-  stageMap: {},
-  accountBatchLimit: 200,
-  contactBatchLimit: 200,
-  childRecordBatchLimit: 200,
-  notesPerOpportunityLimit: 200,
-  activitiesPerOpportunityLimit: 200,
-};
 
 function baseOpportunity(id: string, createdAt: string): Opportunity {
   return {
@@ -62,27 +46,10 @@ function activity(id: string, opportunityId: string, occurredAt: string, kind: A
 export function coverageSample(
   openOpportunities: readonly Opportunity[],
   activitiesByOpportunity: ReadonlyMap<string, readonly Activity[]>,
-  capabilities: AdapterCapabilities = CAPABILITIES,
+  capabilities: AdapterCapabilities = DEFAULT_TEST_CAPABILITIES,
   activitiesTruncatedOpportunityIds: ReadonlySet<string> = new Set(),
 ): CoverageSample {
-  return {
-    openOpportunities,
-    closedOpportunities: [],
-    notesByOpportunity: new Map(),
-    activitiesByOpportunity,
-    notesTruncatedOpportunityIds: new Set(),
-    activitiesTruncatedOpportunityIds,
-    accountsByRef: new Map(),
-    accountsHydrated: false,
-    stageHistoryEarliestChangedAt: null,
-    stageHistoryHydrated: false,
-    missingAccountCount: 0,
-    oppsWithoutAccountRef: 0,
-    contactsByRef: new Map(),
-    contactsHydrated: false,
-    missingContactCount: 0,
-    capabilities,
-  };
+  return makeCoverageSample({ openOpportunities, activitiesByOpportunity, capabilities, activitiesTruncatedOpportunityIds });
 }
 
 export const ACTIVITY_CAPTURE_RATE_ASOF = ASOF;
@@ -150,7 +117,7 @@ export function activityCaptureRateGateOffFixture(): CoverageSample {
   return coverageSample(
     [baseOpportunity('any-opp', daysFromAsOf(-60))],
     new Map(),
-    { ...CAPABILITIES, activitySync: false },
+    { ...DEFAULT_TEST_CAPABILITIES, activitySync: false },
   );
 }
 

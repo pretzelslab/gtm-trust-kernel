@@ -32,13 +32,16 @@ export interface MetricResult {
   /** Required when status isn't 'ok' (the reason); optional stated assumption otherwise. */
   readonly note?: string;
   /**
-   * True when status is 'ok' and value is a lower bound, not exact — at
-   * least one opportunity in the computed denominator had its related
-   * notes/activities truncated at the adapter's per-opportunity limit
-   * (CoverageSample.notesTruncatedOpportunityIds /
-   * activitiesTruncatedOpportunityIds). Never set for a metric that
-   * doesn't read truncatable child records. See
-   * shared.ts's applyTruncationFloor, the only place this is set.
+   * True when status is 'ok' and value is a lower bound, not exact. Two
+   * distinct causes set this, never both in the same metric:
+   *  - per-opportunity child-record truncation (CoverageSample's
+   *    notesTruncatedOpportunityIds / activitiesTruncatedOpportunityIds) —
+   *    see shared.ts's applyTruncationFloor.
+   *  - a stratified reservoir sample hitting its cap (CoverageSample's
+   *    closedWonUnderfilled / closedLostUnderfilled being false) — see
+   *    closed_deal_count_12m (metrics/labels.ts), the only metric this
+   *    applies to today.
+   * Never set for a metric that reads neither.
    */
   readonly floor?: boolean;
 }
@@ -141,6 +144,18 @@ export interface CoverageSample {
   readonly contactsHydrated: boolean;
   /** Count of distinct sampled contact refs (from contactLinks) that did not resolve to a Contact via getContactsByRef. Meaningless until contactsHydrated is true. */
   readonly missingContactCount: number;
+  /**
+   * False once the sample.ts closed_won stratum's reservoir filled to
+   * target (StratumSampleResult.underfilled === false) — meaning
+   * closedOpportunities' closed_won members are capped at the run's
+   * perStratumSampleSize, not the org's true count. True (the default
+   * shape) means every closed_won opportunity in the window was captured.
+   * Used by closed_deal_count_12m (metrics/labels.ts) to set
+   * MetricResult.floor — see that field's docblock.
+   */
+  readonly closedWonUnderfilled: boolean;
+  /** Same as closedWonUnderfilled, for the closed_lost stratum. */
+  readonly closedLostUnderfilled: boolean;
   readonly capabilities: AdapterCapabilities;
 }
 

@@ -1,33 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { MockSecondSourceAdapter, type MockSecondSourceOrgData } from '@gtm-trust-kernel/adapters/mock.js';
-import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { Account, Contact, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { SecondSourceAccount, SecondSourceContact, SecondSourceRef } from '@gtm-trust-kernel/adapters/types.js';
 import { resolveSecondSource } from '../../src/secondSource/resolve.js';
 import type { CoverageSample } from '../../src/metrics/types.js';
+import { makeCoverageSample } from '../support/coverageSample.js';
 
 const ORG = 'org-resolve-test';
 const SOURCE = 'mock-second-source';
 
 const ref = (objectType: RecordRef['objectType'], id: string): RecordRef => ({ crm: 'mock', orgId: ORG, objectType, id });
 const ssRef = (objectType: SecondSourceRef['objectType'], id: string): SecondSourceRef => ({ source: SOURCE, orgId: ORG, objectType, id });
-
-const CAPABILITIES: AdapterCapabilities = {
-  stageHistory: true,
-  ownerHistory: true,
-  activitySync: true,
-  incrementalSync: true,
-  bulkRead: true,
-  writeGranularity: 'field',
-  nativeConcurrencyCheck: false,
-  rateLimit: { kind: 'none', value: 0 },
-  stageMap: {},
-  accountBatchLimit: 200,
-  contactBatchLimit: 200,
-  childRecordBatchLimit: 200,
-  notesPerOpportunityLimit: 200,
-  activitiesPerOpportunityLimit: 200,
-};
 
 function crmContact(id: string, email?: string): Contact {
   return { ref: ref('contact', id), name: `Contact ${id}`, email, createdAt: '2026-01-01T00:00:00.000Z', modifiedAt: '2026-01-01T00:00:00.000Z' };
@@ -38,24 +21,7 @@ function crmAccount(id: string, domain?: string): Account {
 }
 
 function baseSample(contactsByRef: ReadonlyMap<string, Contact>, accountsByRef: ReadonlyMap<string, Account>): CoverageSample {
-  return {
-    openOpportunities: [],
-    closedOpportunities: [],
-    notesByOpportunity: new Map(),
-    activitiesByOpportunity: new Map(),
-    notesTruncatedOpportunityIds: new Set(),
-    activitiesTruncatedOpportunityIds: new Set(),
-    accountsByRef,
-    accountsHydrated: true,
-    stageHistoryEarliestChangedAt: null,
-    stageHistoryHydrated: false,
-    missingAccountCount: 0,
-    oppsWithoutAccountRef: 0,
-    contactsByRef,
-    contactsHydrated: true,
-    missingContactCount: 0,
-    capabilities: CAPABILITIES,
-  };
+  return makeCoverageSample({ accountsByRef, accountsHydrated: true, contactsByRef, contactsHydrated: true });
 }
 
 function makeSecondSourceAdapter(contacts: SecondSourceContact[], accounts: SecondSourceAccount[] = []) {

@@ -1,30 +1,13 @@
-import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import { TrustTier, tag } from '@gtm-trust-kernel/adapters/model/trust.js';
 import type { CoverageSample } from '../../src/metrics/types.js';
+import { makeCoverageSample } from '../support/coverageSample.js';
 
 const ORG = 'org-coverage-test';
 
 function ref(objectType: RecordRef['objectType'], id: string): RecordRef {
   return { crm: 'mock', orgId: ORG, objectType, id };
 }
-
-const CAPABILITIES: AdapterCapabilities = {
-  stageHistory: true,
-  ownerHistory: true,
-  activitySync: true,
-  incrementalSync: true,
-  bulkRead: true,
-  writeGranularity: 'field',
-  nativeConcurrencyCheck: false,
-  rateLimit: { kind: 'none', value: 0 },
-  stageMap: {},
-  accountBatchLimit: 200,
-  contactBatchLimit: 200,
-  childRecordBatchLimit: 200,
-  notesPerOpportunityLimit: 200,
-  activitiesPerOpportunityLimit: 200,
-};
 
 function baseOpportunity(id: string, overrides: Partial<Opportunity> = {}): Opportunity {
   return {
@@ -62,24 +45,7 @@ export function coverageSample(
   notesByOpportunity: ReadonlyMap<string, readonly Note[]> = new Map(),
   notesTruncatedOpportunityIds: ReadonlySet<string> = new Set(),
 ): CoverageSample {
-  return {
-    openOpportunities,
-    closedOpportunities: [],
-    notesByOpportunity,
-    activitiesByOpportunity: new Map(),
-    notesTruncatedOpportunityIds,
-    activitiesTruncatedOpportunityIds: new Set(),
-    accountsByRef: new Map(),
-    accountsHydrated: false,
-    stageHistoryEarliestChangedAt: null,
-    stageHistoryHydrated: false,
-    missingAccountCount: 0,
-    oppsWithoutAccountRef: 0,
-    contactsByRef: new Map(),
-    contactsHydrated: false,
-    missingContactCount: 0,
-    capabilities: CAPABILITIES,
-  };
+  return makeCoverageSample({ openOpportunities, notesByOpportunity, notesTruncatedOpportunityIds });
 }
 
 /**

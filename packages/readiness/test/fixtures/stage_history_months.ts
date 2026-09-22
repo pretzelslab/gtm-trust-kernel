@@ -1,53 +1,21 @@
-import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample } from '../../src/metrics/types.js';
+import { makeCoverageSample, DEFAULT_TEST_CAPABILITIES } from '../support/coverageSample.js';
 
 export const STAGE_HISTORY_MONTHS_ASOF = '2026-06-20T00:00:00.000Z';
 
 /** 2 years + 5 months before STAGE_HISTORY_MONTHS_ASOF, day-of-month <= asOf's day-of-month (no partial-month decrement). */
 const EARLIEST_CHANGED_AT = '2024-01-15T00:00:00.000Z';
 
-function capabilities(stageHistory: boolean): AdapterCapabilities {
-  return {
-    stageHistory,
-    ownerHistory: true,
-    activitySync: true,
-    incrementalSync: true,
-    bulkRead: true,
-    writeGranularity: 'field',
-    nativeConcurrencyCheck: false,
-    rateLimit: { kind: 'none', value: 0 },
-    stageMap: {},
-    accountBatchLimit: 200,
-    contactBatchLimit: 200,
-    childRecordBatchLimit: 200,
-    notesPerOpportunityLimit: 200,
-    activitiesPerOpportunityLimit: 200,
-  };
-}
-
 function coverageSample(
   stageHistoryCapability: boolean,
   stageHistoryHydrated: boolean,
   stageHistoryEarliestChangedAt: string | null,
 ): CoverageSample {
-  return {
-    openOpportunities: [],
-    closedOpportunities: [],
-    notesByOpportunity: new Map(),
-    activitiesByOpportunity: new Map(),
-    notesTruncatedOpportunityIds: new Set(),
-    activitiesTruncatedOpportunityIds: new Set(),
-    accountsByRef: new Map(),
-    accountsHydrated: false,
+  return makeCoverageSample({
     stageHistoryEarliestChangedAt,
     stageHistoryHydrated,
-    missingAccountCount: 0,
-    oppsWithoutAccountRef: 0,
-    contactsByRef: new Map(),
-    contactsHydrated: false,
-    missingContactCount: 0,
-    capabilities: capabilities(stageHistoryCapability),
-  };
+    capabilities: { ...DEFAULT_TEST_CAPABILITIES, stageHistory: stageHistoryCapability },
+  });
 }
 
 /** Golden fixture: hydrated, earliest entry 2024-01-15 vs. STAGE_HISTORY_MONTHS_ASOF (2026-06-20) -> 29 whole calendar months. */

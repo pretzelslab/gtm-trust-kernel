@@ -188,6 +188,32 @@ describe('buildCoverageSample', () => {
     expect(sample.oppsWithoutAccountRef).toBe(2);
     expect(sample.missingAccountCount).toBe(0); // that's hydrateAccounts's concern, not the builder's
   });
+
+  it('carries each closed stratum\'s underfilled flag through independently, defaulting true when a stratum is absent', () => {
+    const result = makeSampleResult({
+      // stratumResult's own target is 3 — exactly 3 items means the reservoir is full (underfilled: false).
+      closed_won: [
+        opp('won-1', 'closed_won', 'acc-1'),
+        opp('won-2', 'closed_won', 'acc-1'),
+        opp('won-3', 'closed_won', 'acc-1'),
+      ],
+      closed_lost: [opp('lost-1', 'closed_lost', 'acc-1')],
+      // discovery is left absent entirely — open strata must not affect either closed flag.
+    });
+
+    const sample = buildCoverageSample(result, CAPABILITIES);
+
+    expect(sample.closedWonUnderfilled).toBe(false);
+    expect(sample.closedLostUnderfilled).toBe(true);
+  });
+
+  it('defaults both closed strata to underfilled: true when the sample has no closed opportunities at all', () => {
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const sample = buildCoverageSample(result, CAPABILITIES);
+
+    expect(sample.closedWonUnderfilled).toBe(true);
+    expect(sample.closedLostUnderfilled).toBe(true);
+  });
 });
 
 describe('hydrateAccounts', () => {
