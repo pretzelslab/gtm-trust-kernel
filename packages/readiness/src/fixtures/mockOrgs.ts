@@ -307,6 +307,34 @@ function generateHealthy(): MockOrgFixture {
             ),
           );
         }
+      } else {
+        // outcome_evidence_retention_rate: 11 of every 12 closed
+        // opportunities (i % 12 !== 0) get a real closing note — landing at
+        // 0.9167, clearly above rubric.ts's viableAt (0.8), not a boundary
+        // value. The remaining 1/12 per stratum is deliberate: a fixture
+        // meant to look "Healthy" should still read a real, imperfect rate,
+        // not 100% (see docs/STATUS.md). Notes only, not activities — keeps
+        // this seeding from touching temporal_anomaly_rate's pooled CRM
+        // activity count (D5). 4 varied templates, won/lost-specific and
+        // all >=40 chars, off FILLER_DENYLIST, no PII-like substrings, so
+        // substantive_note_rate/median_note_length_chars move for a real
+        // reason rather than being skewed by one repeated string.
+        if (i % 12 !== 0) {
+          const wonTemplates = [
+            'Closed won: champion carried it through procurement without pushback, contract signed on schedule.',
+            'Deal closed won after final legal redlines were resolved in a single call with the buyer\'s counsel.',
+          ];
+          const lostTemplates = [
+            'Closed lost: budget was reallocated to a competing initiative before the final signature stage.',
+            'Prospect chose an incumbent vendor after a late executive change on their side derailed the deal.',
+          ];
+          const templates = stage === 'closed_won' ? wonTemplates : lostTemplates;
+          notes.push(
+            // closeDate is always defined when isClosed (see its assignment above) — TS
+            // can't narrow that from this branch alone, hence the assertion.
+            makeNote(orgId, `note-${n}`, ref(orgId, 'opportunity', id), templates[i % templates.length]!, closeDate!),
+          );
+        }
       }
 
       stageHistory.push(makeStageHistoryEntry(orgId, `sh-${n}`, ref(orgId, 'opportunity', id), stage, createdAt));

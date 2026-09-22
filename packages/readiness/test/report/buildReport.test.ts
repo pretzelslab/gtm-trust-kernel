@@ -160,6 +160,15 @@ describe('fixture differentiation (the 4 fixtures must not accidentally look ide
     }
   });
 
+  it('outcome_evidence_retention_rate: healthy reads a real, above-threshold rate, not the 0%/blocked floor its fixture used to produce', async () => {
+    const data = await buildFor('healthy');
+    const row = data.metrics.find((m) => m.metric === 'outcome_evidence_retention_rate')!;
+
+    expect(row.status).toBe('ok');
+    expect(row.tier).toBe('viable');
+    expect(row.value!).toBeGreaterThanOrEqual(row.viableAt!);
+  });
+
   it('closed_deal_count_12m: healthy has no floor (well under the default per-stratum sample size); volume\'s reservoir fills on both closed strata', async () => {
     const [healthy, volume] = await Promise.all([buildFor('healthy'), buildFor('volume')]);
     const row = (d: ReportData) => d.metrics.find((m) => m.metric === 'closed_deal_count_12m')!;

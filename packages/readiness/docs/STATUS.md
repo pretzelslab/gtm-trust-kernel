@@ -273,7 +273,7 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **Floor extended uniformly to all 4 D5 metrics, not just `activity_attribution_rate`/`temporal_anomaly_rate` as first scoped.** Confirmed with the user: `SecondSourceSampleResult` gained `contactsTruncated`/`accountsTruncated` alongside the already-planned `activitiesTruncated` (`src/secondSource/sample.ts`, same keep-newest-style truncation signal as the rest of D5 — computed by `paginate`'s existing loop, not a new mechanism). Applied per which inputs each metric actually reads: `contact_identity_resolution_rate` → `contactsTruncated`; `account_resolution_rate` → `accountsTruncated`; `activity_attribution_rate` → any of the three (it reads activities AND the contact/account matches used to attribute them); `temporal_anomaly_rate` → `activitiesTruncated` only (per the scope lock above, it never reads second-source contacts/accounts at all, so their truncation is irrelevant to it). Same "general data-completeness signal, not a proven-direction correction" philosophy `applyTruncationFloor` established for D1 — `src/metrics/joinability.ts`'s local `withFloorIf` generalizes that to a plain per-type boolean instead of a per-record truncated-id set, since D5's truncation signal isn't per-record.
 - **`MetricConfig.secondSourceResolution?: SecondSourceResolution`** (`metrics/types.ts`, D5 part 2b): threads the D5 orchestration output into every metric function via the existing `(sample, config) => MetricResult` signature, unchanged for every other metric. Deliberately not added to `CoverageSample` — keeps `CoverageSample` CRM-only, same architectural split as `SecondSourceRef` staying separate from `RecordRef` (D5 part 1). Creates a type-only circular import between `metrics/types.ts` and `secondSource/resolve.ts` (each references the other's type) — confirmed this compiles cleanly (`import type` is erased before runtime, so there's no actual circular value dependency), not a design smell to fix.
 - **`buildReportData(adapter, secondSourceAdapter, options)`** (D5 part 2b, `report/buildReport.ts`): new second positional parameter, `SecondSourceAdapter | undefined` — not folded into `BuildReportOptions`, matching how `adapter` itself is already separate from options. `hydrateContacts`/`resolveSecondSource` are only called when `secondSourceAdapter` is provided — skipped entirely otherwise, so the no-second-source path costs zero extra I/O (unlike `hydrateAccounts`/`hydrateNotes`/`hydrateActivities`, which run unconditionally regardless of capability gates, because D1-D4 metrics that always run depend on them; nothing depends on `hydrateContacts` except D5, so there's no equivalent reason to pay for it when D5 can't use it). `cli.ts` constructs `MockSecondSourceAdapter` from `fixture.secondSource.data`/`.capabilities` when present. The `D5_METRICS` fallback set and its branch in `buildReportData` are deleted — dead code once D5 joined `IMPLEMENTED`. No `render.ts` changes: row styling is purely `status`-driven, so `ok` D5 rows render live automatically.
-- **D6/D7: all six decisions below are now implemented and verified, not just locked.** `pii_density`'s patterns were additionally tightened during implementation, locked into `metric-definitions.md` at the same time: SSN-like is hyphenated-only (`###-##-####`, a bare 9-digit run no longer matches) and phone requires an internal separator or a leading `+` — both were the single biggest false-positive source before tightening, and both are covered by dedicated negative-case tests (a bare-digit internal ID, a comma-separated dollar amount) proving the exclusion actually holds, not just that positives still match. Verified end to end against real `report --fixture healthy --json` / `--fixture volume --json` runs (not just unit tests): `pii_density` 3/400 matched on `healthy` (the 3 seeded positives only), `untrusted_text_ratio` 6/290 fields external (the 3 seeded inbound activities' subject+body only), `closed_deal_count_12m` on `volume` reads `value: 40, floor: true` (2 × the 20-per-stratum default cap, not `volume`'s real 60) — and no raw PII value appears anywhere in either report's JSON output.
+- **D6/D7: all six decisions below are now implemented and verified, not just locked.** `pii_density`'s patterns were additionally tightened during implementation, locked into `metric-definitions.md` at the same time: SSN-like is hyphenated-only (`###-##-####`, a bare 9-digit run no longer matches) and phone requires an internal separator or a leading `+` — both were the single biggest false-positive source before tightening, and both are covered by dedicated negative-case tests (a bare-digit internal ID, a comma-separated dollar amount) proving the exclusion actually holds, not just that positives still match. Verified end to end against real `report --fixture healthy --json` / `--fixture volume --json` runs (not just unit tests): `pii_density` 3/400 matched on `healthy` (the 3 seeded positives only), `untrusted_text_ratio` 6/290 fields external (the 3 seeded inbound activities' subject+body only), `closed_deal_count_12m` on `volume` reads `value: 40, floor: true` (2 × the 20-per-stratum default cap, not `volume`'s real 60) — and no raw PII value appears anywhere in either report's JSON output. **These two `healthy` denominators (400/290) are this session's original counts, since superseded: the `outcome_evidence_retention_rate` fix later in this doc added 22 notes to `healthy`'s closed opportunities, moving them to 422/312 — see that entry for the current numbers and re-verification. The ratios and the reasoning above are otherwise unchanged.**
 - **D6/D7 scoping session (doc-only, no code): six decisions locked into `metric-definitions.md`, full rationale there, summarized here.** (1) `substantive_note_rate`/`median_note_length_chars` are scoped to open **and** closed sampled opportunities' notes, not open-only — `note_coverage_rate`'s own denominator is open-only, but `substantive_note_rate` gates `enablement_answer_engine`, which reasons over closed-won/lost history, so open-only would have measured the wrong population. (2) `pii_density` now names its population precisely: Note `body`, Activity `subject`/`body`, and Opportunity `nextStep`, counted **per record** (a record with multiple matching fields still counts once), denominator excludes records with no candidate field set at all; card-like matches require a Luhn check, not just a digit-count pattern; the result must report counts only, never a matched value, and the existing D5 no-raw-PII test must be extended to cover it. (3) `untrusted_text_ratio` is no longer capability-gated — it reads `TrustedText.tier === TrustTier.ExternallySourced` directly (Note `body` + Activity `subject`/`body`, not `nextStep`), since every `TrustedText` is guaranteed a `tier` at ingestion; the old "adapter can't distinguish origin → `not_instrumented`" framing described a gate that can't occur in this model and was removed. Its output must caveat that it reflects the adapter's own ingestion-time tier assignment, not verified ground truth. (4) `closed_deal_count_12m` trusts `sample.ts`'s existing `CLOSED_WINDOW_MONTHS` window rather than re-deriving it, and gets a new `floor: true` path: it must be set whenever either the `closed_won` or `closed_lost` reservoir stratum is full (`underfilled: false`), since a full reservoir means `closedOpportunities.length` is a sample-size ceiling, not the org's true volume. This needs two new `CoverageSample` fields carrying both strata's `underfilled` flags forward — `buildCoverageSample` currently discards them. (5) `outcome_evidence_retention_rate` ships as scoped and shares decision 4's window-trust reasoning, but — reversing this session's own first pass — does **not** get `applyTruncationFloor`: truncation can't change its ≥1-record answer, the same fact true of `note_coverage_rate`/`activity_capture_rate` too, but for this metric that's reason enough to skip the floor rather than apply it as a general signal anyway; a policy call, not a logical necessity, made the other way for the other two. (6) `win_rate_dispersion` is **blocked, not shipped** — see "Deferred" below.
 - **Why `win_rate_dispersion` is deferred, not scoped-and-ready like the other 6:** it needs win rate grouped by every canonical stage a *closed* deal passed through, but a closed `Opportunity.stage` only ever holds `closed_won`/`closed_lost` — intermediate stages only exist in `StageHistoryEntry`, and there is no by-opportunity-ref adapter method to fetch them (`listStageHistory` is an unfiltered stream; D4's `hydrateStageHistory` only fetches one org-wide earliest entry). Confirmed this requires a new `getStageHistoryByOpportunity(oppRefs)` adapter method — cross-package, plan-and-wait, same as the two existing deferrals. Bundled with them below rather than scoped as a third standalone deferral.
 
@@ -462,28 +462,53 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   `nextStepHistory` capability, a `closeDateHistory`-shaped capability, and
   `getStageHistoryByOpportunity(oppRefs)` — three additions to
   `packages/adapters`, scoped together, none started.
-- **`healthy`'s `outcome_evidence_retention_rate` reads 0% (`tier:
-  "blocked"`), found while spot-checking D6/D7 phase 3, not fixed.** Root
-  cause: `generateHealthy()` (`src/fixtures/mockOrgs.ts`) only ever pushes
-  notes/activities inside its `if (!isClosed) { ... }` block — every one of
-  `healthy`'s 24 closed opportunities (12 `closed_won` + 12 `closed_lost`)
-  has zero notes and zero activities by construction, `opp-0`'s
-  notes/activities overflow-seeding included (that opportunity is in an
-  open stage). This makes an otherwise-"good hygiene" fixture read as
-  having purged 100% of its closed-deal evidence, which undercuts the
-  fixture's own "Healthy" framing for this one metric. Deliberately not
-  fixed this session — seeding closed-opportunity notes/activities in
-  `healthy` would also shift `stage_mapping_coverage`/`duplicate_account_rate`
-  (both read `closedOpportunities` too) and potentially the D5
-  spot-check numbers already written into this doc's decisions above, all
-  of which would need re-verification; out of scope for a fixture-support
-  phase that was asked to add specific new content, not audit existing
-  content. To fix next session: seed a majority (not all — the metric
-  should read a real, non-zero-but-imperfect rate, not 100% either) of
-  `healthy`'s closed opportunities with at least one note or activity, then
-  re-verify every already-documented `healthy` spot-check number in this
-  file and in `test/report/buildReport.test.ts`'s fixture-differentiation
-  tests.
+- **`healthy`'s `outcome_evidence_retention_rate` used to read 0%
+  (`tier: "blocked"`) — found while spot-checking D6/D7 phase 3, fixed this
+  session.** Root cause was `generateHealthy()` (`src/fixtures/mockOrgs.ts`)
+  only ever pushing notes/activities inside its `if (!isClosed) { ... }`
+  block — every one of `healthy`'s 24 closed opportunities had zero notes
+  and zero activities by construction. Fixed by adding an `else` branch to
+  that same block: **11 of every 12 closed opportunities per stratum**
+  (`i % 12 !== 0`, `i` the loop's per-stratum index, not the global `n`, so
+  the fraction is exact regardless of where the closed block starts in the
+  generator's id sequence) now get one real closing note — 4 varied
+  won/lost-specific templates (all ≥40 chars, off `FILLER_DENYLIST`, no
+  PII-like substrings), timestamped at that opportunity's own `closeDate`
+  rather than an invented offset. The remaining 1/12 per stratum is
+  deliberate, not an oversight — a fixture meant to look "Healthy" should
+  still read a real, imperfect rate, not 100%. **Notes only, not
+  activities** — deliberately keeps this seeding from touching
+  `temporal_anomaly_rate`'s pooled CRM-activity count (D5), confirmed below.
+  Verified end to end against a real `report --fixture healthy --json` run
+  (not just the loose `status`/`value` shape assertions in
+  `test/report/buildReport.test.ts`, which already passed even at the old
+  0% value and so couldn't have caught this on their own — a dedicated
+  regression test was added: `outcome_evidence_retention_rate` on `healthy`
+  now asserts `tier === 'viable'` and `value >= viableAt`, not just
+  "computed"):
+  - `outcome_evidence_retention_rate`: **0.9167** (22/24), `tier: 'viable'`
+    — was 0/`'blocked'`. Comfortably above `rubric.ts`'s `viableAt: 0.8`,
+    not a boundary value.
+  - `pii_density`: **3/422** (was 3/400) — denominator grew by exactly the
+    22 new notes (`textSubstrate.ts`'s `allSampledNotes` pools open+closed);
+    numerator unchanged, none of the 4 new templates matches a PII pattern.
+  - `untrusted_text_ratio`: **6/312** (was 6/290) — same pooling, same
+    reasoning; numerator (the 3 seeded inbound activities' fields) unchanged.
+  - `substantive_note_rate` (1.0), `median_note_length_chars` (60, still
+    `tier: 'blocked'` — a pre-existing, unrelated gap, not something this
+    session's change caused or was scoped to fix) — both shift with the
+    larger note pool but have no pinned value in this doc to reconcile;
+    `buildReport.test.ts` only asserts `status === 'ok'` / `value !== null`
+    for these, which held before and after.
+  - Confirmed **unaffected**, exactly matching this doc's already-written
+    numbers: `contact_identity_resolution_rate` 0.8667/`viable`,
+    `account_resolution_rate` 0.8667/`degraded`, `activity_attribution_rate`
+    1.0/`viable`, `temporal_anomaly_rate` 0.0304/`degraded` (all D5, read
+    contacts/accounts/second-source data, never CRM notes), `duplicate_account_rate`
+    0/`viable` (reads `accountsByRef`), `stage_mapping_coverage` 1.0/`viable`
+    (reads `stageConfidence`, not notes), `closed_deal_count_12m` 24/`blocked`
+    (pure `closedOpportunities.length`, unrelated pre-existing tier, not
+    touched by this fix either).
 - The `excludedCount`-as-`note` tech debt, now at its second use
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if
