@@ -382,6 +382,17 @@ the same package — one plan-and-wait session, not three.
   rule 5. Scoped as a post-deadline feature — not started, not planned this
   session; revisit with its own plan-and-wait when it's actually scheduled.
 
+- **No `redact.ts` — injection defence relies on typed envelope + omission
+  from output surface.** A cold adversarial review (this session) confirmed
+  there is no PII-redaction or text-scrubbing module anywhere in this repo.
+  Raw text is kept out of the readiness report by the report's data model
+  never carrying it, not by a scrub step (see README.md's Design Rules).
+  The only live injection defence is `model/trust.ts`'s typed
+  `UntrustedEnvelope` + canary token, which is exercised only by unit tests
+  on data shape (`packages/kernel/test/signals.test.ts`) — no code in this
+  repo yet calls a real model with it. Full redaction module is
+  post-deadline scope, same as `narrative.ts` above.
+
 ---
 
 ## Open questions, not yet resolved

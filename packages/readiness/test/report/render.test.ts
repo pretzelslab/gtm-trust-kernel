@@ -60,3 +60,35 @@ describe('render.ts offline safety and structural integrity (not previously cove
     assertStructurallyIntact(html);
   });
 });
+
+/**
+ * Adversarial escaping check (cold review finding: no test previously
+ * exercised escapeHtml against a hostile orgLabel). orgLabel/orgDescription
+ * are BuildReportOptions-supplied, not adapter-sourced free text (see
+ * README.md's Design Rules) — but escapeHtml is the only thing standing
+ * between any future caller and injected markup, so it earns its own test.
+ */
+describe('render.ts escaping under adversarial input', () => {
+  it('escapes <script>, double quotes, and single quotes; preserves a unicode lookalike as inert text', async () => {
+    const data = await buildHealthy();
+    const hostile: ReportData = {
+      ...data,
+      org: {
+        ...data.org,
+        orgLabel: `<script>alert(1)</script> "double" 'single' аdmin`,
+      },
+    };
+
+    const html = renderReportHtml(hostile);
+
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).not.toContain('"double"');
+    expect(html).not.toContain("'single'");
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).toContain('&quot;double&quot;');
+    expect(html).toContain('&#39;single&#39;');
+    // The Cyrillic "а" lookalike isn't an HTML metacharacter — it survives as
+    // ordinary text, which is correct: escaping isn't meant to strip it.
+    expect(html).toContain('аdmin');
+  });
+});

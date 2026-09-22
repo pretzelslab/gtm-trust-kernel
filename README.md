@@ -63,6 +63,8 @@ test/
 
 **Deterministic retrieval.** Same input, same evidence set, same id. Evidence truncated by the retrieval budget is recorded, so abstention is honest rather than accidental.
 
+**No redaction module exists yet, and no report output needs one.** There is no `redact.ts` or text-scrubbing step anywhere in this repo. The readiness report (`packages/readiness`) never carries raw record text (note bodies, activity subjects, next steps) into its output at all — its data model only has room for computed counts, rates, and booleans — so nothing needs to be redacted from it. A future narrative-generation pass that reasons over raw text would need its own defence; see `packages/readiness/docs/STATUS.md`'s Known Gaps.
+
 ---
 
 ## The adapter contract
