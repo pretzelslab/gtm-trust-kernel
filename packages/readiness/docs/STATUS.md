@@ -374,14 +374,23 @@ the same package — one plan-and-wait session, not three.
 
 ## Known Gaps
 
-- **`narrative.ts` not built — no-raw-records property is currently moot.**
-  `claude/gtm-readiness-scope.md`'s Phase E specifies an LLM narrative pass
+- **`narrative.ts` (the LLM narrative pass) still not built — no-raw-records
+  property is still moot for that specific module.** A separate,
+  deterministic plain-English layer now exists (`report/plainSummary.ts`,
+  `report/plainReport.ts` — this session): a template-based translation of
+  capability verdicts into sales-leader-facing prose (a collapsible summary
+  in the tabular report, plus a standalone `*-plain.html` file), with no
+  model call anywhere and no access to raw record text, so it carries none
+  of the LLM pass's deferred risk. This does not replace or start
+  `claude/gtm-readiness-scope.md`'s Phase E LLM narrative pass
   (`report/narrative.ts`, takes only computed numbers, must not see raw
   records — asserted by its own test once it exists) on top of `render.ts`.
-  Neither the module nor that test exist in this repo; `src/report/` has
-  only `buildReport.ts`, `cli.ts`, `render.ts`. Phase C (readiness) has
-  stayed deterministic-only throughout, per this repo's root `CLAUDE.md`
-  rule 5. Scoped as a post-deadline feature — not started, not planned this
+  That module and its test still don't exist in this repo; `src/report/`
+  now has `buildReport.ts`, `cli.ts`, `render.ts`, `shell.ts`,
+  `plainSummary.ts`, `plainReport.ts`. Phase C (readiness) has stayed
+  deterministic-only throughout, per this repo's root `CLAUDE.md` rule 5.
+  The actual LLM narrative pass is still scoped as a post-deadline feature —
+  not started, not planned this
   session; revisit with its own plan-and-wait when it's actually scheduled.
 
 - **No `redact.ts` — injection defence relies on typed envelope + omission

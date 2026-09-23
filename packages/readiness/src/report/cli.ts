@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
  * `report` CLI: by default runs the readiness assessment against the mock
- * adapter (never a real CRM) and writes a single self-contained HTML file,
- * plus an optional JSON file of the same data. --live switches to a real
- * Salesforce org instead (see SalesforceAdapter) — still read-only, no
- * writes ever happen through this path.
+ * adapter (never a real CRM) and writes two self-contained HTML files (the
+ * tabular report and a plain-English narrative version), plus an optional
+ * JSON file of the same data. --live switches to a real Salesforce org
+ * instead (see SalesforceAdapter) — still read-only, no writes ever happen
+ * through this path. --all (comparison across every fixture) only writes
+ * the tabular version — no plain-English narrative for a multi-org page.
  *
  * Usage (from packages/readiness):
  *   npm run report                          # fixture: healthy
@@ -23,6 +25,7 @@ import { loadSalesforceConfigFromEnv, SalesforceAdapter } from '@gtm-trust-kerne
 import { FIXTURE_NAMES, MOCK_ORG_FIXTURES, type FixtureName } from '../fixtures/mockOrgs.js';
 import { buildReportData, type ReportData } from './buildReport.js';
 import { renderComparisonHtml, renderReportHtml } from './render.js';
+import { renderPlainReportHtml } from './plainReport.js';
 
 function isFixtureName(name: string): name is FixtureName {
   return (FIXTURE_NAMES as readonly string[]).includes(name);
@@ -123,6 +126,8 @@ async function main(): Promise<void> {
     }
     const html = renderReportHtml(data, { mode: 'live' });
     await writeHtml(outDir, `report-live-${timestamp}.html`, 'live-latest.html', html);
+    const plainHtml = renderPlainReportHtml(data, { mode: 'live' });
+    await writeHtml(outDir, `report-live-${timestamp}-plain.html`, 'live-latest-plain.html', plainHtml);
     if (values.json) {
       await writeJson(outDir, `report-live-${timestamp}.json`, data);
     }
@@ -152,6 +157,8 @@ async function main(): Promise<void> {
   const data = await buildOne(fixtureArg);
   const html = renderReportHtml(data);
   await writeHtml(outDir, `report-${timestamp}.html`, 'latest.html', html);
+  const plainHtml = renderPlainReportHtml(data);
+  await writeHtml(outDir, `report-${timestamp}-plain.html`, 'latest-plain.html', plainHtml);
   if (values.json) {
     await writeJson(outDir, `report-${timestamp}.json`, data);
   }
