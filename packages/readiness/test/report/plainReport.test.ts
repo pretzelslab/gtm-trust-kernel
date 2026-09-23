@@ -51,11 +51,29 @@ describe('renderPlainReportHtml offline safety and structural integrity', () => 
     assertStructurallyIntact(html);
   });
 
-  it('has no metrics table and no verdict pills — prose only', async () => {
+  it('has no metrics table and no verdict pills — bucketed lists and prose only', async () => {
     const data = await buildHealthy();
     const html = renderPlainReportHtml(data);
     expect(html).not.toContain('<table');
     expect(html).not.toContain('class="pill');
+  });
+
+  it('renders each populated bucket as its own heading + <ul> (healthy has all three)', async () => {
+    const data = await buildHealthy();
+    const html = renderPlainReportHtml(data);
+    expect(html).toContain('<h2>Ready to use</h2>');
+    expect(html).toContain('<h2>Usable with caution</h2>');
+    expect(html).toContain('<h2>Not ready yet</h2>');
+    expect(html.match(/<ul>/g)).toHaveLength(3);
+  });
+
+  it('uses a human date format, not ISO timestamps, in the meta line', async () => {
+    const data = await buildHealthy();
+    const html = renderPlainReportHtml(data);
+    expect(html).toContain('Data as of 20 Sep 2026');
+    expect(html).toMatch(/Report generated \d{1,2} [A-Z][a-z]{2} \d{4}/);
+    expect(html).not.toContain('2026-09-20T00:00:00.000Z');
+    expect(html).not.toContain(data.generatedAt);
   });
 });
 

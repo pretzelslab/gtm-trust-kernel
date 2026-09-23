@@ -18,10 +18,11 @@
  * rather than guessing — see NEUTRAL_REASON.
  */
 
-import type { MetricDimension, ReportData } from './buildReport.js';
+import type { MetricDimension, ReportCapabilityRow, ReportData } from './buildReport.js';
 import type { CapabilityId, Verdict } from '../rubric.js';
 
-const PLAIN_CAPABILITY: Readonly<Record<CapabilityId, string>> = {
+/** Lowercase, mid-sentence phrasing — sentence-case with capitalize() for a standalone label (e.g. a list heading). */
+export const PLAIN_CAPABILITY: Readonly<Record<CapabilityId, string>> = {
   grounded_account_brief: 'AI-generated account briefs',
   pipeline_risk_signals: 'pipeline risk alerts',
   close_date_realism: 'close-date reality checks',
@@ -115,42 +116,63 @@ function notReadyReason(data: ReportData, capabilityId: CapabilityId): string {
 }
 
 /**
- * 3-4 plain-English sentences for a sales-leader reader: no metric names,
- * no tier labels ("viable"/"degraded"/"blocked" never appear). Sentence
- * count is 3 when every capability is ready, 3 when none are, and 4 when
- * it's a mixed picture — the middle sentence that has nothing to say for a
- * given input is simply dropped, rather than padded.
+ * The blocked-bucket's aggregate reason: named only when at least half of
+ * the not-ready capabilities share the same per-capability reason (see
+ * notReadyReason); otherwise neutral wording, since naming one cause for a
+ * genuinely mixed set of blockers would overstate what's actually known.
+ */
+function aggregateReason(data: ReportData, notReady: readonly ReportCapabilityRow[]): string {
+  const reasons = notReady.map((c) => notReadyReason(data, c.id));
+  const counts = new Map<string, number>();
+  for (const reason of reasons) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  let best = NEUTRAL_REASON;
+  let bestCount = 0;
+  for (const [reason, count] of counts) {
+    if (count > bestCount) {
+      best = reason;
+      bestCount = count;
+    }
+  }
+  return bestCount / reasons.length >= 0.5 ? best : NEUTRAL_REASON;
+}
+
+/**
+ * 3-5 plain-English sentences for a sales-leader reader: no metric names,
+ * no tier labels ("viable"/"degraded"/"blocked" never appear). Three
+ * buckets — ready (viable), usable with caution (degraded), not ready
+ * (blocked) — each get at most one self-contained sentence, omitted when
+ * that bucket is empty (1-3 sentences total there); a degraded capability
+ * is never described as "not ready" (that word only appears in the
+ * blocked-bucket sentence, which never lists a degraded capability). The
+ * fixed closing line is itself two sentences, so the overall range is
+ * 3 (one populated bucket + closing) to 5 (all three buckets + closing).
  */
 export function buildExecutiveSummary(data: ReportData): string {
   const ready = data.capabilities.filter((c) => c.verdict === 'viable');
-  const notReady = data.capabilities.filter((c) => c.verdict !== 'viable');
+  const caution = data.capabilities.filter((c) => c.verdict === 'degraded');
+  const notReady = data.capabilities.filter((c) => c.verdict === 'blocked');
 
   const sentences: string[] = [];
 
-  if (notReady.length === 0) {
-    sentences.push('Your CRM data is in strong enough shape to support AI-assisted sales tools right away.');
-  } else if (ready.length === 0) {
-    sentences.push("Your CRM data isn't ready yet to safely support AI-assisted sales tools.");
-  } else {
-    sentences.push('Your CRM data is ready to support some AI-assisted sales tools now, with a few not ready yet.');
-  }
-
   if (ready.length > 0) {
-    sentences.push(`It has enough good-quality data to support ${joinPlain(ready.map((c) => PLAIN_CAPABILITY[c.id]))}.`);
+    sentences.push(`There is enough good-quality data to support ${joinPlain(ready.map((c) => PLAIN_CAPABILITY[c.id]))}.`);
   }
 
-  if (notReady.length > 0) {
-    const reasons = new Set(notReady.map((c) => notReadyReason(data, c.id)));
-    const reasonPhrase = reasons.size === 1 ? [...reasons][0]! : NEUTRAL_REASON;
-    const verb = notReady.length === 1 ? 'is' : 'are';
+  if (caution.length > 0) {
     sentences.push(
-      `${capitalize(reasonPhrase)} right now, so ${joinPlain(notReady.map((c) => PLAIN_CAPABILITY[c.id]))} ${verb} not ready yet.`,
+      `The data can also support ${joinPlain(caution.map((c) => PLAIN_CAPABILITY[c.id]))}, but treat the output with caution — it's thinner or less certain than ideal for now.`,
     );
   }
 
-  sentences.push(
-    'Nothing here writes to your CRM on its own — every recommendation still needs a person to approve it.',
-  );
+  if (notReady.length > 0) {
+    const reason = aggregateReason(data, notReady);
+    const verb = notReady.length === 1 ? 'is' : 'are';
+    sentences.push(
+      `${capitalize(reason)} right now, so ${joinPlain(notReady.map((c) => PLAIN_CAPABILITY[c.id]))} ${verb} not ready yet.`,
+    );
+  }
+
+  sentences.push("This report only reads your CRM data. It doesn't change anything.");
 
   return sentences.join(' ');
 }
@@ -162,15 +184,21 @@ export interface CapabilityOutcome {
 
 export interface FullNarrative {
   readonly summary: string;
-  readonly capabilityOutcomes: readonly CapabilityOutcome[];
+  readonly ready: readonly CapabilityOutcome[];
+  readonly caution: readonly CapabilityOutcome[];
+  readonly notReady: readonly CapabilityOutcome[];
 }
 
-/** Full narrative for the plain HTML report: the executive summary, plus one plain-outcome sentence per capability. */
+function outcomeFor(data: ReportData, c: ReportCapabilityRow): CapabilityOutcome {
+  const base = PLAIN_OUTCOME[c.id][c.verdict];
+  const outcome = c.verdict === 'viable' ? base : `${base} Right now, ${notReadyReason(data, c.id)}.`;
+  return { label: capitalize(PLAIN_CAPABILITY[c.id]), outcome };
+}
+
+/** Full narrative for the plain HTML report: the executive summary, plus each capability's outcome grouped by bucket. */
 export function buildFullNarrative(data: ReportData): FullNarrative {
-  const capabilityOutcomes = data.capabilities.map((c) => {
-    const base = PLAIN_OUTCOME[c.id][c.verdict];
-    const outcome = c.verdict === 'viable' ? base : `${base} Right now, ${notReadyReason(data, c.id)}.`;
-    return { label: PLAIN_CAPABILITY[c.id], outcome };
-  });
-  return { summary: buildExecutiveSummary(data), capabilityOutcomes };
+  const ready = data.capabilities.filter((c) => c.verdict === 'viable').map((c) => outcomeFor(data, c));
+  const caution = data.capabilities.filter((c) => c.verdict === 'degraded').map((c) => outcomeFor(data, c));
+  const notReady = data.capabilities.filter((c) => c.verdict === 'blocked').map((c) => outcomeFor(data, c));
+  return { summary: buildExecutiveSummary(data), ready, caution, notReady };
 }

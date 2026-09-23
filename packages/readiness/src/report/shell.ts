@@ -61,7 +61,8 @@ export const STYLE = `
   .plain-summary { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; }
   .plain-summary summary { cursor: pointer; font-weight: 600; }
   .plain-summary p { margin: 10px 0 0; }
-  .capability-outcome { margin-bottom: 14px; }
+  ul { padding-left: 20px; }
+  ul li { margin-bottom: 10px; }
 `;
 
 export function pageShell(title: string, body: string): string {
