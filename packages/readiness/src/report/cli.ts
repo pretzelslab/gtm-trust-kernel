@@ -121,7 +121,7 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const html = renderReportHtml(data);
+    const html = renderReportHtml(data, { mode: 'live' });
     await writeHtml(outDir, `report-live-${timestamp}.html`, 'live-latest.html', html);
     if (values.json) {
       await writeJson(outDir, `report-live-${timestamp}.json`, data);

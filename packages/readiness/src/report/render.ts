@@ -98,6 +98,7 @@ const STYLE = `
   .thresh { font-size: 11px; color: var(--muted); white-space: nowrap; }
   .lowconf { font-size: 11px; color: var(--degraded-fg); }
   .floor-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; background: var(--floor-bg); color: var(--floor-fg); border: 1px solid var(--floor-fg); cursor: help; }
+  .banner-live { background: var(--card-bg); color: var(--fg); border: 1px solid var(--border); font-weight: 600; padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; letter-spacing: 0.02em; }
 `;
 
 function renderSummaryCards(data: ReportData): string {
@@ -189,10 +190,14 @@ ${body}
 </html>`;
 }
 
-export function renderReportHtml(data: ReportData): string {
+export function renderReportHtml(data: ReportData, options?: { readonly mode?: 'fixture' | 'live' }): string {
   const { org } = data;
+  const banner =
+    options?.mode === 'live'
+      ? `<div class="banner-live">LIVE DATA · read-only</div>`
+      : `<div class="banner">MOCK DATA — fixture: ${escapeHtml(org.orgLabel)}. No real CRM was contacted; nothing leaves this machine.</div>`;
   const body = `
-  <div class="banner">MOCK DATA — fixture: ${escapeHtml(org.orgLabel)}. No real CRM was contacted; nothing leaves this machine.</div>
+  ${banner}
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
