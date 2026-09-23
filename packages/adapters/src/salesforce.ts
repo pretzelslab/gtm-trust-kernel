@@ -28,7 +28,6 @@ import { fileURLToPath } from 'node:url';
 import type {
   Account,
   Activity,
-  ActivityKind,
   CanonicalStage,
   Contact,
   Note,
@@ -268,7 +267,6 @@ interface RawTask {
   WhatId: string | null;
   Subject: string | null;
   Description: string | null;
-  Type: string | null;
   ActivityDate: string | null;
   CreatedDate: string;
   SystemModstamp: string;
@@ -322,7 +320,7 @@ const OPPORTUNITY_FIELDS = [
 const CONTACT_FIELDS = ['Id', 'AccountId', 'Name', 'Title', 'Email', 'CreatedDate', 'SystemModstamp'];
 // Task only — Event (calendar meetings) is out of scope for this adapter;
 // see STATUS.md known gaps.
-const TASK_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'Type', 'ActivityDate', 'CreatedDate', 'SystemModstamp'];
+const TASK_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'CreatedDate', 'SystemModstamp'];
 // Legacy Note object only — Salesforce's Enhanced Notes (ContentNote) is a
 // different object and is out of scope for this adapter; see STATUS.md.
 const NOTE_FIELDS = ['Id', 'ParentId', 'Title', 'Body', 'OwnerId', 'CreatedDate', 'SystemModstamp'];
@@ -564,17 +562,6 @@ export class SalesforceAdapter implements CrmAdapter {
     modifiedAt: raw.SystemModstamp,
   });
 
-  private mapTaskKind(type: string | null): ActivityKind {
-    switch (type) {
-      case 'Call':
-        return 'call';
-      case 'Email':
-        return 'email';
-      default:
-        return 'other';
-    }
-  }
-
   private mapTask = (raw: RawTask): Activity => {
     const relatedTo: RecordRef[] = [];
     if (raw.WhatId) relatedTo.push(this.ref('opportunity', raw.WhatId));
@@ -588,7 +575,10 @@ export class SalesforceAdapter implements CrmAdapter {
     return {
       ref: this.ref('activity', raw.Id),
       relatedTo,
-      kind: this.mapTaskKind(raw.Type),
+      // Type isn't queried (dropped: not present on every org, and not
+      // read by any metric or report — see STATUS.md), so there's no
+      // signal to distinguish call/email/other here.
+      kind: 'other',
       direction: 'unknown',
       occurredAt,
       subject: raw.Subject
