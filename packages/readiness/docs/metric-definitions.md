@@ -240,6 +240,12 @@ Step genuinely has no always-on tracking path). Do not generalize this
 finding to other adapters without checking each one's own equivalent
 object — HubSpot/other CRMs may or may not have a comparable always-on
 mechanism.
+**Signal strength:** on Salesforce specifically, this metric is
+near-universally `true` (it rests on an unconditional platform guarantee,
+not an admin toggle an org could have left off), so a `viable` verdict here
+carries little diagnostic weight for a Salesforce org — a `blocked`/`degraded`
+result is the informative case, flagging an adapter that isn't Salesforce
+or a genuine capability gap.
 **Threshold:** `close_date_history_enabled`.
 
 ### stage_history_months
