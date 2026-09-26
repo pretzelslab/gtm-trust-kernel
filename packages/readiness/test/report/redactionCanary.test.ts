@@ -93,7 +93,17 @@ function canaryActivity(activity: Activity): Activity {
 }
 
 function canaryOpportunity(opportunity: Opportunity): Opportunity {
-  return opportunity.nextStep ? { ...opportunity, nextStep: canaryTag(opportunity.nextStep, opportunity.ref.id) } : opportunity;
+  return {
+    ...opportunity,
+    // name/vendorStageLabel added for docs/narrative-design.md decision 13
+    // (Opportunity.vendorStageLabel is the concrete field decision 10 named,
+    // and this suite's existing canary tokens are already distinctive by
+    // construction, unlike vendorStageLabel's own fixture value in 3 of the
+    // 4 mock orgs, which duplicates a literal canonical stage name).
+    name: canaryValue(`${opportunity.ref.id}:name`, canaryCounter++),
+    vendorStageLabel: canaryValue(`${opportunity.ref.id}:vendorStageLabel`, canaryCounter++),
+    ...(opportunity.nextStep ? { nextStep: canaryTag(opportunity.nextStep, opportunity.ref.id) } : {}),
+  };
 }
 
 function canaryContact(contact: Contact): Contact {
@@ -236,6 +246,12 @@ describe('redaction canary: no canary fragment survives into any output surface'
         .map((o) => o.nextStep?.value)
         .filter((v): v is string => Boolean(v));
       expect(nextSteps.some(containsAnyCanary)).toBe(true);
+
+      const opportunityNames = [...sample.openOpportunities, ...sample.closedOpportunities].map((o) => o.name);
+      expect(opportunityNames.some(containsAnyCanary)).toBe(true);
+
+      const vendorStageLabels = [...sample.openOpportunities, ...sample.closedOpportunities].map((o) => o.vendorStageLabel);
+      expect(vendorStageLabels.some(containsAnyCanary)).toBe(true);
 
       const contactTexts = [...sample.contactsByRef.values()].flatMap((c) => [c.name, c.email]).filter((v): v is string => Boolean(v));
       expect(contactTexts.some(containsAnyCanary)).toBe(true);

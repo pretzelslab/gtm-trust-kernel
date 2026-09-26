@@ -69,14 +69,35 @@ out.
    `tier`/`verdict` of every id the claim cites. A mismatch (e.g. the
    model writes "viable" for a metric whose real tier is `degraded`) fails
    the claim, independent of the numeric check in decision 7.
+   **Known v1 vocabulary limit (accepted, 2026-09-26):** this checks only
+   the 7 literal terms above. Other qualitative words a model might reach
+   for — "healthy", "poor", "risky", and similar — aren't checked at all;
+   a claim using one of those neither passes nor fails on that basis.
+   Revisit if the manual smoke script (decision 4) surfaces model output
+   that leans on unchecked vocabulary to imply a tier.
 
-7. **Numeric tolerance.** Fractions are normalized to percent before
-   comparison (`0.203` and `20.3%` are the same value). Percent-shaped
-   values must match within **±0.5 percentage points**. Non-percent values
-   (counts, day counts, ratios not displayed as a percent) must match at
-   the metric's own displayed rounding precision — i.e. compare against
-   the same rounded string the report itself would render, not the raw
-   float.
+7. **Numeric tolerance, and the unmatched-number rule (revised
+   2026-09-26).** Fractions are normalized to percent before comparison
+   (`0.203` and `20.3%` are the same value). Percent-shaped values must
+   match within **±0.5 percentage points**. Non-percent values (counts,
+   day counts, chars) must match the metric's own displayed value exactly
+   — `render.ts` shows these with no rounding, so there is no tolerance
+   band to allow.
+   **The check is not scoped to `MetricId` citations, as first
+   implemented — corrected per explicit instruction:** if a claim's text
+   contains any number at all, at least one of its cited **metric** ids
+   must have a value that number matches, within the tolerance above.
+   Otherwise the claim fails, regardless of what it cites. This applies
+   even when every cited id is a capability (no single value to check
+   against) or a bool-unit metric (categorical, not numeric) — a number
+   appearing in either case fails, rather than silently passing for lack
+   of a shape to check.
+   **Known v1 strictness tradeoff (accepted, not an oversight):** an
+   aggregate figure derived from several rows at once (e.g. "2 of 8
+   capabilities are blocked") has no single cited metric whose own value
+   it matches, so it fails this check even when every underlying number
+   is correct. Revisit if the smoke script's fallback rate is high and
+   this turns out to be why.
 
 8. **Any single failing claim discards the whole narrative.** No partial
    assembly of "the claims that passed." This stays strict per the user's
@@ -109,6 +130,63 @@ out.
       redaction-canary test in the test strategy below, which stays
       where originally planned (verifying the actual serialized prompt
       payload, once the prompt-builder exists).
+    - **Verified clean, 2026-09-26** (traced every write site of every
+      string field reachable from `ReportData`, not just grepped for
+      `vendorStageLabel`): zero reads of `vendorStageLabel`/`.name`/
+      `.title`/`.industry`/`.forecastCategory` anywhere in `src/metrics/`
+      or `src/report/`. The two fields that *are* read
+      (`consistency.ts`'s `account.domain` for `duplicate_account_rate`,
+      `joinability.ts`'s `.email` truthy check) never put the raw value
+      into any `MetricResult.note` — every `note` interpolates only
+      counts. `stageConfidence` is a closed enum, never the raw picklist
+      label. `ReportOrgSummary.orgLabel`/`orgDescription` are the one
+      near-miss — see decision 11.
+
+11. **Prompt input excludes `ReportOrgSummary.orgDescription` entirely.**
+    In `--live` mode `orgDescription` is `SalesforceAdapter.orgId`, which
+    `salesforce.ts` derives as `new URL(instanceUrl).host` — the connected
+    instance's hostname. That identifies the customer, and sending it to a
+    third-party model API is data egress this package's local-first
+    design doesn't otherwise permit — not customer-authored free text like
+    a note body, but a real instance of the same problem. `orgLabel` is
+    kept: it's already generic and static in both modes (`fixture.label`
+    in fixture mode, the hardcoded literal `'Live Salesforce org'` in live
+    mode — never org-specific). `NarrativePromptInput.org` is typed as
+    `Omit<ReportOrgSummary, 'orgDescription'>`, not `ReportOrgSummary`
+    itself, so this is a compile-time guarantee, not a runtime filter that
+    could be forgotten on some code path.
+
+12. **Structural guard: a pinned inventory of every string-valued path in
+    `ReportData`.** Decision 10's field-by-field trace is a point-in-time
+    check — it says nothing about a field added next month. A test walks
+    a built `ReportData` (every mock-org fixture) and collects every path
+    whose value is a string (arrays normalized to `[]`, e.g.
+    `metrics[].note`), then asserts that set equals an explicit, reviewed
+    allowlist committed in the test file. A new string field anywhere in
+    `ReportData` changes the discovered set and fails the test until a
+    human reviews it and adds it to the allowlist deliberately — the same
+    "changes the discovered set" property also fails if a known path
+    disappears, so the allowlist can't silently drift stale either.
+
+13. **Decision 3's distinctiveness check — resolved by reusing the
+    existing canary technique, not by editing production fixture data.**
+    Audited `mockOrgs.ts`'s actual seeded free text: `Opportunity.name`
+    (`` `Deal ${id}` ``) and `Account`/`Contact.name` (`` `Account ${id}` ``/
+    `` `Contact ${id}` ``) are distinctive enough combined with their
+    fixture-specific id. `Opportunity.vendorStageLabel` is **not** —
+    for 3 of the 4 fixtures it's set to the literal canonical stage name
+    (`'discovery'`, `'proposal'`, etc.), a word ordinary report prose could
+    plausibly contain for unrelated reasons. Rather than rewrite
+    `mockOrgs.ts` (shared by all 341 existing tests) to make that one
+    field more distinctive, the commit-1 test extends
+    `test/report/redactionCanary.test.ts`'s existing canary-injection
+    technique (`canaryOpportunity`) to also seed `name`/`vendorStageLabel`
+    with the same purpose-built, unmistakably-distinctive tokens the rest
+    of that suite already uses — sidestepping the naturalness problem
+    entirely instead of assessing it field-by-field. That test already
+    asserts `JSON.stringify(reportData)` (the `--json` surface) carries no
+    canary fragment, so this one extension closes decision 10's gap for
+    `ReportData` specifically, without new scaffolding.
 
 ## Non-goals (explicit)
 
@@ -136,11 +214,18 @@ out.
 
 ## Commit breakdown
 
-1. **Free-text verification gate (decision 10), then: interface + fake
-   client + grounding validation.** `NarrativeModelClient`/
-   `NarrativePromptInput`/`NarrativeModelResult` types,
-   `FakeNarrativeModelClient`, `validateGrounding()` (ids, tier-words,
-   numeric tolerance) + golden-fixture tests. No new dependency yet.
+1. **Free-text verification gate (decision 10, done — see above), then:
+   types, prompt-input builder, fake client, grounding validation, and the
+   two new guard tests (decisions 11-13).**
+   `NarrativeModelClient`/`NarrativePromptInput`/`NarrativeClaim`/
+   `NarrativeModelResponse` types (`src/report/narrativeTypes.ts`);
+   `buildNarrativePromptInput()` dropping `orgDescription`
+   (`src/report/narrativePromptInput.ts`, decision 11) with its own test;
+   `FakeNarrativeModelClient` (`test/support/`); `validateGrounding()`
+   (ids, tier-words, numeric tolerance — `src/report/narrativeGrounding.ts`)
+   + golden-fixture tests; the `redactionCanary.test.ts` extension
+   (decision 13); the structural-path-inventory test (decision 12). No new
+   dependency yet.
 2. **Real client + manual smoke script.** Add `@anthropic-ai/sdk`,
    `AnthropicNarrativeModelClient`, structured-output schema wiring, the
    `NARRATIVE_MODEL` env override. The fixture-fallback-rate smoke script

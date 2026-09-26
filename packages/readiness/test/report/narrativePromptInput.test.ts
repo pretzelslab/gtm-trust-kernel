@@ -1,0 +1,62 @@
+import { describe, expect, it } from 'vitest';
+import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
+import { MOCK_ORG_FIXTURES, type FixtureName } from '../../src/fixtures/mockOrgs.js';
+import { buildReportData, type ReportData } from '../../src/report/buildReport.js';
+import { buildNarrativePromptInput } from '../../src/report/narrativePromptInput.js';
+
+async function buildFixture(name: FixtureName): Promise<ReportData> {
+  const fixture = MOCK_ORG_FIXTURES[name];
+  const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
+  const secondSourceAdapter = fixture.secondSource
+    ? new MockSecondSourceAdapter(fixture.secondSource.data, fixture.secondSource.capabilities)
+    : undefined;
+  return buildReportData(adapter, secondSourceAdapter, {
+    orgLabel: fixture.label,
+    orgDescription: fixture.description,
+    asOf: fixture.asOf,
+  });
+}
+
+describe('buildNarrativePromptInput', () => {
+  it('excludes orgDescription entirely (fixture mode)', async () => {
+    const data = await buildFixture('healthy');
+
+    const input = buildNarrativePromptInput(data);
+
+    expect('orgDescription' in input.org).toBe(false);
+    expect(input.org.orgLabel).toBe(data.org.orgLabel);
+  });
+
+  it('excludes orgDescription entirely when it holds a live-mode-shaped value (a connected instance hostname)', async () => {
+    const data = await buildFixture('healthy');
+    const liveShaped: ReportData = {
+      ...data,
+      org: { ...data.org, orgLabel: 'Live Salesforce org', orgDescription: 'my-instance.my.salesforce.com' },
+    };
+
+    const input = buildNarrativePromptInput(liveShaped);
+
+    expect('orgDescription' in input.org).toBe(false);
+    expect(JSON.stringify(input)).not.toContain('my-instance.my.salesforce.com');
+  });
+
+  it('preserves every other field unchanged', async () => {
+    const data = await buildFixture('healthy');
+
+    const input = buildNarrativePromptInput(data);
+
+    expect(input.generatedAt).toBe(data.generatedAt);
+    expect(input.metrics).toBe(data.metrics);
+    expect(input.capabilities).toBe(data.capabilities);
+    expect(input.org).toEqual({
+      orgLabel: data.org.orgLabel,
+      asOf: data.org.asOf,
+      openSampleSize: data.org.openSampleSize,
+      closedSampleSize: data.org.closedSampleSize,
+      recordsScanned: data.org.recordsScanned,
+      stopReason: data.org.stopReason,
+      capabilityVerdictCounts: data.org.capabilityVerdictCounts,
+      metricStatusCounts: data.org.metricStatusCounts,
+    });
+  });
+});
