@@ -28,6 +28,7 @@
  */
 
 import Anthropic, { APIError } from '@anthropic-ai/sdk';
+import { SUMMARY_IDS } from './narrativeTypes.js';
 import type {
   NarrativeClaim,
   NarrativeModelClient,
@@ -82,16 +83,51 @@ export function isClaimsShape(value: unknown): value is { claims: NarrativeClaim
   return Array.isArray(candidate['claims']) && candidate['claims'].every(isNarrativeClaim);
 }
 
-function buildPrompt(input: NarrativePromptInput): string {
+/**
+ * Every id the model may legally put in a claim's groundedIn -- decisions 5
+ * (+ its commit-2b amendment) and 14. Exported for direct unit testing (no
+ * network): asserts the structural field names (capabilityVerdictCounts,
+ * metricStatusCounts, gatesCapabilities) are never in this list, separately
+ * from asserting the prompt text still names and forbids them.
+ */
+export function listValidIds(input: NarrativePromptInput): readonly string[] {
+  return [...input.metrics.map((m) => m.metric), ...input.capabilities.map((c) => c.id), ...SUMMARY_IDS];
+}
+
+/**
+ * Exported for direct unit testing (no network) -- decisions 14/15 (commit
+ * 2b), motivated by the commit-2 live smoke run's 100% grounding-fallback
+ * rate: the model was citing structural JSON field names it could see in
+ * the data dump (capabilityVerdictCounts, metricStatusCounts,
+ * gatesCapabilities, and the 3 now-legitimate summary counts) as if they
+ * were valid ids, and writing aggregate tier-count sentences with no single
+ * id a real claim could cite.
+ */
+export function buildPrompt(input: NarrativePromptInput): string {
   return [
     'You are generating a short, plain-English narrative summary of a CRM',
     'data-readiness report. You are given computed metrics and capabilities',
     'only -- never raw CRM records.',
     '',
-    'Every claim you make must cite at least one metric or capability id',
-    'from the data below, in `groundedIn`. Never invent a number, id, or',
-    'qualitative tier word (e.g. "viable"/"degraded"/"blocked") that is not',
-    'directly supported by the cited id(s).',
+    "Every claim you make must cite at least one id in `groundedIn`. The ONLY",
+    'valid ids are exactly these, verbatim -- no other string is acceptable,',
+    'even if it looks like a reasonable field name in the JSON below:',
+    listValidIds(input).join(', '),
+    '',
+    'Do NOT cite structural field names such as "capabilityVerdictCounts",',
+    '"metricStatusCounts", or "gatesCapabilities" -- those are groupings in',
+    'the JSON shape, not valid ids, even though they appear in the data.',
+    '',
+    'Do not write a sentence that summarizes a COUNT across multiple',
+    'capabilities or metrics by tier (e.g. "2 capabilities are blocked, 5',
+    'are viable") -- no single id exists that such a sentence could',
+    'correctly cite. A claim about one specific capability\'s or metric\'s',
+    'own tier (e.g. "the pipeline_risk_signals capability is blocked") is',
+    'fine and encouraged.',
+    '',
+    'Never invent a number, id, or qualitative tier word',
+    '(e.g. "viable"/"degraded"/"blocked") that is not directly supported by',
+    'the cited id(s).',
     '',
     'Report data (JSON):',
     JSON.stringify(input),

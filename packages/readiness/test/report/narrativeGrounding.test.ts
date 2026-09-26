@@ -207,6 +207,57 @@ describe('validateGrounding', () => {
     expect(result).toEqual({ ok: true, failures: [] });
   });
 
+  it('passes a claim citing summary.recordsScanned with an exact matching count (decision 5 amendment, commit 2b)', async () => {
+    const data = await buildFixture('healthy');
+    const claim: NarrativeClaim = {
+      text: `This report scanned ${data.org.recordsScanned} records.`,
+      groundedIn: ['summary.recordsScanned'],
+    };
+
+    const result = validateGrounding([claim], data);
+
+    expect(result).toEqual({ ok: true, failures: [] });
+  });
+
+  it('fails a claim citing summary.openSampleSize with a mismatched count -- exact match only, no tolerance (commit 2b)', async () => {
+    const data = await buildFixture('healthy');
+    const claim: NarrativeClaim = {
+      text: `The open sample size was ${data.org.openSampleSize + 1}.`,
+      groundedIn: ['summary.openSampleSize'],
+    };
+
+    const result = validateGrounding([claim], data);
+
+    expect(result.ok).toBe(false);
+    expect(result.failures[0]!.reason).toContain("doesn't match");
+  });
+
+  it('fails a claim citing an unlisted summary-shaped id -- the summary namespace is a closed 3-id set, not a wildcard (commit 2b)', async () => {
+    const data = await buildFixture('healthy');
+    const claim: NarrativeClaim = {
+      text: 'Something about a summary field that is not among the allowed ones.',
+      groundedIn: ['summary.bogus' as never],
+    };
+
+    const result = validateGrounding([claim], data);
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([{ claimIndex: 0, reason: 'cited id "summary.bogus" does not exist in this report' }]);
+  });
+
+  it('regression: a claim citing capabilityVerdictCounts still fails id-existence -- a structural field is never a valid id, even after the decision 5 amendment (commit 2b)', async () => {
+    const data = await buildFixture('healthy');
+    const claim: NarrativeClaim = {
+      text: 'This is a breakdown of capabilities by their current status.',
+      groundedIn: ['capabilityVerdictCounts' as never],
+    };
+
+    const result = validateGrounding([claim], data);
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([{ claimIndex: 0, reason: 'cited id "capabilityVerdictCounts" does not exist in this report' }]);
+  });
+
   it('reports one failure per offending claim across multiple claims, preserving claimIndex', async () => {
     const data = await buildFixture('healthy');
     const goodRow = findRow(data, (r) => r.value !== null);

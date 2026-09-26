@@ -62,6 +62,24 @@ out.
    `MetricId`/`CapabilityId` values) must be non-empty on every claim; no
    free-floating connective sentences. An id that doesn't exist in the
    `ReportData` passed to the model fails the claim.
+   **Amended 2026-09-26 (commit 2b), approved by the user in response to
+   commit 2's live smoke-run finding (100% grounding-fallback rate across
+   all 4 fixtures, 0 transport failures):** three additional, namespaced
+   ids are citable alongside `MetricId`/`CapabilityId` --
+   `summary.recordsScanned`, `summary.openSampleSize`,
+   `summary.closedSampleSize` -- each checked by **exact match** against
+   the real `ReportData.org` value (`recordsScanned`/`openSampleSize`/
+   `closedSampleSize` respectively), never the percent-tolerance rule
+   decision 7 uses for rate-unit metrics: these are plain integer counts,
+   not rates. Additive only -- no existing `MetricId`/`CapabilityId`
+   citation, tier-word, or numeric-tolerance check is loosened. Motivation:
+   the model's very first claim, in every one of the 4 live fixtures, tried
+   to state one of these exact org-level counts (a legitimate fact about
+   the data) but had no valid id to cite for it, since neither a metric nor
+   a capability represents "how many records were scanned." Deliberately a
+   closed 3-id set, not a wildcard `summary.*` acceptance -- an unlisted
+   org-summary field cited this way still fails as "does not exist," same
+   as today (see `narrativeGrounding.test.ts`'s `summary.bogus` case).
 
 6. **Tier-word check.** If a claim's text contains a tier or qualitative
    term (`viable`/`degraded`/`blocked`, `ready`/`not ready`,
@@ -188,6 +206,55 @@ out.
     canary fragment, so this one extension closes decision 10's gap for
     `ReportData` specifically, without new scaffolding.
 
+14. **Prompt must enumerate the exact valid `groundedIn` vocabulary (2026-
+    09-26, commit 2b).** `anthropicNarrativeModelClient.ts`'s `buildPrompt()`
+    lists every `metrics[].metric` id, every `capabilities[].id`, and the 3
+    summary ids from decision 5's amendment, verbatim (`listValidIds()`),
+    and explicitly states that citing any other field name (e.g.
+    `capabilityVerdictCounts`, `metricStatusCounts`, `gatesCapabilities`, or
+    any other JSON key visible in the data dump) is not allowed. Motivated
+    by the same live-run finding as decision 5's amendment: the model was
+    reaching for structural field names it could see in the JSON, not just
+    the 3 legitimate org-summary counts — enumerating the vocabulary
+    explicitly, rather than relying on the model to infer "id" from
+    context, is the fix for that broader pattern. `listValidIds()` is
+    exported and unit-tested directly: it must contain every real id and
+    must never contain the 3 named structural fields, checked separately
+    from a test confirming the prompt's *forbidding sentence* still names
+    them (so deleting that sentence, while tidying the prompt, is itself a
+    test failure).
+
+15. **Aggregate tier-count sentences are prohibited; per-capability/per-
+    metric tier claims remain allowed (2026-09-26, commit 2b).** The prompt
+    instructs the model never to write a sentence summarizing a count
+    across multiple capabilities/metrics by tier (e.g. "2 capabilities are
+    blocked, 5 are viable") — citing `capabilityVerdictCounts`/
+    `metricStatusCounts` this way was the second major source of live-run
+    failures, alongside decision 14's structural-field-name problem. A
+    claim about one specific capability's or metric's own tier (e.g. "the
+    `pipeline_risk_signals` capability is blocked") is unaffected and stays
+    allowed. **This is a prompt-only instruction, not a new grounding
+    check:** even without it, such a sentence would still fail decision 5's
+    (unchanged) id-existence check today, since `capabilityVerdictCounts`/
+    `metricStatusCounts` are not part of the citable vocabulary — this
+    decision just stops the model from generating (and having rejected)
+    that pattern in the first place, rather than adding new enforcement.
+
+**Open item, not yet resolved (2026-09-26, commit 2b):** the live run also
+surfaced a narrower, distinct hypothesis — `volume`'s one non-id-related
+numeric failure cited a real metric (`stage_mapping_coverage`, a `'rate'`-
+unit metric) but still failed the numeric check, and the likely cause is
+that the claim quoted a count from that metric's own `note` field (e.g.
+`stage_mapping_coverage`'s note reads "115 mapped, 0 inferred, 0
+unmapped") rather than a percent — `metricMatchesSomeNumber` only checks
+percent-shaped numbers against a `'rate'`-unit metric's value, never bare
+counts, so a note-derived count on a rate metric can never pass regardless
+of correctness. Not confirmed against the literal claim text and **not
+fixed this commit** — commit 2b adds claim text to the smoke script's
+failure output specifically to confirm or refute this on the next live
+run. If confirmed, this is a separate gap from decisions 5/14/15 above and
+needs its own decision before any fix.
+
 ## Non-goals (explicit)
 
 - No envelope/trust-tier wiring in this phase (see Scope).
@@ -230,6 +297,19 @@ out.
    `AnthropicNarrativeModelClient`, structured-output schema wiring, the
    `NARRATIVE_MODEL` env override. The fixture-fallback-rate smoke script
    from decision 4, explicitly excluded from `npm run ci`.
+2b. **Prompt/grounding correction from commit 2's live smoke-run finding
+   (2026-09-26).** The first live run (4 fixtures, 1 run each) showed a
+   100% grounding-fallback rate — every fixture's narrative was rejected,
+   0 transport failures. Root cause: the model cited JSON field names that
+   aren't valid `MetricId`/`CapabilityId` values (`recordsScanned`,
+   `openSampleSize`, `closedSampleSize`, `capabilityVerdictCounts`,
+   `metricStatusCounts`, `gatesCapabilities`) when writing an overview
+   sentence about scan/sample counts or an aggregate tier-count summary —
+   see decision 5's amendment and decisions 14/15 above. The smoke script
+   also gained claim text in its failure output (previously only the
+   failure reason) and `--runs N` (default 1) for a multi-run pass-rate
+   signal, both to support confirming the separate note-derived-count
+   hypothesis flagged as an open item above — not fixed this commit.
 3. **`narrative.ts` orchestration.** Builds the prompt input from
    `ReportData`, calls the client, validates, falls back with the visible
    reason from decision 9 — fully testable via the fake client from

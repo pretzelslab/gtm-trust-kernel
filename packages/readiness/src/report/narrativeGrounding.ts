@@ -6,12 +6,16 @@
  * is narrative.ts's job (not yet built), not this function's.
  *
  * Three independent checks per claim, all must pass:
- *  1. every cited id must exist in this ReportData (metric or capability).
+ *  1. every cited id must exist in this ReportData (metric, capability, or
+ *     -- decision 5 amendment, commit 2b -- one of the 3 closed summary ids).
  *  2. any tier/qualitative word in the claim's text must match every cited
- *     id's actual tier/verdict.
+ *     id's actual tier/verdict. Summary ids carry no tier -- citing one
+ *     contributes nothing to the expected-tier set, same as a capability.
  *  3. the unmatched-number rule: if the claim's text contains any number at
- *     all, at least one of it cited METRIC ids (never capabilities -- see
- *     below) must have a value that number matches, within tolerance.
+ *     all, at least one of its cited METRIC ids (never capabilities -- see
+ *     below) must have a value that number matches, within tolerance, OR
+ *     one of its cited summary ids must match the number by exact count
+ *     (decision 5 amendment, commit 2b -- see summaryValueMatchesSomeNumber).
  *     Otherwise the claim fails, regardless of citation type. This is
  *     deliberately not scoped to "only check a number against a metric
  *     whose unit matches the number's shape" -- it applies even when every
@@ -24,7 +28,9 @@
  * blocked") has no single cited metric/capability whose own value it
  * matches, so it fails check 3 even when every underlying number is
  * correct. Revisit if the manual smoke script (decision 4) shows a high
- * fallback rate driven by this.
+ * fallback rate driven by this. (commit 2b: this was confirmed as the
+ * dominant live-run failure mode -- addressed by prohibiting the sentence
+ * pattern in the prompt, decision 15, not by loosening this check.)
  *
  * Known v1 vocabulary limit (also accepted): the tier-word check below
  * only recognizes decision 6's literal 7 terms. Other qualitative words a
@@ -36,7 +42,18 @@
 
 import type { CapabilityId, MetricId, Verdict } from '../rubric.js';
 import type { MetricRow, ReportCapabilityRow, ReportData } from './buildReport.js';
-import type { NarrativeClaim } from './narrativeTypes.js';
+import { SUMMARY_IDS, type NarrativeClaim, type SummaryId } from './narrativeTypes.js';
+
+/** The ReportOrgSummary field each summary id reads its real value from -- see narrativeTypes.ts's SUMMARY_IDS. */
+const SUMMARY_ID_FIELD: Readonly<Record<SummaryId, 'recordsScanned' | 'openSampleSize' | 'closedSampleSize'>> = {
+  'summary.recordsScanned': 'recordsScanned',
+  'summary.openSampleSize': 'openSampleSize',
+  'summary.closedSampleSize': 'closedSampleSize',
+};
+
+function isSummaryId(id: string): id is SummaryId {
+  return (SUMMARY_IDS as readonly string[]).includes(id);
+}
 
 export interface GroundingFailure {
   readonly claimIndex: number;
@@ -118,6 +135,11 @@ function metricMatchesSomeNumber(metric: MetricRow, claimText: string): boolean 
   return extractBareNumbers(claimText).some((n) => n === metric.value);
 }
 
+/** Decision 5 amendment (commit 2b): exact match only -- summary ids are plain counts, never percent-normalized. */
+function summaryValueMatchesSomeNumber(value: number, claimText: string): boolean {
+  return extractBareNumbers(claimText).some((n) => n === value);
+}
+
 // ---------------------------------------------------------------------------
 
 function validateClaim(
@@ -125,6 +147,7 @@ function validateClaim(
   claimIndex: number,
   metricsById: ReadonlyMap<MetricId, MetricRow>,
   capabilitiesById: ReadonlyMap<CapabilityId, ReportCapabilityRow>,
+  org: ReportData['org'],
 ): GroundingFailure[] {
   const failures: GroundingFailure[] = [];
 
@@ -134,25 +157,37 @@ function validateClaim(
 
   const expectedTiers = new Set<Verdict>();
   const citedMetrics: MetricRow[] = [];
+  const citedSummaryEntries: { id: SummaryId; value: number }[] = [];
   for (const id of claim.groundedIn) {
     const metric = metricsById.get(id as MetricId);
     const capability = capabilitiesById.get(id as CapabilityId);
+    const summaryId = isSummaryId(id) ? id : undefined;
 
-    if (!metric && !capability) {
+    if (!metric && !capability && !summaryId) {
       failures.push({ claimIndex, reason: `cited id "${id}" does not exist in this report` });
       continue;
     }
     if (metric?.tier) expectedTiers.add(metric.tier);
     if (capability) expectedTiers.add(capability.verdict);
     if (metric) citedMetrics.push(metric);
+    if (summaryId) citedSummaryEntries.push({ id: summaryId, value: org[SUMMARY_ID_FIELD[summaryId]] });
   }
 
   // Unmatched-number rule (see this file's docblock): applies whether the
-  // claim cites metrics, capabilities, or both -- a capability-only or
-  // bool-metric-only citation has no matchable value, so any number in the
-  // text fails here, not silently passing for lack of a shape to check.
-  if (hasAnyNumericContent(claim.text) && !citedMetrics.some((m) => metricMatchesSomeNumber(m, claim.text))) {
-    const citedIds = citedMetrics.length > 0 ? citedMetrics.map((m) => m.metric).join(', ') : 'none (capability-only citation, or no matchable metric cited)';
+  // claim cites metrics, capabilities, summary ids, or a mix -- a
+  // capability-only or bool-metric-only citation has no matchable value, so
+  // any number in the text fails here, not silently passing for lack of a
+  // shape to check. A cited summary id (decision 5 amendment) does have a
+  // matchable value -- checked by exact count, never percent tolerance.
+  if (
+    hasAnyNumericContent(claim.text) &&
+    !citedMetrics.some((m) => metricMatchesSomeNumber(m, claim.text)) &&
+    !citedSummaryEntries.some((s) => summaryValueMatchesSomeNumber(s.value, claim.text))
+  ) {
+    const citedParts: string[] = [];
+    if (citedMetrics.length > 0) citedParts.push(citedMetrics.map((m) => m.metric).join(', '));
+    if (citedSummaryEntries.length > 0) citedParts.push(citedSummaryEntries.map((s) => s.id).join(', '));
+    const citedIds = citedParts.length > 0 ? citedParts.join('; ') : 'none (capability-only citation, or no matchable metric/summary id cited)';
     failures.push({
       claimIndex,
       reason: `claim's number doesn't match any cited metric's value (cited metric ids: ${citedIds})`,
@@ -172,7 +207,7 @@ export function validateGrounding(claims: readonly NarrativeClaim[], data: Repor
 
   const failures: GroundingFailure[] = [];
   claims.forEach((claim, index) => {
-    failures.push(...validateClaim(claim, index, metricsById, capabilitiesById));
+    failures.push(...validateClaim(claim, index, metricsById, capabilitiesById, data.org));
   });
 
   return { ok: failures.length === 0, failures };

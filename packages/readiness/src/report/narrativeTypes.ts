@@ -22,12 +22,21 @@ export interface NarrativePromptInput {
 }
 
 /**
+ * Decision 5 amendment (commit 2b): three additional, namespaced ids are
+ * citable alongside MetricId/CapabilityId -- one per ReportOrgSummary field
+ * that is a plain count rather than a scored metric or capability. Closed
+ * set, not a wildcard `summary.*` acceptance -- see narrativeGrounding.ts.
+ */
+export const SUMMARY_IDS = ['summary.recordsScanned', 'summary.openSampleSize', 'summary.closedSampleSize'] as const;
+export type SummaryId = (typeof SUMMARY_IDS)[number];
+
+/**
  * One sentence (or short span) of model-generated prose, plus the ids it
  * claims to be grounded in. `groundedIn` must be non-empty -- decision 5.
  */
 export interface NarrativeClaim {
   readonly text: string;
-  readonly groundedIn: readonly (MetricId | CapabilityId)[];
+  readonly groundedIn: readonly (MetricId | CapabilityId | SummaryId)[];
 }
 
 /** Token usage for one generate() call. Optional -- FakeNarrativeModelClient callers have no real usage to report. */

@@ -10,12 +10,18 @@
  *     gradable set of claims).
  *   - grounding: generate() returned a well-formed response, but
  *     validateGrounding() found at least one claim that fails id-citation,
- *     tier-word, or numeric-tolerance checks.
+ *     tier-word, or numeric-tolerance checks. Each failure line includes
+ *     the offending claim's own text (commit 2b), not just the reason, so
+ *     a specific hypothesis about a failure (e.g. a claim quoting a
+ *     metric's own note-derived count) can be confirmed from this output
+ *     alone.
  *
  * The ~20% escalation threshold (decision 4: "switch the hardcoded default
  * to claude-sonnet-5") is about claim quality, not network flakiness, so it
  * is called out against the grounding fallback rate only -- transport
- * failures are reported but never counted toward it.
+ * failures are reported but never counted toward it. With --runs N > 1,
+ * the threshold call-out and per-fixture pass rate are both computed over
+ * every fixture x run.
  *
  * Excluded from `npm run ci`: this file's name doesn't match vitest's
  * default *.test.ts/*.spec.ts glob, so it's never picked up as a test, and
@@ -24,17 +30,20 @@
  * "excluded from ci" means never executed automatically, not never
  * typechecked.
  *
- * Usage (from packages/readiness): npm run narrative:smoke
+ * Usage (from packages/readiness):
+ *   npm run narrative:smoke                 # 1 run per fixture (default)
+ *   npm run narrative:smoke -- --runs 3      # 3 runs per fixture
  * Requires ANTHROPIC_API_KEY in .env or the shell environment -- prints a
  * message and exits 0 (not a failure) if it's unset.
  *
- * Token/cost output: per-fixture and total input/output token counts are
- * always printed. An estimated-cost line is printed only when BOTH
- * NARRATIVE_INPUT_COST_PER_MTOK and NARRATIVE_OUTPUT_COST_PER_MTOK (USD per
- * million tokens) are set -- this script does not hardcode a price table,
- * since published rates change independently of this code.
+ * Token/cost output: per-fixture-per-run and grand-total input/output token
+ * counts are always printed. An estimated-cost line is printed only when
+ * BOTH NARRATIVE_INPUT_COST_PER_MTOK and NARRATIVE_OUTPUT_COST_PER_MTOK
+ * (USD per million tokens) are set -- this script does not hardcode a
+ * price table, since published rates change independently of this code.
  */
 
+import { parseArgs } from 'node:util';
 import { AnthropicNarrativeModelClient } from '../src/report/anthropicNarrativeModelClient.js';
 import { buildFromFixture } from '../src/report/buildFromFixture.js';
 import { loadEnvFileIfPresent } from '../src/report/envFile.js';
@@ -51,12 +60,22 @@ interface Usage {
 
 interface FixtureOutcome {
   readonly fixture: FixtureName;
+  readonly runIndex: number;
   readonly kind: 'ok' | 'transport' | 'grounding';
   readonly reasons: readonly string[];
   readonly usage?: Usage;
 }
 
-async function runFixture(client: AnthropicNarrativeModelClient, fixture: FixtureName): Promise<FixtureOutcome> {
+function parseRunsArg(): number {
+  const { values } = parseArgs({ options: { runs: { type: 'string', default: '1' } } });
+  const runs = Number(values.runs);
+  if (!Number.isInteger(runs) || runs < 1) {
+    throw new Error(`--runs must be a positive integer, got "${values.runs}"`);
+  }
+  return runs;
+}
+
+async function runFixture(client: AnthropicNarrativeModelClient, fixture: FixtureName, runIndex: number): Promise<FixtureOutcome> {
   const data = await buildFromFixture(fixture);
   const promptInput = buildNarrativePromptInput(data);
 
@@ -66,6 +85,7 @@ async function runFixture(client: AnthropicNarrativeModelClient, fixture: Fixtur
   } catch (error) {
     return {
       fixture,
+      runIndex,
       kind: 'transport',
       reasons: [error instanceof Error ? error.message : String(error)],
     };
@@ -75,13 +95,17 @@ async function runFixture(client: AnthropicNarrativeModelClient, fixture: Fixtur
   if (!grounding.ok) {
     return {
       fixture,
+      runIndex,
       kind: 'grounding',
-      reasons: grounding.failures.map((f) => `claim ${f.claimIndex}: ${f.reason}`),
+      reasons: grounding.failures.map((f) => {
+        const claimText = response.claims[f.claimIndex]?.text ?? '(claim text unavailable)';
+        return `claim ${f.claimIndex} ["${claimText}"]: ${f.reason}`;
+      }),
       usage: response.usage,
     };
   }
 
-  return { fixture, kind: 'ok', reasons: [], usage: response.usage };
+  return { fixture, runIndex, kind: 'ok', reasons: [], usage: response.usage };
 }
 
 function formatUsage(usage: Usage | undefined): string {
@@ -109,6 +133,8 @@ function maybeCostLine(totalInputTokens: number, totalOutputTokens: number): str
 }
 
 async function main(): Promise<void> {
+  const runs = parseRunsArg();
+
   await loadEnvFileIfPresent();
   if (!process.env['ANTHROPIC_API_KEY']) {
     console.log('ANTHROPIC_API_KEY not set (checked .env and the shell environment) -- skipping narrative smoke run.');
@@ -117,32 +143,46 @@ async function main(): Promise<void> {
 
   const client = new AnthropicNarrativeModelClient();
   const outcomes: FixtureOutcome[] = [];
-  for (const fixture of FIXTURE_NAMES) {
-    outcomes.push(await runFixture(client, fixture));
+  for (let runIndex = 1; runIndex <= runs; runIndex++) {
+    for (const fixture of FIXTURE_NAMES) {
+      const outcome = await runFixture(client, fixture, runIndex);
+      outcomes.push(outcome);
+
+      const label = runs > 1 ? `[run ${runIndex}/${runs}] ${outcome.fixture}` : outcome.fixture;
+      console.log(`${label}: ${formatStatus(outcome.kind)}  [usage: ${formatUsage(outcome.usage)}]`);
+      for (const reason of outcome.reasons) {
+        console.log(`  - ${reason}`);
+      }
+    }
   }
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   for (const outcome of outcomes) {
-    console.log(`${outcome.fixture}: ${formatStatus(outcome.kind)}  [usage: ${formatUsage(outcome.usage)}]`);
-    for (const reason of outcome.reasons) {
-      console.log(`  - ${reason}`);
-    }
     if (outcome.usage) {
       totalInputTokens += outcome.usage.inputTokens;
       totalOutputTokens += outcome.usage.outputTokens;
     }
   }
 
+  console.log('');
+  if (runs > 1) {
+    for (const fixture of FIXTURE_NAMES) {
+      const forFixture = outcomes.filter((o) => o.fixture === fixture);
+      const passed = forFixture.filter((o) => o.kind === 'ok').length;
+      console.log(`${fixture}: ${passed}/${runs} passed`);
+    }
+    console.log('');
+  }
+
   const groundingFallbacks = outcomes.filter((o) => o.kind === 'grounding').length;
   const transportFailures = outcomes.filter((o) => o.kind === 'transport').length;
   const groundingRate = groundingFallbacks / outcomes.length;
 
-  console.log('');
   console.log(
     `Grounding fallback rate: ${(groundingRate * 100).toFixed(0)}% (${groundingFallbacks}/${outcomes.length})` +
       (groundingRate > GROUNDING_FALLBACK_THRESHOLD
-        ? ' -- ABOVE the ~20% escalation threshold (decision 4); consider switching NARRATIVE_MODEL\'s default to claude-sonnet-5.'
+        ? " -- ABOVE the ~20% escalation threshold (decision 4); consider switching NARRATIVE_MODEL's default to claude-sonnet-5."
         : ' -- within the ~20% escalation threshold.'),
   );
   console.log(`Transport failures: ${transportFailures}/${outcomes.length} (not counted toward the escalation threshold above)`);
