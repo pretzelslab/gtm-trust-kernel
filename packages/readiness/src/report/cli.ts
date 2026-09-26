@@ -17,48 +17,18 @@
  */
 
 import { parseArgs } from 'node:util';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import { loadSalesforceConfigFromEnv, SalesforceAdapter } from '@gtm-trust-kernel/adapters/salesforce.js';
-import { FIXTURE_NAMES, MOCK_ORG_FIXTURES, type FixtureName } from '../fixtures/mockOrgs.js';
+import { FIXTURE_NAMES, type FixtureName } from '../fixtures/mockOrgs.js';
+import { buildFromFixture } from './buildFromFixture.js';
+import { loadEnvFileIfPresent } from './envFile.js';
 import { buildReportData, type ReportData } from './buildReport.js';
 import { renderComparisonHtml, renderReportHtml } from './render.js';
 import { renderPlainReportHtml } from './plainReport.js';
 
 function isFixtureName(name: string): name is FixtureName {
   return (FIXTURE_NAMES as readonly string[]).includes(name);
-}
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-
-/**
- * Minimal KEY=VALUE .env loader — no dotenv dependency, per this feature's
- * "no new dependencies" scope. Never overrides a var already set in the
- * shell environment. Silently no-ops if .env doesn't exist.
- */
-async function loadEnvFileIfPresent(): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readFile(path.join(REPO_ROOT, '.env'), 'utf8');
-  } catch {
-    return;
-  }
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (key && !(key in process.env)) {
-      process.env[key] = value;
-    }
-  }
 }
 
 async function buildLive(): Promise<ReportData> {
@@ -69,19 +39,6 @@ async function buildLive(): Promise<ReportData> {
     orgLabel: 'Live Salesforce org',
     orgDescription: adapter.orgId,
     asOf: new Date().toISOString(),
-  });
-}
-
-async function buildOne(name: FixtureName): Promise<ReportData> {
-  const fixture = MOCK_ORG_FIXTURES[name];
-  const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
-  const secondSourceAdapter = fixture.secondSource
-    ? new MockSecondSourceAdapter(fixture.secondSource.data, fixture.secondSource.capabilities)
-    : undefined;
-  return buildReportData(adapter, secondSourceAdapter, {
-    orgLabel: fixture.label,
-    orgDescription: fixture.description,
-    asOf: fixture.asOf,
   });
 }
 
@@ -137,7 +94,7 @@ async function main(): Promise<void> {
   if (values.all) {
     const datas: ReportData[] = [];
     for (const name of FIXTURE_NAMES) {
-      datas.push(await buildOne(name));
+      datas.push(await buildFromFixture(name));
     }
     const html = renderComparisonHtml(datas);
     await writeHtml(outDir, `report-all-${timestamp}.html`, 'latest-all.html', html);
@@ -154,7 +111,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const data = await buildOne(fixtureArg);
+  const data = await buildFromFixture(fixtureArg);
   const html = renderReportHtml(data);
   await writeHtml(outDir, `report-${timestamp}.html`, 'latest.html', html);
   const plainHtml = renderPlainReportHtml(data);

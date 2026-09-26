@@ -30,9 +30,16 @@ export interface NarrativeClaim {
   readonly groundedIn: readonly (MetricId | CapabilityId)[];
 }
 
+/** Token usage for one generate() call. Optional -- FakeNarrativeModelClient callers have no real usage to report. */
+export interface NarrativeModelUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}
+
 /** The model's raw structured response, before grounding validation. */
 export interface NarrativeModelResponse {
   readonly claims: readonly NarrativeClaim[];
+  readonly usage?: NarrativeModelUsage;
 }
 
 /**

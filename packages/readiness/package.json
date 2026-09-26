@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Readiness assessment: scored CRM data-health diagnostic. Not yet built.",
   "dependencies": {
+    "@anthropic-ai/sdk": "0.128.0",
     "@gtm-trust-kernel/adapters": "*",
     "tldts": "7.4.13"
   },
@@ -14,6 +15,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "report": "tsx src/report/cli.ts"
+    "report": "tsx src/report/cli.ts",
+    "narrative:smoke": "tsx scripts/narrativeSmoke.ts"
   }
 }
