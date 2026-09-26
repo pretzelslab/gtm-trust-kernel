@@ -141,3 +141,108 @@ export function winRateDispersionGateOffFixture(): CoverageSample {
 export function winRateDispersionNoEligibleFixture(): CoverageSample {
   return coverageSample([closedOpportunity('opp-1', true), closedOpportunity('opp-2', false)], new Map());
 }
+
+/**
+ * Builds one opportunity's stage-history entries from an ordered list of
+ * intermediate stages it passed through before closing — the multi-hop
+ * shape every real org's stage history actually has (STATUS.md's "Known
+ * Gaps": until this fixture, only `generateHealthy()` exercised it; every
+ * fixture above gives each opportunity exactly one entry).
+ */
+function multiHopEntries(opportunityId: string, stages: readonly StageHistoryEntry['toStage'][]): StageHistoryEntry[] {
+  return stages.map((stage, i) => stageEntry(`sh-${opportunityId}-${i}`, opportunityId, stage));
+}
+
+/**
+ * Multi-hop, high dispersion: 10 opportunities, each passing through 2
+ * adjacent stages (discovery->proposal, or proposal->negotiation) rather
+ * than a single stage. 5 discovery->proposal deals all won; 5
+ * proposal->negotiation deals all lost. discovery: 5/5 won (rate 1.0);
+ * negotiation: 0/5 won (rate 0.0); proposal, fed by both groups: 5/10 won
+ * (rate 0.5). winRates [1.0, 0.5, 0.0]: this is the maximum-variance
+ * 3-point configuration bounded to [0, 1] with mean 0.5 (push two points to
+ * the opposite bounds, the third makes the mean work) -> standardDeviation
+ * sqrt(1/6) ~= 0.4082, the highest this metric can read for 3 qualifying
+ * stages centered at a 0.5 mean win rate.
+ */
+export function winRateDispersionMultiHopHighFixture(): CoverageSample {
+  const opportunities: Opportunity[] = [];
+  const changes = new Map<string, readonly StageHistoryEntry[]>();
+  for (let i = 0; i < 5; i++) {
+    const id = `early-won-${i}`;
+    opportunities.push(closedOpportunity(id, true));
+    changes.set(id, multiHopEntries(id, ['discovery', 'proposal']));
+  }
+  for (let i = 0; i < 5; i++) {
+    const id = `late-lost-${i}`;
+    opportunities.push(closedOpportunity(id, false));
+    changes.set(id, multiHopEntries(id, ['proposal', 'negotiation']));
+  }
+  return coverageSample(opportunities, changes);
+}
+
+export const WIN_RATE_DISPERSION_MULTI_HOP_HIGH_EXPECTED = { value: Math.sqrt(1 / 6), sampleSize: 10 };
+
+/**
+ * Multi-hop, low (zero) dispersion: same two-stage-chain shape as the high
+ * fixture above, but each group is an even 50/50 split. discovery: 3/6 won
+ * (rate 0.5); proposal, fed by both groups: 6/12 won (rate 0.5);
+ * negotiation: 3/6 won (rate 0.5). All three stages read exactly the same
+ * rate -> standardDeviation exactly 0, proving pipeline stage carries zero
+ * predictive signal in this org, not just "some" signal.
+ */
+export function winRateDispersionMultiHopLowFixture(): CoverageSample {
+  const opportunities: Opportunity[] = [];
+  const changes = new Map<string, readonly StageHistoryEntry[]>();
+  const groupAOutcomes = [true, true, true, false, false, false];
+  const groupBOutcomes = [true, true, true, false, false, false];
+  groupAOutcomes.forEach((won, i) => {
+    const id = `chainA-${i}`;
+    opportunities.push(closedOpportunity(id, won));
+    changes.set(id, multiHopEntries(id, ['discovery', 'proposal']));
+  });
+  groupBOutcomes.forEach((won, i) => {
+    const id = `chainB-${i}`;
+    opportunities.push(closedOpportunity(id, won));
+    changes.set(id, multiHopEntries(id, ['proposal', 'negotiation']));
+  });
+  return coverageSample(opportunities, changes);
+}
+
+export const WIN_RATE_DISPERSION_MULTI_HOP_LOW_EXPECTED = { value: 0, sampleSize: 12 };
+
+/**
+ * Degenerate multi-hop shape: one opportunity's stage history revisits an
+ * earlier stage (discovery -> proposal -> discovery, e.g. a real CRM
+ * "stage regression"), so `entries.map(e => e.toStage)` contains
+ * 'discovery' twice for this single deal. Locks in that `winRateDispersion`
+ * dedupes per-opportunity stage visits (its `stagesVisited` Set) rather
+ * than counting the same closed deal twice within one stage's tally: 4
+ * discovery-only opportunities (2 won/2 lost) plus this one won revisiting
+ * opportunity puts discovery at 3/5 won (rate 0.6); 4 proposal-only
+ * opportunities (2 won/2 lost) plus the same opportunity's single proposal
+ * visit puts proposal at 3/5 won (rate 0.6) too -> standardDeviation
+ * exactly 0. Without the dedup, the revisiting opportunity would count
+ * twice toward discovery's total (6 instead of 5), giving discovery a rate
+ * of 4/6 != proposal's 3/5 and a nonzero, wrong dispersion value instead.
+ */
+export function winRateDispersionRevisitedStageFixture(): CoverageSample {
+  const opportunities: Opportunity[] = [];
+  const changes = new Map<string, readonly StageHistoryEntry[]>();
+  [true, false, true, false].forEach((won, i) => {
+    const id = `disc-only-${i}`;
+    opportunities.push(closedOpportunity(id, won));
+    changes.set(id, multiHopEntries(id, ['discovery']));
+  });
+  [true, false, true, false].forEach((won, i) => {
+    const id = `prop-only-${i}`;
+    opportunities.push(closedOpportunity(id, won));
+    changes.set(id, multiHopEntries(id, ['proposal']));
+  });
+  const revisitId = 'revisits-discovery';
+  opportunities.push(closedOpportunity(revisitId, true));
+  changes.set(revisitId, multiHopEntries(revisitId, ['discovery', 'proposal', 'discovery']));
+  return coverageSample(opportunities, changes);
+}
+
+export const WIN_RATE_DISPERSION_REVISITED_STAGE_EXPECTED = { value: 0, sampleSize: 9 };

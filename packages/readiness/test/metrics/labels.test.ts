@@ -18,12 +18,18 @@ import {
   WIN_RATE_DISPERSION_ASOF,
   WIN_RATE_DISPERSION_EXCLUDED_STAGE_EXPECTED,
   WIN_RATE_DISPERSION_EXPECTED,
+  WIN_RATE_DISPERSION_MULTI_HOP_HIGH_EXPECTED,
+  WIN_RATE_DISPERSION_MULTI_HOP_LOW_EXPECTED,
+  WIN_RATE_DISPERSION_REVISITED_STAGE_EXPECTED,
   winRateDispersionExcludedStageFixture,
   winRateDispersionFewerThanTwoStagesFixture,
   winRateDispersionFixture,
   winRateDispersionGateOffFixture,
+  winRateDispersionMultiHopHighFixture,
+  winRateDispersionMultiHopLowFixture,
   winRateDispersionNoEligibleFixture,
   winRateDispersionOnlyClosingTransitionFixture,
+  winRateDispersionRevisitedStageFixture,
 } from '../fixtures/win_rate_dispersion.js';
 
 describe('closedDealCountTwelveMonths', () => {
@@ -159,6 +165,42 @@ describe('winRateDispersion', () => {
       sampleSize: 0,
       lowConfidence: false,
       note: 'no closed opportunities in sample with a resolvable stage-history entry',
+    });
+  });
+
+  it('multi-hop, high dispersion: opportunities passing through 2 stages each read winRates [1.0, 0.5, 0.0], standardDeviation sqrt(1/6)', () => {
+    const result = winRateDispersion(winRateDispersionMultiHopHighFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_MULTI_HOP_HIGH_EXPECTED.value, 10);
+    expect({ ...result, value: undefined }).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'ok',
+      value: undefined,
+      sampleSize: WIN_RATE_DISPERSION_MULTI_HOP_HIGH_EXPECTED.sampleSize,
+      lowConfidence: true,
+    });
+  });
+
+  it('multi-hop, low dispersion: an even 50/50 split at every stage reads standardDeviation exactly 0 despite multi-stage transitions', () => {
+    const result = winRateDispersion(winRateDispersionMultiHopLowFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_MULTI_HOP_LOW_EXPECTED.value, 10);
+    expect({ ...result, value: undefined }).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'ok',
+      value: undefined,
+      sampleSize: WIN_RATE_DISPERSION_MULTI_HOP_LOW_EXPECTED.sampleSize,
+      lowConfidence: true,
+    });
+  });
+
+  it('degenerate multi-hop shape: a stage revisited twice by the same closed opportunity is deduped, not double-counted, within that stage\'s tally', () => {
+    const result = winRateDispersion(winRateDispersionRevisitedStageFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_REVISITED_STAGE_EXPECTED.value, 10);
+    expect({ ...result, value: undefined }).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'ok',
+      value: undefined,
+      sampleSize: WIN_RATE_DISPERSION_REVISITED_STAGE_EXPECTED.sampleSize,
+      lowConfidence: true,
     });
   });
 });
