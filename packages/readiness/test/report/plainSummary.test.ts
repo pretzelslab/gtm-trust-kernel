@@ -1,12 +1,50 @@
 import { describe, expect, it } from 'vitest';
 import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import { MOCK_ORG_FIXTURES, type FixtureName } from '../../src/fixtures/mockOrgs.js';
-import { buildReportData, type ReportData } from '../../src/report/buildReport.js';
+import { buildReportData, type ReportCapabilityRow, type ReportData } from '../../src/report/buildReport.js';
 import { PLAIN_CAPABILITY, buildExecutiveSummary, buildFullNarrative } from '../../src/report/plainSummary.js';
-import { THRESHOLDS } from '../../src/rubric.js';
+import { THRESHOLDS, type MetricId, type Verdict } from '../../src/rubric.js';
 
 const METRIC_IDS = Object.keys(THRESHOLDS);
 const TIER_WORDS = [/\bviable\b/i, /\bdegraded\b/i, /\bblocked\b/i];
+
+/**
+ * Synthetic override, not a real fixture outcome: forces exactly 2 blocked
+ * capabilities (close_date_realism via D4 only, forecast_assistance via D7
+ * only — two distinct single-dimension reasons) on top of a real ReportData
+ * used only for shape (org/generatedAt/every other field). Deliberately
+ * decoupled from any real metric's computed value — in particular
+ * win_rate_dispersion's, once it ships — so these two "2-of-2 split"
+ * tie-break tests keep exercising that logic regardless of what any real
+ * fixture's real numbers happen to grade to on a given day.
+ */
+const TWO_BLOCKED_TIER_OVERRIDES: Readonly<Partial<Record<MetricId, Verdict>>> = {
+  close_date_fill_rate: 'viable',
+  past_due_close_date_rate: 'viable',
+  close_date_history_enabled: 'blocked',
+  stage_mapping_coverage: 'viable',
+  win_rate_dispersion: 'blocked',
+  closed_deal_count_12m: 'viable',
+  amount_fill_rate: 'viable',
+};
+
+function twoBlockedDifferentReasonsFixture(base: ReportData): ReportData {
+  const metrics = base.metrics.map((m) => {
+    const tier = TWO_BLOCKED_TIER_OVERRIDES[m.metric];
+    return tier ? { ...m, status: 'ok' as const, tier } : m;
+  });
+  // autonomous_writeback stays degraded, not folded into "everything else
+  // viable" — its fail-safe is excluded from aggregateReason's own
+  // majority count regardless (see plainSummary.ts's genuine/writebackFailSafe
+  // split), but the second test below still needs a real degraded fail-safe
+  // to exercise, matching its own guard.
+  const capabilities = base.capabilities.map((c): ReportCapabilityRow => {
+    if (c.id === 'close_date_realism' || c.id === 'forecast_assistance') return { ...c, verdict: 'blocked' };
+    if (c.id === 'autonomous_writeback') return { ...c, verdict: 'degraded' };
+    return { ...c, verdict: 'viable' };
+  });
+  return { ...base, metrics, capabilities };
+}
 
 function assertNoJargon(text: string): void {
   for (const pattern of TIER_WORDS) {
@@ -135,19 +173,14 @@ describe('buildExecutiveSummary', () => {
   });
 
   it('a 2-of-2 not-ready split with different reasons falls back to neutral wording (no arbitrary tie-break)', async () => {
-    const data = await buildFixture('healthy');
-    const notReadyIds = data.capabilities.filter((c) => c.verdict === 'blocked').map((c) => c.id);
-    // guard: this test relies on healthy's real blocked set being exactly these two, with
-    // genuinely different individual reasons (D4 vs D7) — see the per-capability breakdown.
+    const base = await buildFixture('healthy');
+    const synthetic = twoBlockedDifferentReasonsFixture(base);
+    const notReadyIds = synthetic.capabilities.filter((c) => c.verdict === 'blocked').map((c) => c.id);
+    // guard: confirms the synthetic override actually produced the intended
+    // 2-of-2 split with genuinely different reasons (D4 vs D7) before
+    // asserting on the tie-break behavior that depends on it.
     expect(notReadyIds.sort()).toEqual(['close_date_realism', 'forecast_assistance']);
 
-    // Neutralize the fail-safe capability so it doesn't join this bucket and change the split.
-    const synthetic: ReportData = {
-      ...data,
-      capabilities: data.capabilities.map((c) =>
-        c.id === 'autonomous_writeback' ? { ...c, verdict: 'viable' as const } : c,
-      ),
-    };
     const summary = buildExecutiveSummary(synthetic);
     const notReadySentence = sentencesOf(summary).find((s) => s.includes('not ready yet')) ?? '';
     expect(notReadySentence.startsWith("The data doesn't meet the quality bar")).toBe(true);
@@ -155,12 +188,13 @@ describe('buildExecutiveSummary', () => {
     expect(notReadySentence).not.toMatch(/^Not enough closed-deal/);
   });
 
-  it('does not tie the writeback fail-safe clause to a data-quality reason (mixed fixture: healthy)', async () => {
-    const data = await buildFixture('healthy');
-    const writeback = data.capabilities.find((c) => c.id === 'autonomous_writeback');
-    expect(writeback?.verdict).toBe('degraded'); // guard: fail-safe only meaningful if healthy still grades it degraded
+  it('does not tie the writeback fail-safe clause to a data-quality reason (synthetic: 2-of-2 blocked, different reasons)', async () => {
+    const base = await buildFixture('healthy');
+    const synthetic = twoBlockedDifferentReasonsFixture(base);
+    const writeback = synthetic.capabilities.find((c) => c.id === 'autonomous_writeback');
+    expect(writeback?.verdict).toBe('degraded'); // guard: the synthetic override sets this explicitly
 
-    const summary = buildExecutiveSummary(data);
+    const summary = buildExecutiveSummary(synthetic);
     const writebackClause = 'fully automatic CRM updates stay off until a person checks every change';
     const notReadySentence = sentencesOf(summary).find((s) => s.includes(writebackClause)) ?? '';
     expect(notReadySentence).not.toBe('');
@@ -173,9 +207,10 @@ describe('buildExecutiveSummary', () => {
     expect(clauseOnward).not.toContain('closed-deal');
     expect(clauseOnward).not.toContain('data');
 
-    // It also must not be counted into the aggregate reason's majority: healthy's two genuinely
-    // blocked capabilities (close_date_realism, forecast_assistance) split 1-1 on reason, which is
-    // not a majority of 2 — so the sentence must lead with neutral wording, not either specific one.
+    // It also must not be counted into the aggregate reason's majority: the synthetic fixture's two
+    // genuinely blocked capabilities (close_date_realism, forecast_assistance) split 1-1 on reason
+    // (D4 vs D7), which is not a majority of 2 — so the sentence must lead with neutral wording, not
+    // either specific one.
     expect(notReadySentence.startsWith("The data doesn't meet the quality bar")).toBe(true);
   });
 

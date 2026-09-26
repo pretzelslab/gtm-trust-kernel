@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ownerHistoryEnabled, stageHistoryMonths } from '../../src/metrics/history.js';
+import { closeDateHistoryEnabled, ownerHistoryEnabled, stageHistoryMonths } from '../../src/metrics/history.js';
 import { ownerHistoryEnabledFalseFixture, ownerHistoryEnabledTrueFixture } from '../fixtures/owner_history_enabled.js';
+import { closeDateHistoryEnabledFalseFixture, closeDateHistoryEnabledTrueFixture } from '../fixtures/close_date_history_enabled.js';
 import {
   STAGE_HISTORY_MONTHS_ASOF,
   STAGE_HISTORY_MONTHS_EXPECTED,
@@ -26,6 +27,30 @@ describe('ownerHistoryEnabled', () => {
     const result = ownerHistoryEnabled(ownerHistoryEnabledFalseFixture(), { asOf: STAGE_HISTORY_MONTHS_ASOF });
     expect(result).toEqual({
       metric: 'owner_history_enabled',
+      status: 'ok',
+      value: 0,
+      sampleSize: 0,
+      lowConfidence: false,
+    });
+  });
+});
+
+describe('closeDateHistoryEnabled', () => {
+  it('reports value 1 when AdapterCapabilities.closeDateHistory is true', () => {
+    const result = closeDateHistoryEnabled(closeDateHistoryEnabledTrueFixture(), { asOf: STAGE_HISTORY_MONTHS_ASOF });
+    expect(result).toEqual({
+      metric: 'close_date_history_enabled',
+      status: 'ok',
+      value: 1,
+      sampleSize: 0,
+      lowConfidence: false,
+    });
+  });
+
+  it('reports value 0 when AdapterCapabilities.closeDateHistory is false', () => {
+    const result = closeDateHistoryEnabled(closeDateHistoryEnabledFalseFixture(), { asOf: STAGE_HISTORY_MONTHS_ASOF });
+    expect(result).toEqual({
+      metric: 'close_date_history_enabled',
       status: 'ok',
       value: 0,
       sampleSize: 0,

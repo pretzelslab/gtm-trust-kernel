@@ -23,7 +23,7 @@ import {
 } from '../metrics/coverage.js';
 import { medianDaysSinceModified, pastDueCloseDateRate } from '../metrics/freshness.js';
 import { stageActivityContradictionRate, roundAmountRate, stageMappingCoverage, duplicateAccountRate } from '../metrics/consistency.js';
-import { ownerHistoryEnabled, stageHistoryMonths } from '../metrics/history.js';
+import { closeDateHistoryEnabled, ownerHistoryEnabled, stageHistoryMonths } from '../metrics/history.js';
 import { accountResolutionRate, activityAttributionRate, contactIdentityResolutionRate, temporalAnomalyRate } from '../metrics/joinability.js';
 import { medianNoteLengthChars, piiDensity, substantiveNoteRate, untrustedTextRatio } from '../metrics/textSubstrate.js';
 import { closedDealCountTwelveMonths, outcomeEvidenceRetentionRate } from '../metrics/labels.js';
@@ -118,6 +118,7 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
   round_amount_rate: roundAmountRate,
   owner_history_enabled: ownerHistoryEnabled,
   stage_history_months: stageHistoryMonths,
+  close_date_history_enabled: closeDateHistoryEnabled,
   contact_identity_resolution_rate: contactIdentityResolutionRate,
   account_resolution_rate: accountResolutionRate,
   activity_attribution_rate: activityAttributionRate,
@@ -131,8 +132,6 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
 };
 
 const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
-  close_date_history_enabled:
-    'Deferred: no adapter capability exists yet for Close Date field history (docs/STATUS.md).',
   median_next_step_age_days:
     'Deferred: no adapter can report a per-field "Next Step last changed" timestamp yet; needs a nextStepHistory capability (docs/STATUS.md).',
   win_rate_dispersion:

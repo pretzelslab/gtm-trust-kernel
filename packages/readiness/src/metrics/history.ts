@@ -1,8 +1,5 @@
 /**
  * D4 history depth metrics. See docs/metric-definitions.md, section D4.
- *
- * close_date_history_enabled is not implemented here — deferred, no
- * adapter capability exists for it yet. See docs/STATUS.md.
  */
 
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
@@ -29,6 +26,29 @@ export function ownerHistoryEnabled(sample: CoverageSample, _config: MetricConfi
     metric: 'owner_history_enabled',
     status: 'ok',
     value: sample.capabilities.ownerHistory ? 1 : 0,
+    sampleSize: 0,
+    lowConfidence: false,
+  };
+}
+
+/**
+ * Pure capability check, identical shape to ownerHistoryEnabled above —
+ * reports AdapterCapabilities.closeDateHistory as-is. Always 'ok': the
+ * capability read itself IS the metric.
+ *
+ * Note this reads differently across adapters than ownerHistoryEnabled
+ * despite the identical code shape: on Salesforce, closeDateHistory is
+ * statically true (backed by the always-on OpportunityHistory object),
+ * while ownerHistory is statically false (genuinely needs the admin-gated
+ * Field History Tracking feature) — see docs/metric-definitions.md's
+ * close_date_history_enabled entry for the evidence. This function doesn't
+ * need to know why; it just reports the capability matrix's answer.
+ */
+export function closeDateHistoryEnabled(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  return {
+    metric: 'close_date_history_enabled',
+    status: 'ok',
+    value: sample.capabilities.closeDateHistory ? 1 : 0,
     sampleSize: 0,
     lowConfidence: false,
   };
