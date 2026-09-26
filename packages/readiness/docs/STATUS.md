@@ -533,6 +533,15 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
+- **Phase E (LLM narrative pass, `report/narrative.ts`) has a draft plan,
+  not yet built: see `docs/narrative-design.md`.** Covers the model-calling
+  layer, why it doesn't need the `UntrustedEnvelope`/`TrustTier` machinery,
+  the grounding checks (id citation, tier-word match, numeric tolerance),
+  the whole-narrative-discard fallback rule and its visible-to-the-reader
+  requirement, the model-selection escalation rule, and a 5-commit
+  breakdown starting with a free-text-verification gate. Per `CLAUDE.md`
+  rule 4, each commit still needs its own plan-and-wait pass before
+  writing — this note is the agreed shape, not a green light to build.
 - **Superseded, 2026-09-26: all seven dimensions (D1–D7) are now fully
   implemented, zero deferred metrics.** The bullet that used to sit here
   described D2/D4/D7 each carrying one metric blocked on a new adapter
