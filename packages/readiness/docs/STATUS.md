@@ -18,7 +18,16 @@ repeated here.
 
 ---
 
-## Status as of 2026-09-21
+## Status as of 2026-09-26
+
+**Zero deferred metrics.** All seven dimensions (D1–D7) are fully implemented
+— the three that were still open as of 2026-09-21
+(`median_next_step_age_days`, `close_date_history_enabled`,
+`win_rate_dispersion`) shipped this session via the bundled
+adapter-contract change (`getStageHistoryByOpportunity`/`nextStepHistory`/
+`closeDateHistory`, `9a0d823`/`b9ba754`), then the three metric commits
+(`5935dd1`, `706916b`, `5dba202`). `buildReport.test.ts`'s deferral test now
+asserts the deferred set is empty.
 
 | Metric group | State | Commit |
 |---|---|---|
@@ -26,16 +35,16 @@ repeated here.
 | D1 `owner_id_fill_rate` | Done, tested. **Report-only** — not wired into any `CapabilitySpec`'s gates | this session, see git log |
 | D2 `median_days_since_modified` | Done, tested | `1590803` |
 | D2 `past_due_close_date_rate` | Done, tested | `1590803` |
-| D2 `median_next_step_age_days` | **Deferred** — not implemented | doc-only in `031ad35` |
+| D2 `median_next_step_age_days` | **Done, tested.** Unblocked 2026-09-26 (adapter-contract change), shipped | `706916b` |
 | D3 `stage_activity_contradiction_rate`, `round_amount_rate` | Done, tested | prior session, see git log |
 | D3 `stage_mapping_coverage`, `duplicate_account_rate` | **Done, tested.** D3 is now fully implemented (all 4 metrics) | this session ("D3 part 2b"), see git log |
 | D4 `owner_history_enabled`, `stage_history_months` | Done, tested | this session ("D4 part 1"), see git log |
-| D4 `close_date_history_enabled` | **Deferred** — not implemented | doc-only, this session |
+| D4 `close_date_history_enabled` | **Done, tested.** Root cause corrected (Salesforce's `OpportunityHistory` snapshots Close Date unconditionally) — statically `true` on `SalesforceAdapter` | `5935dd1` |
 | D5 part 1: `SecondSourceAdapter` contract + `MockSecondSourceAdapter` + fixtures | Done, tested. **No D5 metric code** — adapter/mock/contract-test/fixture scaffolding only | this session ("D5 part 1"), see git log |
 | D5 part 2a: joinability orchestration (independent second-source sampling, hashing at ingestion, contact/account resolution) | Done, tested | prior session ("D5 part 2a"), see git log |
 | D5 part 2b: the 4 D5 metrics + `buildReportData`/`cli.ts`/`--json` wiring | **Done, tested. D5 is now fully implemented** — all 4 metrics live in the report, no longer greyed out | this session ("D5 part 2b"), see git log |
 | D6 (4 metrics), D7's `closed_deal_count_12m`/`outcome_evidence_retention_rate` | **Done, tested.** Scoped and locked in `metric-definitions.md`, then implemented in 3 phases (CoverageSample plumbing, the 6 metric functions, fixture support) — all 6 live in the report, no longer greyed out | this session ("D6/D7 phase 1/2/3"), see git log |
-| D7 `win_rate_dispersion` | **Deferred** — blocked on a new adapter method (per-opportunity stage history), bundled with the two D2/D4 deferrals below into one adapter-contract change | doc-only, this session |
+| D7 `win_rate_dispersion` | **Done, tested.** Last of the 3-metric bundle — see "Known Gaps" for its single-real-fixture caveat | `5dba202` |
 
 `notesByOpportunity`/`activitiesByOpportunity` hydration — the gap flagged
 when the visual report shipped (`note_coverage_rate`,
@@ -452,9 +461,19 @@ metric's own computed value there.
   fixtures + internal docs leak into the tarball (no `files` allowlist).
   Full packaging plan required before public release.
 
----
+- **`win_rate_dispersion` has exactly one real-fixture witness.** By
+  design, only `generateHealthy()` was given the multi-hop stage-history
+  data this metric needs (`5dba202`) — `fresh`/`volume` read
+  `not_applicable` and `legacy` reads `not_instrumented`, none of which
+  exercises the actual dispersion computation (the per-stage win-rate
+  split, the closed-stage exclusion, the <5-closed-opps/<2-remaining-
+  stages boundaries). `healthy`'s one real value (0.203, degraded) is the
+  only end-to-end evidence this logic is correct against fixture data
+  shaped like a real org; every other case it handles is currently proven
+  only by `test/fixtures/win_rate_dispersion.ts`'s synthetic
+  `CoverageSample` literals, not a real report run.
 
-## Open questions, not yet resolved
+### Open questions / v0.2 backlog (not blocking)
 
 - **`round_amount_rate` and negative amounts.** Currently left in the
   denominator and evaluated by the same `% 1000 === 0` rule as any other
@@ -514,38 +533,26 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
-- **D1, D3, D5 are fully implemented as of this session. D2 and D4 each
-  have one deferred metric** (2 of 3 done, not 3 of 3): D2's
-  `median_next_step_age_days` and D4's `close_date_history_enabled` are
-  both blocked on a new adapter capability (see the two "Deferred"
-  sections below) — neither is "complete," just as complete as v0.1 gets
-  without that cross-package change. D4's other two
-  (`owner_history_enabled`/`stage_history_months`) are done. **D5 is
-  done** (part 1: adapter/mock/contract/fixtures; part 2a:
-  sampling/hashing/resolution orchestration; part 2b, this session: the 4
-  metrics + report wiring), the only dimension besides D1/D3 with zero
-  deferrals. **D6 (4 metrics) and D7's 2 shippable metrics are now fully
-  implemented, this session** (`substantive_note_rate`,
-  `median_note_length_chars`, `pii_density`, `untrusted_text_ratio`,
-  `closed_deal_count_12m`, `outcome_evidence_retention_rate`) — scoped and
-  locked into `metric-definitions.md` first, then built in 3 phases (see
-  the D6/D7 narrative paragraph above), verified against real report runs,
-  `npm run ci` green at 286 tests. D7's `win_rate_dispersion` is deferred,
-  bundled into the same adapter-contract change as D2's
-  `median_next_step_age_days` and D4's `close_date_history_enabled` (see
-  "Deferred" sections below) — **every dimension in the original
-  seven-dimension scope now has either a shipped metric or an explicit,
-  bundled deferral; nothing in Phase C is unscoped.**
+- **Superseded, 2026-09-26: all seven dimensions (D1–D7) are now fully
+  implemented, zero deferred metrics.** The bullet that used to sit here
+  described D2/D4/D7 each carrying one metric blocked on a new adapter
+  capability — that capability shipped this session
+  (`getStageHistoryByOpportunity`/`nextStepHistory`/`closeDateHistory`,
+  `9a0d823`/`b9ba754`) and all three metrics followed (`5935dd1`,
+  `706916b`, `5dba202`). See the "Status as of 2026-09-26" table at the
+  top of this doc for the current per-dimension state; the historical
+  "Deferred: ..." sections below are kept as the record of *why* each was
+  blocked and how it was unblocked, not as current status.
 - **`GetSecondSourceRecordsResult.truncatedRefIds`'s always-empty field on
   `getContactsByRef`/`getAccountsByRef`** (see decisions above) — minor
   cleanup candidate, not blocking.
 - Whether `owner_id_fill_rate` should ever gate a capability in `rubric.ts`
   (currently report-only, by design, not oversight).
-- The bundled adapter-contract change blocking `median_next_step_age_days`
-  (D2), `close_date_history_enabled` (D4), and `win_rate_dispersion` (D7):
-  `nextStepHistory` capability, a `closeDateHistory`-shaped capability, and
-  `getStageHistoryByOpportunity(oppRefs)` — three additions to
-  `packages/adapters`, scoped together, none started.
+- ~~The bundled adapter-contract change blocking `median_next_step_age_days`
+  (D2), `close_date_history_enabled` (D4), and `win_rate_dispersion` (D7)~~
+  — **done, 2026-09-26**: `nextStepHistory` capability, `closeDateHistory`
+  capability, and `getStageHistoryByOpportunity(oppRefs)` all shipped
+  (`9a0d823`/`b9ba754`), followed by the three metrics themselves.
 - **`healthy`'s `outcome_evidence_retention_rate` used to read 0%
   (`tier: "blocked"`) — found while spot-checking D6/D7 phase 3, fixed this
   session.** Root cause was `generateHealthy()` (`src/fixtures/mockOrgs.ts`)
@@ -663,11 +670,9 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   (`round_amount_rate`, `stage_mapping_coverage` — see decisions above) —
   revisit if a third metric needs the same pattern, or if
   `duplicate_account_rate`'s heavier note turns out to need it sooner.
-- The three `duplicate_account_rate` open questions (beyond-first variant,
-  cross-TLD, regional shared-provider domains), the two D4 open questions
-  (`lowConfidence` hardcoding, dry-run budget), and one remaining
-  note/activity-hydration open question (dry-run budget not accounting
-  for `hydrateNotes`/`hydrateActivities`'s calls) — none blocking, all
-  deferred to v0.2 or later. `truncatedOpportunityIds` consumption
-  (`applyTruncationFloor`) and the mock's truncation-selection order are
-  both resolved now — see decisions above.
+- The v0.2-deferred, non-blocking items (duplicate-account-rate variants,
+  D4 `lowConfidence` hardcoding, dry-run budget gaps) are consolidated
+  under "Known Gaps" > "Open questions / v0.2 backlog", not repeated here.
+  `truncatedOpportunityIds` consumption (`applyTruncationFloor`) and the
+  mock's truncation-selection order are both resolved now — see decisions
+  above.
