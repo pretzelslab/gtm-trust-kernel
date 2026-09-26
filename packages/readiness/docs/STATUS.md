@@ -389,6 +389,25 @@ the same package — one plan-and-wait session, not three.
   repo yet calls a real model with it. Full redaction module is
   post-deadline scope, same as `narrative.ts` above.
 
+  **Resolved, 2026-09-25: this gap is closed by decision, not by building
+  `redact.ts`.** The bullet above was a code-review claim with no regression
+  test behind it. This session added one: `test/report/redactionCanary.test.ts`
+  seeds a distinct canary fragment into every text-bearing field of every
+  CRM and second-source record and asserts none of it survives into
+  `--json`, tabular HTML (fixture and live mode), plain HTML, the `--all`
+  comparison view, or console output during build/render — with a positive
+  control proving the canaries actually reach the hydrated `CoverageSample`
+  (and the second-source adapter's pre-hash output), not just the input
+  fixture. Findings from the one cold adversarial review that has been run
+  (commit `66d0553`) are now written up, ranked by severity, in
+  `docs/redaction-review.md`, per `claude/RUNBOOK.md` Step 10's format.
+  **Decision: `redact.ts`/`redact.test.ts` (per the original scope-doc
+  architecture) will not be built** — redaction is by construction (no
+  metric function or render surface ever carries raw record text), enforced
+  by the canary test rather than a scrub step. See
+  `claude/gtm-readiness-scope.md`'s decision log for the scope this
+  guarantee covers and the rule for extending it.
+
 - **npx packaging not built.** No `bin` entry, no compiled output,
   `@gtm-trust-kernel/adapters` unpublished (clean install fails), test
   fixtures + internal docs leak into the tarball (no `files` allowlist).
