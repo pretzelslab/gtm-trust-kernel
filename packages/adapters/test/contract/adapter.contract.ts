@@ -35,6 +35,8 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       const c = adapter.capabilities();
       expect(typeof c.stageHistory).toBe('boolean');
       expect(typeof c.ownerHistory).toBe('boolean');
+      expect(typeof c.closeDateHistory).toBe('boolean');
+      expect(typeof c.nextStepHistory).toBe('boolean');
       expect(typeof c.activitySync).toBe('boolean');
       expect(typeof c.incrementalSync).toBe('boolean');
       expect(['field', 'record', 'none']).toContain(c.writeGranularity);
@@ -47,10 +49,18 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       if (!c.stageHistory) {
         const page = await adapter.listStageHistory({ limit: 10 });
         expect(page.items).toHaveLength(0);
+        const oppRef = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: 'any-id' };
+        const byRef = await adapter.getStageHistoryByOpportunity([oppRef]);
+        expect(byRef.items).toHaveLength(0);
       }
       if (!c.ownerHistory) {
         const page = await adapter.listOwnerChanges({ limit: 10 });
         expect(page.items).toHaveLength(0);
+      }
+      if (!c.nextStepHistory) {
+        const oppRef = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: 'any-id' };
+        const byRef = await adapter.getNextStepHistoryByOpportunity([oppRef]);
+        expect(byRef.items).toHaveLength(0);
       }
     });
   });
@@ -293,6 +303,48 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       const result = await h.adapter.getNotesByOpportunity([oppRef]);
       expect(result.truncatedOpportunityIds instanceof Set).toBe(true);
       expect(result.truncatedOpportunityIds.size).toBe(0);
+    });
+  });
+
+  describe('batch history reads (stage history/next-step-changes by opportunity)', () => {
+    it('resolves stage history related to a known opportunity ref, when stageHistory is enabled', async () => {
+      const h = await make();
+      if (!h.adapter.capabilities().stageHistory) return;
+      const oppRef = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
+      const result = await h.adapter.getStageHistoryByOpportunity([oppRef]);
+      expect(result.items.length).toBeGreaterThan(0);
+      for (const entry of result.items) {
+        expect(entry.opportunityRef.id).toBe(h.knownOpportunityId);
+      }
+    });
+
+    it('returns nothing and consumes no quota for an empty refs array', async () => {
+      const { adapter } = await make();
+      const stageHistory = await adapter.getStageHistoryByOpportunity([]);
+      expect(stageHistory.items).toHaveLength(0);
+      expect(stageHistory.apiCallsConsumed).toBe(0);
+
+      const nextStepChanges = await adapter.getNextStepHistoryByOpportunity([]);
+      expect(nextStepChanges.items).toHaveLength(0);
+      expect(nextStepChanges.apiCallsConsumed).toBe(0);
+    });
+
+    it('returns no items rather than throwing for an unresolvable opportunity ref', async () => {
+      const { adapter } = await make();
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: 'no-such-opportunity-xyz' };
+      const stageHistory = await adapter.getStageHistoryByOpportunity([ref]);
+      expect(stageHistory.items).toHaveLength(0);
+      const nextStepChanges = await adapter.getNextStepHistoryByOpportunity([ref]);
+      expect(nextStepChanges.items).toHaveLength(0);
+    });
+
+    it('reports truncatedOpportunityIds as a set on both methods', async () => {
+      const h = await make();
+      const oppRef = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
+      const stageHistory = await h.adapter.getStageHistoryByOpportunity([oppRef]);
+      expect(stageHistory.truncatedOpportunityIds instanceof Set).toBe(true);
+      const nextStepChanges = await h.adapter.getNextStepHistoryByOpportunity([oppRef]);
+      expect(nextStepChanges.truncatedOpportunityIds instanceof Set).toBe(true);
     });
   });
 

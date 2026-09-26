@@ -14,6 +14,7 @@ import type {
   Account,
   Activity,
   Contact,
+  NextStepChange,
   Note,
   Opportunity,
   OwnerChange,
@@ -47,6 +48,7 @@ export interface MockOrgData {
   notes: Note[];
   stageHistory: StageHistoryEntry[];
   ownerChanges: OwnerChange[];
+  nextStepChanges: NextStepChange[];
 }
 
 export interface MockFaults {
@@ -80,6 +82,8 @@ export class MockAdapter implements CrmAdapter {
     return {
       stageHistory: true,
       ownerHistory: true,
+      closeDateHistory: true,
+      nextStepHistory: true,
       activitySync: true,
       incrementalSync: true,
       bulkRead: true,
@@ -92,6 +96,7 @@ export class MockAdapter implements CrmAdapter {
       childRecordBatchLimit: 200,
       notesPerOpportunityLimit: 200,
       activitiesPerOpportunityLimit: 200,
+      historyPerOpportunityLimit: 200,
       ...this.caps,
     };
   }
@@ -162,9 +167,10 @@ export class MockAdapter implements CrmAdapter {
     return { items: sorted, apiCallsConsumed: 1 };
   }
 
-  private getChildRecordsByOpportunity<T extends { relatedTo: readonly RecordRef[] }>(
+  private getChildRecordsByOpportunity<T>(
     allRecords: readonly T[],
     oppRefs: readonly RecordRef[],
+    matchesOpportunity: (item: T, oppId: string) => boolean,
     dateOf: (item: T) => string,
     perOpportunityLimit: number,
   ): GetChildRecordsResult<T> {
@@ -186,7 +192,7 @@ export class MockAdapter implements CrmAdapter {
     const truncatedOpportunityIds = new Set<string>();
 
     for (const oppId of dedupedIds) {
-      const related = allRecords.filter((item) => item.relatedTo.some((r) => r.objectType === 'opportunity' && r.id === oppId));
+      const related = allRecords.filter((item) => matchesOpportunity(item, oppId));
       const sorted = [...related].sort((a, b) => dateOf(a).localeCompare(dateOf(b)));
       if (sorted.length > perOpportunityLimit) {
         truncatedOpportunityIds.add(oppId);
@@ -203,16 +209,56 @@ export class MockAdapter implements CrmAdapter {
     return { items, truncatedOpportunityIds, apiCallsConsumed: 1 };
   }
 
+  private static matchesRelatedTo(item: { relatedTo: readonly RecordRef[] }, oppId: string): boolean {
+    return item.relatedTo.some((r) => r.objectType === 'opportunity' && r.id === oppId);
+  }
+
   async getNotesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Note>> {
-    return this.getChildRecordsByOpportunity(this.data.notes, oppRefs, (n) => n.createdAt, this.capabilities().notesPerOpportunityLimit);
+    return this.getChildRecordsByOpportunity(
+      this.data.notes,
+      oppRefs,
+      MockAdapter.matchesRelatedTo,
+      (n) => n.createdAt,
+      this.capabilities().notesPerOpportunityLimit,
+    );
   }
 
   async getActivitiesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Activity>> {
     return this.getChildRecordsByOpportunity(
       this.data.activities,
       oppRefs,
+      MockAdapter.matchesRelatedTo,
       (a) => a.occurredAt,
       this.capabilities().activitiesPerOpportunityLimit,
+    );
+  }
+
+  async getStageHistoryByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<StageHistoryEntry>> {
+    // Gated the same as listStageHistory, since both read the same
+    // underlying stageHistory capability — unlike getActivitiesByOpportunity,
+    // where activitySync governs interpretation, not read access.
+    if (!this.capabilities().stageHistory) {
+      return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
+    }
+    return this.getChildRecordsByOpportunity(
+      this.data.stageHistory,
+      oppRefs,
+      (s, oppId) => s.opportunityRef.id === oppId,
+      (s) => s.changedAt,
+      this.capabilities().historyPerOpportunityLimit,
+    );
+  }
+
+  async getNextStepHistoryByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<NextStepChange>> {
+    if (!this.capabilities().nextStepHistory) {
+      return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
+    }
+    return this.getChildRecordsByOpportunity(
+      this.data.nextStepChanges,
+      oppRefs,
+      (c, oppId) => c.opportunityRef.id === oppId,
+      (c) => c.changedAt,
+      this.capabilities().historyPerOpportunityLimit,
     );
   }
 

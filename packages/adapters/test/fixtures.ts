@@ -3,6 +3,7 @@ import type {
   Activity,
   Contact,
   EvidenceSet,
+  NextStepChange,
   Note,
   Opportunity,
   OwnerChange,
@@ -177,7 +178,15 @@ export function makeOrgData(): MockOrgData {
     },
   ];
 
-  return { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges };
+  const nextStepChanges: NextStepChange[] = [
+    {
+      ref: ref('next_step_change', 'nsc-1'),
+      opportunityRef: ref('opportunity', 'opp-1'),
+      changedAt: iso(5),
+    },
+  ];
+
+  return { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges, nextStepChanges };
 }
 
 export function makeMockAdapter(faults: MockFaults = {}) {

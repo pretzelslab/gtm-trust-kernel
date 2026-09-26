@@ -20,6 +20,8 @@ import type { CoverageSample } from '../../src/metrics/types.js';
 export const DEFAULT_TEST_CAPABILITIES: AdapterCapabilities = {
   stageHistory: true,
   ownerHistory: true,
+  closeDateHistory: true,
+  nextStepHistory: true,
   activitySync: true,
   incrementalSync: true,
   bulkRead: true,
@@ -32,6 +34,7 @@ export const DEFAULT_TEST_CAPABILITIES: AdapterCapabilities = {
   childRecordBatchLimit: 200,
   notesPerOpportunityLimit: 200,
   activitiesPerOpportunityLimit: 200,
+  historyPerOpportunityLimit: 200,
 };
 
 /**

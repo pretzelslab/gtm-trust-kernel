@@ -16,6 +16,7 @@ import type {
   Activity,
   Contact,
   CanonicalStage,
+  NextStepChange,
   Note,
   Opportunity,
   OwnerChange,
@@ -29,6 +30,25 @@ export interface AdapterCapabilities {
   readonly stageHistory: boolean;
   /** Can report owner change history. */
   readonly ownerHistory: boolean;
+  /**
+   * Can report a change history for the Close Date field, sufficient to
+   * detect slip. Not necessarily the same mechanism as stageHistory/
+   * ownerHistory: on Salesforce this is backed by the same always-on
+   * OpportunityHistory object as stageHistory (confirmed against docs and a
+   * live query — see docs/metric-definitions.md's close_date_history_enabled
+   * entry), not the admin-gated Field History Tracking feature that
+   * ownerHistory genuinely needs. Other adapters may need a different,
+   * genuinely gated mechanism — don't assume this one's availability
+   * pattern generalizes.
+   */
+  readonly closeDateHistory: boolean;
+  /**
+   * Can report a change history for the Next Step field (when it was last
+   * edited, not its value). Unlike closeDateHistory, Salesforce has no
+   * always-on equivalent for this field — it genuinely needs the
+   * admin-gated Field History Tracking feature, same as ownerHistory.
+   */
+  readonly nextStepHistory: boolean;
   /**
    * Auto-captures activities via email/calendar sync (e.g. Salesforce
    * Einstein Activity Capture), rather than relying on manual logging.
@@ -89,6 +109,18 @@ export interface AdapterCapabilities {
   readonly notesPerOpportunityLimit: number;
   /** Same contract as notesPerOpportunityLimit, for getActivitiesByOpportunity(). */
   readonly activitiesPerOpportunityLimit: number;
+  /**
+   * Max StageHistoryEntry/NextStepChange records returned per opportunity by
+   * a single getStageHistoryByOpportunity()/getNextStepHistoryByOpportunity()
+   * call. Shared by both methods, unlike notesPerOpportunityLimit/
+   * activitiesPerOpportunityLimit getting their own fields — those track
+   * potentially-large free-text collections; these two track small,
+   * inherently bounded history sequences (pipeline depth; Next Step edit
+   * count), the same "one shared field" reasoning childRecordBatchLimit
+   * already uses for ref-batch size. Same enforcement/truncation contract as
+   * notesPerOpportunityLimit where it applies (keep-newest, drop-oldest).
+   */
+  readonly historyPerOpportunityLimit: number;
 }
 
 export interface SyncWindow {
@@ -248,6 +280,26 @@ export interface CrmAdapter {
    * be readable even when activitySync is false.
    */
   getActivitiesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Activity>>;
+
+  /**
+   * Same by-ref batch shape as getNotesByOpportunity, for full per-opportunity
+   * stage-transition sequences (win_rate_dispersion needs every stage a
+   * closed deal passed through, not just listStageHistory's one org-wide
+   * earliest entry). Must return empty (not throw) when
+   * capabilities().stageHistory is false — same gate listStageHistory
+   * already has for this same capability. Unlike
+   * getActivitiesByOpportunity/activitySync, stageHistory already governs
+   * read access itself, not just interpretation of absence.
+   */
+  getStageHistoryByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<StageHistoryEntry>>;
+
+  /**
+   * Same by-ref batch shape as getNotesByOpportunity, for NextStepChange
+   * records (median_next_step_age_days needs the latest Next-Step change
+   * per sampled opportunity). Must return empty (not throw) when
+   * capabilities().nextStepHistory is false.
+   */
+  getNextStepHistoryByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<NextStepChange>>;
 
   /** Must return empty (not throw) when capabilities().stageHistory is false. */
   listStageHistory(w: SyncWindow): Promise<SyncPage<StageHistoryEntry>>;

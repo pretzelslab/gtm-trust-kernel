@@ -119,6 +119,8 @@ function makeSampleResult(overrides: Partial<Record<SampleStratum, readonly Oppo
 const CAPABILITIES: AdapterCapabilities = {
   stageHistory: true,
   ownerHistory: true,
+  closeDateHistory: true,
+  nextStepHistory: true,
   activitySync: true,
   incrementalSync: true,
   bulkRead: true,
@@ -131,6 +133,7 @@ const CAPABILITIES: AdapterCapabilities = {
   childRecordBatchLimit: 200,
   notesPerOpportunityLimit: 200,
   activitiesPerOpportunityLimit: 200,
+  historyPerOpportunityLimit: 200,
 };
 
 function makeAdapter(
@@ -150,6 +153,7 @@ function makeAdapter(
     notes,
     stageHistory,
     ownerChanges: [],
+    nextStepChanges: [],
   };
   return new MockAdapter(ORG, data, caps, faults);
 }

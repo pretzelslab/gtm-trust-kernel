@@ -88,6 +88,7 @@ function buildOrgData(perStratum: number): MockOrgData {
     notes: [],
     stageHistory: [],
     ownerChanges: [],
+    nextStepChanges: [],
   };
 }
 

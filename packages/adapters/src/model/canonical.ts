@@ -35,7 +35,8 @@ export type CanonicalObjectType =
   | 'note'
   | 'task'
   | 'stage_history'
-  | 'owner_change';
+  | 'owner_change'
+  | 'next_step_change';
 
 /**
  * Canonical pipeline stage. Adapters map vendor stage names onto this ladder
@@ -166,6 +167,21 @@ export interface OwnerChange {
   readonly subjectRef: RecordRef;
   readonly fromOwnerId?: string;
   readonly toOwnerId: string;
+  readonly changedAt: string;
+}
+
+/**
+ * One field-history change event on Opportunity.nextStep. Deliberately
+ * carries no text value (only when it changed, not what it changed to or
+ * from) — median_next_step_age_days only needs the latest changedAt per
+ * opportunity, and this keeps the type structurally incapable of leaking
+ * Next Step content, same reasoning StageHistoryEntry already has no free
+ * text field. See docs/metric-definitions.md's median_next_step_age_days
+ * entry.
+ */
+export interface NextStepChange {
+  readonly ref: RecordRef;
+  readonly opportunityRef: RecordRef;
   readonly changedAt: string;
 }
 

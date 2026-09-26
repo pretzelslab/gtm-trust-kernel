@@ -68,7 +68,7 @@ function makeData(): MockOrgData {
     },
   ];
 
-  return { accounts: [], opportunities, contacts: [], activities, notes, stageHistory: [], ownerChanges: [] };
+  return { accounts: [], opportunities, contacts: [], activities, notes, stageHistory: [], ownerChanges: [], nextStepChanges: [] };
 }
 
 describe('MockAdapter getNotesByOpportunity/getActivitiesByOpportunity truncation', () => {

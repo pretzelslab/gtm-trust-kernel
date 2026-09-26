@@ -217,6 +217,8 @@ function makeOwnerChange(orgId: string, id: string, subjectRef: RecordRef, toOwn
 const BASE_CAPABILITIES: AdapterCapabilities = {
   stageHistory: true,
   ownerHistory: true,
+  closeDateHistory: true,
+  nextStepHistory: true,
   activitySync: true,
   incrementalSync: true,
   bulkRead: true,
@@ -229,6 +231,7 @@ const BASE_CAPABILITIES: AdapterCapabilities = {
   childRecordBatchLimit: 200,
   notesPerOpportunityLimit: 200,
   activitiesPerOpportunityLimit: 200,
+  historyPerOpportunityLimit: 200,
 };
 
 // ---------------------------------------------------------------------------
@@ -450,7 +453,7 @@ function generateHealthy(): MockOrgFixture {
     description: 'Good field hygiene, full capability matrix, clean unique account domains.',
     asOf,
     capabilities: BASE_CAPABILITIES,
-    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges },
+    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges, nextStepChanges: [] },
     secondSource: {
       capabilities: { kind: 'engagement', hasContacts: true, hasAccounts: true, hasActivities: true },
       data: { contacts: secondSourceContacts, accounts: secondSourceAccounts, activities: secondSourceActivities },
@@ -530,7 +533,7 @@ function generateFresh(): MockOrgFixture {
     description: 'Newly onboarded org: healthy-quality data, but stage-history tracking was just turned on (zero entries retained yet).',
     asOf,
     capabilities: BASE_CAPABILITIES, // stageHistory: true, but data.stageHistory is empty below.
-    data: { accounts, opportunities, contacts, activities, notes, stageHistory: [], ownerChanges },
+    data: { accounts, opportunities, contacts, activities, notes, stageHistory: [], ownerChanges, nextStepChanges: [] },
     // secondSource intentionally omitted: this is D5's "no second source
     // connected" fixture — layers onto "newly onboarded" (a fresh org
     // hasn't connected one yet either), rather than adding a 4th fixture
@@ -646,7 +649,7 @@ function generateLegacy(): MockOrgFixture {
       bulkRead: false,
       accountBatchLimit: 50,
     },
-    data: { accounts, opportunities, contacts, activities: [], notes: [], stageHistory, ownerChanges },
+    data: { accounts, opportunities, contacts, activities: [], notes: [], stageHistory, ownerChanges, nextStepChanges: [] },
     secondSource: {
       capabilities: { kind: 'billing', hasContacts: true, hasAccounts: true, hasActivities: false },
       data: { contacts: secondSourceContacts, accounts: secondSourceAccounts, activities: [] },
@@ -734,7 +737,7 @@ function generateVolume(): MockOrgFixture {
     description: 'Ordinary field hygiene; exists solely to exceed the default per-stratum sample size on both closed strata (closed_deal_count_12m\'s floor path).',
     asOf,
     capabilities: BASE_CAPABILITIES,
-    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges: [] },
+    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges: [], nextStepChanges: [] },
     // No second source: this fixture's only job is the D7 floor path, not D5.
   };
 }
