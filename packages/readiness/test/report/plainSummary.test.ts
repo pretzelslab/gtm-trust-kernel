@@ -45,7 +45,7 @@ describe('buildExecutiveSummary', () => {
     expect(buildExecutiveSummary(data)).toBe(buildExecutiveSummary(data));
   });
 
-  it('produces 3-5 sentences and hits 5 for a fully mixed set (healthy: viable + degraded + blocked all present)', async () => {
+  it('produces 3-6 sentences and hits 6 for a fully mixed set (healthy: viable + degraded + blocked all present)', async () => {
     const data = await buildFixture('healthy');
     expect(data.org.capabilityVerdictCounts.viable).toBeGreaterThan(0);
     expect(data.org.capabilityVerdictCounts.degraded).toBeGreaterThan(0);
@@ -54,8 +54,8 @@ describe('buildExecutiveSummary', () => {
     assertNoJargon(summary);
     const count = sentencesOf(summary).length;
     expect(count).toBeGreaterThanOrEqual(3);
-    expect(count).toBeLessThanOrEqual(5);
-    expect(count).toBe(5); // ready + caution + not-ready + closing (2 sentences)
+    expect(count).toBeLessThanOrEqual(6);
+    expect(count).toBe(6); // ready(1) + caution(2 sentences) + not-ready(1) + closing(2)
   });
 
   it('produces 3 sentences when no capability is ready (legacy: all blocked)', async () => {
@@ -95,9 +95,11 @@ describe('buildExecutiveSummary', () => {
     expect(sentencesOf(summary).length).toBe(4);
   });
 
-  it('never places a degraded capability in the not-ready sentence', async () => {
+  it('never places a degraded, non-writeback capability in the not-ready sentence', async () => {
     const data = await buildFixture('healthy');
-    const degraded = data.capabilities.filter((c) => c.verdict === 'degraded');
+    // autonomous_writeback is the one deliberate exception (the fail-safe) — excluded here,
+    // covered separately below.
+    const degraded = data.capabilities.filter((c) => c.verdict === 'degraded' && c.id !== 'autonomous_writeback');
     expect(degraded.length).toBeGreaterThan(0); // guard: this test is only meaningful if healthy still has degraded capabilities
 
     const summary = buildExecutiveSummary(data);
@@ -107,11 +109,90 @@ describe('buildExecutiveSummary', () => {
       expect(notReadySentence).not.toContain(PLAIN_CAPABILITY[c.id]);
     }
 
-    // The caution sentence (the one that isn't the not-ready sentence and isn't the closing/opening)
-    // should be the one carrying each degraded capability's phrase instead.
+    // The caution sentence should be the one carrying each degraded capability's phrase instead.
     for (const c of degraded) {
       expect(summary).toContain(PLAIN_CAPABILITY[c.id]);
     }
+  });
+
+  it('a degraded autonomous_writeback is bucketed as not-ready (fail-safe), never ready or caution', async () => {
+    const data = await buildFixture('healthy');
+    const writeback = data.capabilities.find((c) => c.id === 'autonomous_writeback');
+    expect(writeback?.verdict).toBe('degraded'); // guard: this test is only meaningful if healthy still grades it degraded
+
+    const narrative = buildFullNarrative(data);
+    const expectedLabel = 'Fully automatic CRM updates with no human check';
+    expect(narrative.ready.some((c) => c.label === expectedLabel)).toBe(false);
+    expect(narrative.caution.some((c) => c.label === expectedLabel)).toBe(false);
+    const entry = narrative.notReady.find((c) => c.label === expectedLabel);
+    expect(entry).toBeDefined();
+    expect(entry!.outcome).toContain('AI should not write to the CRM without a person checking every change yet.');
+
+    // Same override applies to the executive summary: the phrase must not appear in the caution sentence.
+    const summary = buildExecutiveSummary(data);
+    const cautionSentence = sentencesOf(summary).find((s) => s.includes('treat the output with caution')) ?? '';
+    expect(cautionSentence).not.toContain(PLAIN_CAPABILITY.autonomous_writeback);
+  });
+
+  it('a 2-of-2 not-ready split with different reasons falls back to neutral wording (no arbitrary tie-break)', async () => {
+    const data = await buildFixture('healthy');
+    const notReadyIds = data.capabilities.filter((c) => c.verdict === 'blocked').map((c) => c.id);
+    // guard: this test relies on healthy's real blocked set being exactly these two, with
+    // genuinely different individual reasons (D4 vs D7) — see the per-capability breakdown.
+    expect(notReadyIds.sort()).toEqual(['close_date_realism', 'forecast_assistance']);
+
+    // Neutralize the fail-safe capability so it doesn't join this bucket and change the split.
+    const synthetic: ReportData = {
+      ...data,
+      capabilities: data.capabilities.map((c) =>
+        c.id === 'autonomous_writeback' ? { ...c, verdict: 'viable' as const } : c,
+      ),
+    };
+    const summary = buildExecutiveSummary(synthetic);
+    const notReadySentence = sentencesOf(summary).find((s) => s.includes('not ready yet')) ?? '';
+    expect(notReadySentence.startsWith("The data doesn't meet the quality bar")).toBe(true);
+    expect(notReadySentence).not.toMatch(/^Not enough history/);
+    expect(notReadySentence).not.toMatch(/^Not enough closed-deal/);
+  });
+
+  it('does not tie the writeback fail-safe clause to a data-quality reason (mixed fixture: healthy)', async () => {
+    const data = await buildFixture('healthy');
+    const writeback = data.capabilities.find((c) => c.id === 'autonomous_writeback');
+    expect(writeback?.verdict).toBe('degraded'); // guard: fail-safe only meaningful if healthy still grades it degraded
+
+    const summary = buildExecutiveSummary(data);
+    const writebackClause = 'fully automatic CRM updates stay off until a person checks every change';
+    const notReadySentence = sentencesOf(summary).find((s) => s.includes(writebackClause)) ?? '';
+    expect(notReadySentence).not.toBe('');
+
+    // Everything from the writeback clause onward must be exactly that fixed clause, carrying no
+    // data-quality vocabulary — it must never be presented as caused by a data problem.
+    const clauseOnward = notReadySentence.slice(notReadySentence.indexOf(writebackClause)).toLowerCase();
+    expect(clauseOnward).not.toContain('quality');
+    expect(clauseOnward).not.toContain('history');
+    expect(clauseOnward).not.toContain('closed-deal');
+    expect(clauseOnward).not.toContain('data');
+
+    // It also must not be counted into the aggregate reason's majority: healthy's two genuinely
+    // blocked capabilities (close_date_realism, forecast_assistance) split 1-1 on reason, which is
+    // not a majority of 2 — so the sentence must lead with neutral wording, not either specific one.
+    expect(notReadySentence.startsWith("The data doesn't meet the quality bar")).toBe(true);
+  });
+
+  it('collapses the wording when a bucket contains every capability', async () => {
+    const legacyData = await buildFixture('legacy');
+    const total = legacyData.capabilities.length;
+    expect(legacyData.capabilities.every((c) => c.verdict === 'blocked')).toBe(true); // guard
+
+    const noneReadySummary = buildExecutiveSummary(legacyData);
+    expect(noneReadySummary).toContain(`None of the ${total} AI-assisted sales tools are ready yet.`);
+
+    const allViable: ReportData = {
+      ...legacyData,
+      capabilities: legacyData.capabilities.map((c) => ({ ...c, verdict: 'viable' as const })),
+    };
+    const allReadySummary = buildExecutiveSummary(allViable);
+    expect(allReadySummary).toContain(`The data can support all ${total} AI-assisted sales tools.`);
   });
 
   it("all-ready output doesn't contradict itself (no approval-needed language)", async () => {

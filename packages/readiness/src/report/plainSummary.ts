@@ -85,13 +85,37 @@ const PLAIN_OUTCOME: Readonly<Record<CapabilityId, Readonly<Record<Verdict, stri
   autonomous_writeback: {
     viable:
       'The data is clean and trustworthy enough that AI writing to the CRM without a per-change human check could be considered — still worth extra caution before turning this on.',
-    degraded: 'AI should not yet write to the CRM without a person checking every change.',
+    // Fail-safe wording (see effectiveBucket): a degraded verdict here is still bucketed as
+    // Not ready, so this line must read as a not-ready line, not a caution line.
+    degraded: 'AI should not write to the CRM without a person checking every change yet.',
     blocked: 'AI should not write to the CRM without a person checking every change.',
   },
 };
 
 function capitalize(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+type Bucket = 'ready' | 'caution' | 'notReady';
+
+function isWritebackFailSafe(c: ReportCapabilityRow): boolean {
+  return c.id === 'autonomous_writeback' && c.verdict === 'degraded';
+}
+
+/**
+ * Fail-safe override, this plain layer only — does not touch rubric.ts or
+ * the tabular verdict, which both still show autonomous_writeback as
+ * "degraded" when that's what it graded as. Here, a degraded
+ * autonomous_writeback is bucketed as Not ready, never Usable with
+ * caution: "usable with caution" implies a human spot-checks some of the
+ * output, but for AI writing to the CRM, a human must check every change
+ * regardless of how close to viable the underlying data is.
+ */
+function effectiveBucket(c: ReportCapabilityRow): Bucket {
+  if (isWritebackFailSafe(c)) return 'notReady';
+  if (c.verdict === 'viable') return 'ready';
+  if (c.verdict === 'degraded') return 'caution';
+  return 'notReady';
 }
 
 function joinPlain(phrases: readonly string[]): string {
@@ -116,10 +140,11 @@ function notReadyReason(data: ReportData, capabilityId: CapabilityId): string {
 }
 
 /**
- * The blocked-bucket's aggregate reason: named only when at least half of
- * the not-ready capabilities share the same per-capability reason (see
- * notReadyReason); otherwise neutral wording, since naming one cause for a
- * genuinely mixed set of blockers would overstate what's actually known.
+ * The not-ready bucket's aggregate reason: named only when strictly more
+ * than half of its capabilities share the same per-capability reason (see
+ * notReadyReason); otherwise neutral wording. A tie (e.g. 1-of-2 each for
+ * two different reasons) does not qualify — "more than half" rules it out
+ * deliberately, rather than picking one arbitrarily.
  */
 function aggregateReason(data: ReportData, notReady: readonly ReportCapabilityRow[]): string {
   const reasons = notReady.map((c) => notReadyReason(data, c.id));
@@ -133,43 +158,68 @@ function aggregateReason(data: ReportData, notReady: readonly ReportCapabilityRo
       bestCount = count;
     }
   }
-  return bestCount / reasons.length >= 0.5 ? best : NEUTRAL_REASON;
+  return bestCount / reasons.length > 0.5 ? best : NEUTRAL_REASON;
 }
 
+/** The writeback fail-safe's own not-ready clause — deliberately not a data-quality claim (see below). */
+const WRITEBACK_NOT_READY_CLAUSE = 'fully automatic CRM updates stay off until a person checks every change';
+
 /**
- * 3-5 plain-English sentences for a sales-leader reader: no metric names,
+ * 3-6 plain-English sentences for a sales-leader reader: no metric names,
  * no tier labels ("viable"/"degraded"/"blocked" never appear). Three
- * buckets — ready (viable), usable with caution (degraded), not ready
- * (blocked) — each get at most one self-contained sentence, omitted when
- * that bucket is empty (1-3 sentences total there); a degraded capability
- * is never described as "not ready" (that word only appears in the
- * blocked-bucket sentence, which never lists a degraded capability). The
- * fixed closing line is itself two sentences, so the overall range is
- * 3 (one populated bucket + closing) to 5 (all three buckets + closing).
+ * buckets (see effectiveBucket) — ready, usable with caution, not ready —
+ * each get at most one sentence, omitted when empty (the caution sentence
+ * is two sentences on its own once populated); a degraded capability is
+ * never described as "not ready" EXCEPT autonomous_writeback, which the
+ * fail-safe always buckets as not ready when degraded — but it gets its
+ * own fixed clause there (WRITEBACK_NOT_READY_CLAUSE), never the aggregate
+ * data-quality reason: it isn't blocked because of a data problem, so
+ * `aggregateReason` only ever sees the genuinely-blocked capabilities,
+ * both for naming a reason and for the >50% majority count. When a bucket
+ * contains every capability, its sentence collapses to a fixed "all
+ * N"/"none of the N" line instead of enumerating. The fixed closing line
+ * is itself two sentences, so the overall range is 3 (one populated
+ * single-sentence bucket + closing) to 6 (all three buckets, caution's two
+ * sentences included, + closing).
  */
 export function buildExecutiveSummary(data: ReportData): string {
-  const ready = data.capabilities.filter((c) => c.verdict === 'viable');
-  const caution = data.capabilities.filter((c) => c.verdict === 'degraded');
-  const notReady = data.capabilities.filter((c) => c.verdict === 'blocked');
+  const total = data.capabilities.length;
+  const ready = data.capabilities.filter((c) => effectiveBucket(c) === 'ready');
+  const caution = data.capabilities.filter((c) => effectiveBucket(c) === 'caution');
+  const notReady = data.capabilities.filter((c) => effectiveBucket(c) === 'notReady');
 
   const sentences: string[] = [];
 
   if (ready.length > 0) {
-    sentences.push(`There is enough good-quality data to support ${joinPlain(ready.map((c) => PLAIN_CAPABILITY[c.id]))}.`);
+    sentences.push(
+      ready.length === total
+        ? `The data can support all ${total} AI-assisted sales tools.`
+        : `There is enough good-quality data to support ${joinPlain(ready.map((c) => PLAIN_CAPABILITY[c.id]))}.`,
+    );
   }
 
   if (caution.length > 0) {
     sentences.push(
-      `The data can also support ${joinPlain(caution.map((c) => PLAIN_CAPABILITY[c.id]))}, but treat the output with caution — it's thinner or less certain than ideal for now.`,
+      `The data can also support ${joinPlain(caution.map((c) => PLAIN_CAPABILITY[c.id]))}, but treat the output with caution. It's thinner or less certain than ideal for now.`,
     );
   }
 
   if (notReady.length > 0) {
-    const reason = aggregateReason(data, notReady);
-    const verb = notReady.length === 1 ? 'is' : 'are';
-    sentences.push(
-      `${capitalize(reason)} right now, so ${joinPlain(notReady.map((c) => PLAIN_CAPABILITY[c.id]))} ${verb} not ready yet.`,
-    );
+    if (notReady.length === total) {
+      sentences.push(`None of the ${total} AI-assisted sales tools are ready yet.`);
+    } else {
+      const writebackFailSafe = notReady.find(isWritebackFailSafe);
+      const genuine = notReady.filter((c) => !isWritebackFailSafe(c));
+
+      if (genuine.length > 0) {
+        const reason = aggregateReason(data, genuine);
+        const verb = genuine.length === 1 ? 'is' : 'are';
+        const base = `${capitalize(reason)} right now, so ${joinPlain(genuine.map((c) => PLAIN_CAPABILITY[c.id]))} ${verb} not ready yet`;
+        sentences.push(writebackFailSafe ? `${base}, and ${WRITEBACK_NOT_READY_CLAUSE}.` : `${base}.`);
+      } else if (writebackFailSafe) {
+        sentences.push(`${capitalize(WRITEBACK_NOT_READY_CLAUSE)}.`);
+      }
+    }
   }
 
   sentences.push("This report only reads your CRM data. It doesn't change anything.");
@@ -189,16 +239,23 @@ export interface FullNarrative {
   readonly notReady: readonly CapabilityOutcome[];
 }
 
-function outcomeFor(data: ReportData, c: ReportCapabilityRow): CapabilityOutcome {
+function outcomeFor(data: ReportData, c: ReportCapabilityRow, bucket: Bucket): CapabilityOutcome {
   const base = PLAIN_OUTCOME[c.id][c.verdict];
-  const outcome = c.verdict === 'viable' ? base : `${base} Right now, ${notReadyReason(data, c.id)}.`;
+  const outcome = bucket === 'ready' ? base : `${base} Right now, ${notReadyReason(data, c.id)}.`;
   return { label: capitalize(PLAIN_CAPABILITY[c.id]), outcome };
 }
 
 /** Full narrative for the plain HTML report: the executive summary, plus each capability's outcome grouped by bucket. */
 export function buildFullNarrative(data: ReportData): FullNarrative {
-  const ready = data.capabilities.filter((c) => c.verdict === 'viable').map((c) => outcomeFor(data, c));
-  const caution = data.capabilities.filter((c) => c.verdict === 'degraded').map((c) => outcomeFor(data, c));
-  const notReady = data.capabilities.filter((c) => c.verdict === 'blocked').map((c) => outcomeFor(data, c));
+  const ready: CapabilityOutcome[] = [];
+  const caution: CapabilityOutcome[] = [];
+  const notReady: CapabilityOutcome[] = [];
+  for (const c of data.capabilities) {
+    const bucket = effectiveBucket(c);
+    const outcome = outcomeFor(data, c, bucket);
+    if (bucket === 'ready') ready.push(outcome);
+    else if (bucket === 'caution') caution.push(outcome);
+    else notReady.push(outcome);
+  }
   return { summary: buildExecutiveSummary(data), ready, caution, notReady };
 }
