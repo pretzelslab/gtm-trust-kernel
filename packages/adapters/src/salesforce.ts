@@ -30,6 +30,7 @@ import type {
   Activity,
   CanonicalStage,
   Contact,
+  NextStepChange,
   Note,
   Opportunity,
   OpportunityContactLink,
@@ -352,6 +353,21 @@ export class SalesforceAdapter implements CrmAdapter {
       // this file's own design rule, rather than guessing and sometimes
       // throwing a schema error.
       ownerHistory: false,
+      // Backed by the same always-on OpportunityHistory object as
+      // stageHistory above, NOT the admin-gated Field History Tracking
+      // feature ownerHistory needs — verified against Salesforce docs and a
+      // live read-only query/describe against a real dev org: every change
+      // to Stage, Amount, Probability, or Close Date (individually) creates
+      // a new OpportunityHistory row, unconditionally. See
+      // docs/metric-definitions.md's close_date_history_enabled entry for
+      // the full evidence. Static true, not a runtime probe — same
+      // synchronous capabilities() contract every other field here follows.
+      closeDateHistory: true,
+      // Unlike closeDateHistory: OpportunityHistory has no NextStep field at
+      // all (confirmed via the same describe() call above) — Next Step
+      // genuinely has no always-on tracking path and needs Field History
+      // Tracking, same as ownerHistory. Declaring false for the same reason.
+      nextStepHistory: false,
       // Einstein Activity Capture is a separate paid feature, not present
       // by default on a Developer Edition org.
       activitySync: false,
@@ -369,6 +385,7 @@ export class SalesforceAdapter implements CrmAdapter {
       childRecordBatchLimit: 200,
       notesPerOpportunityLimit: 200,
       activitiesPerOpportunityLimit: 200,
+      historyPerOpportunityLimit: 200,
     };
   }
 
@@ -740,6 +757,70 @@ export class SalesforceAdapter implements CrmAdapter {
       items.push(...kept.map(this.mapTask));
     }
     return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length };
+  }
+
+  /**
+   * Pure, per-opportunity fromStage derivation — deliberately NOT
+   * mapStageHistory (which mutates this.lastKnownStage as a side effect,
+   * correct only under listStageHistory's single global chronological
+   * stream). A by-ref batch call fetches one opportunity's full history at
+   * once; reusing the shared stateful map here would either corrupt or be
+   * corrupted by whatever listStageHistory is concurrently doing, and its
+   * ordering guarantee doesn't hold for an arbitrary WHERE-IN result set
+   * anyway. rows must already be ascending by CreatedDate.
+   */
+  private mapStageHistoryForOpportunity(rows: readonly RawOpportunityHistory[]): StageHistoryEntry[] {
+    let previous: CanonicalStage | undefined;
+    const result: StageHistoryEntry[] = [];
+    for (const raw of rows) {
+      const toStage: CanonicalStage = raw.StageName ? (SALESFORCE_STAGE_MAP[raw.StageName] ?? 'prospecting') : 'prospecting';
+      result.push({
+        ref: this.ref('stage_history', raw.Id),
+        opportunityRef: this.ref('opportunity', raw.OpportunityId),
+        fromStage: previous,
+        toStage,
+        changedAt: raw.CreatedDate,
+        changedBy: raw.CreatedById ?? undefined,
+        closeDateAtChange: raw.CloseDate ?? undefined,
+      });
+      previous = toStage;
+    }
+    return result;
+  }
+
+  /**
+   * Same per-opportunity SOQL shape as getNotesByOpportunity, reusing
+   * OpportunityHistory (the same always-on object listStageHistory already
+   * reads — see capabilities().closeDateHistory's docblock) with a
+   * WHERE OpportunityId = filter instead of a since-window. fromStage is
+   * derived locally per call (mapStageHistoryForOpportunity), not via the
+   * stateful mapStageHistory used by the stream.
+   */
+  async getStageHistoryByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<StageHistoryEntry>> {
+    if (oppRefs.length === 0) return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
+    const limit = this.capabilities().historyPerOpportunityLimit;
+    const ids = dedupeIds(oppRefs);
+    const items: StageHistoryEntry[] = [];
+    const truncatedOpportunityIds = new Set<string>();
+    for (const oppId of ids) {
+      assertValidSalesforceId(oppId);
+      const soql =
+        `SELECT ${OPPORTUNITY_HISTORY_FIELDS.join(', ')} FROM OpportunityHistory WHERE OpportunityId = '${oppId}' ` +
+        `ORDER BY CreatedDate DESC LIMIT ${limit + 1}`;
+      const page = await this.soqlQuery<RawOpportunityHistory>(soql);
+      const desc = [...page.records];
+      if (desc.length > limit) truncatedOpportunityIds.add(oppId);
+      const ascending = desc.slice(0, limit).reverse(); // back to ascending, newest-kept
+      items.push(...this.mapStageHistoryForOpportunity(ascending));
+    }
+    return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length };
+  }
+
+  async getNextStepHistoryByOpportunity(_oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<NextStepChange>> {
+    // capabilities().nextStepHistory is false — contract requires empty, not
+    // a throw, same as listOwnerChanges above for the same reason (Next Step
+    // has no always-on tracking path on this adapter, see capabilities()).
+    return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
   }
 
   async getOpportunity(ref: RecordRef): Promise<Opportunity | null> {
