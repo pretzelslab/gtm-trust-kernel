@@ -306,6 +306,16 @@ and wait for approval before writing any of it, same process as
 than three separate plan-and-wait sessions — all three need a new
 history-tracking capability/method added to `packages/adapters`.
 
+**Unblocked, 2026-09-26: definition locked in `metric-definitions.md`, code
+following in dedicated commits this session.** `nextStepHistory` capability
+confirmed static `false` (contrast `close_date_history_enabled` below —
+Salesforce's `OpportunityHistory` has no `NextStep` field, confirmed via a
+live `describe()` call, so this one genuinely has no always-on path). Data
+source: new `NextStepChange` type (no text value) +
+`getNextStepHistoryByOpportunity(oppRefs)`. Gates zero capabilities today
+(confirmed by exhaustively grepping every `CapabilitySpec.gates` array) —
+shipping it changes no rubric verdict anywhere.
+
 ---
 
 ## Deferred: `close_date_history_enabled`
@@ -335,6 +345,20 @@ metric's implementation is blocked.
 **Bundled this session** with `median_next_step_age_days` above and D7's
 `win_rate_dispersion` below into one adapter-contract change — see that
 metric's entry for why.
+
+**Unblocked, 2026-09-26 — root cause corrected, not just resolved.** Verified
+against Salesforce docs and a live read-only query/describe against a real
+dev org: `OpportunityHistory` (the same object `stageHistory` already
+reads) snapshots Stage, Amount, Probability, **and Close Date** on every
+change to any of those four, individually, and is **not** gated by Field
+History Tracking — it's always queryable, unconditionally, same guarantee
+`stageHistory: true` already rests on. The original "off by default" root
+cause was wrong for Salesforce specifically (right for `ownerHistory`,
+which `OpportunityHistory` does not snapshot at all). `AdapterCapabilities.closeDateHistory`
+is declared statically `true` for `SalesforceAdapter`, not `false`. Full
+evidence and the doc/query sources are in `metric-definitions.md`'s entry.
+`rubric.ts`'s question/rationale/remediation prose updated to match
+(thresholds unchanged, protected-file rule respected — prose only).
 
 ---
 
@@ -369,6 +393,21 @@ capability (`median_next_step_age_days`), and a `closeDateHistory`-shaped
 capability (`close_date_history_enabled`). Scoped together because all
 three are "add a history-tracking capability + adapter method" changes to
 the same package — one plan-and-wait session, not three.
+
+**Unblocked, 2026-09-26: sample-size/gating rules locked in
+`metric-definitions.md`** (exclude stages with fewer than 5 closed opps;
+`not_applicable` below 2 remaining stages; excluded-stage count in `note`).
+**Real fixture gap found while locking this, not previously known:** every
+mock fixture seeds exactly one `StageHistoryEntry` per opportunity (its
+stage at creation), so today's fixtures carry no genuine multi-hop
+transition sequence for any closed deal — this metric would see a
+degenerate 1-entry history for every sampled deal until its own commit
+adds real multi-hop stage histories to `generateHealthy()` (plus one
+deliberate single-entry case to keep exercising the degenerate path). Gates
+`forecast_assistance` alongside `closed_deal_count_12m`, which already
+reads `degraded` on `healthy` — so `healthy`'s `forecast_assistance`
+verdict cannot exceed `degraded` even once this ships, regardless of this
+metric's own computed value there.
 
 ---
 

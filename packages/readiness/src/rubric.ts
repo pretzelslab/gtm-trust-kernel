@@ -330,14 +330,15 @@ export const THRESHOLDS: Readonly<Record<MetricId, Threshold>> = {
     viableAt: 1,
     degradedAt: 0,
     question:
-      'Is field history tracking on Close Date required (1) or optional (0) for slip detection? It is off by default in most orgs.',
+      'Can this CRM retain a change history for Close Date, required (1) or optional (0) for slip detection? Availability is adapter-specific, not a single "off by default" fact — see remediation.',
     candidates: [
       { value: 1, implication: 'Required. Without it, slip detection is impossible, not merely degraded.' },
       { value: 0, implication: 'Optional. Accept a weaker proxy from stage history timestamps.' },
     ],
     rationale:
       'Required. Without close date history, slip detection isn\'t degraded, it\'s impossible; there\'s no weaker proxy worth calling Viable.',
-    remediation: 'Enable field history tracking on Close Date. History accrues only from the day you turn it on.',
+    remediation:
+      'On Salesforce this is already available for free via the standard Opportunity History object (it snapshots Stage, Amount, Probability, and Close Date on every change, unconditionally — not gated by Field History Tracking). For an adapter or CRM without an equivalent always-on mechanism, enable field-history tracking on Close Date; history accrues only from the day it\'s turned on.',
   },
 
   stage_history_months: {

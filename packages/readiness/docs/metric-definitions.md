@@ -108,11 +108,33 @@ Next Step, of `today - <date Next Step field was last modified>`.
 Next Step, not just the opportunity's overall `LastModifiedDate`. No
 fallback: if the adapter can't report a per-field Next Step change date,
 this metric returns `not_instrumented` rather than an approximate value
-computed from `LastModifiedDate`.
-**Status: deferred.** No adapter capability for this exists yet in v0.1.
-Requires a `nextStepHistory` capability, field-history backed the same way
-`stageHistory`/`ownerHistory` are, before this metric can return anything
-but `not_instrumented`. Not implemented until that capability lands.
+computed from `LastModifiedDate`. Gated on `AdapterCapabilities.nextStepHistory`.
+**Per-opportunity exclusion (locked 2026-09-26):** a sampled open opportunity
+with a non-empty Next Step but zero `NextStepChange` entries (capability
+just turned on, or retained history doesn't reach back far enough) is
+**excluded from the denominator** — same "filtered sample size" convention
+`activity_capture_rate` already uses. Not treated as age 0, and never
+falls back to the opportunity's whole-record `modifiedAt`. The excluded
+count is reported in `note`.
+**Low-confidence trigger (locked 2026-09-26):** `lowConfidence` is set true
+when sample size is below `LOW_CONFIDENCE_SAMPLE_SIZE` (the existing
+cross-cutting rule) **or** when more than 50% of eligible opportunities
+(non-empty Next Step) were excluded per the rule above — whichever fired.
+`note` must name which cause fired (e.g. "62% of opportunities excluded: no
+Next Step change history") so the two cases are distinguishable. **This is
+a low-confidence flag only — it does not force a `degraded` verdict.** The
+computed tier (viable/degraded/blocked) is still graded by `rubric.ts`'s
+`gradeGate()` from the real value against threshold, exactly like every
+other metric; there is no mechanism for a metric to force a tier directly,
+and this metric gates zero capabilities today regardless (see rubric.ts's
+`CAPABILITIES` — confirmed by exhaustive grep, 2026-09-26). If a future
+capability ever gates on this metric, revisit whether the exclusion rate
+should influence grading more directly — not resolved now.
+**Data source:** `NextStepChange { ref, opportunityRef, changedAt }` — a new
+canonical/adapter-contract type, deliberately carrying no text value (only
+a timestamp), same "structurally incapable of leaking content" shape as
+`StageHistoryEntry`. Fetched via `CrmAdapter.getNextStepHistoryByOpportunity(oppRefs)`,
+same shape/batching as `getNotesByOpportunity`.
 **Threshold:** `median_next_step_age_days`.
 
 ---
@@ -185,22 +207,39 @@ that is evenly divisible by 1,000 (e.g. 50000, 25000 — not 24999 or 50500).
 ## D4. History depth
 
 ### close_date_history_enabled
-**Definition:** boolean, reported by the adapter's capability matrix — is
-field-history tracking active on the Close Date field for this org.
+**Definition:** boolean, reported by the adapter's capability matrix — can
+this CRM retain a change history for the Close Date field, sufficient to
+detect slip.
 **Not sampled from records** — this is a capability check, not a
 per-opportunity computation. If the adapter can't answer the capability
 question directly, treat as `false` (assume not enabled) rather than
 attempting to infer it from whether any history records happen to exist.
-**Status: deferred.** No adapter capability for this exists yet in v0.1.
-`AdapterCapabilities.stageHistory`/`ownerHistory` don't cover it, and
-`StageHistoryEntry.closeDateAtChange` is a snapshot of the close date *at
-a stage change*, not field-history on the Close Date field itself — using
-it as a stand-in would be exactly the "infer from whether history records
-happen to exist" this entry's own rule above forbids. Requires a new
-`AdapterCapabilities` field (shape TBD), field-history backed the same way
-`stageHistory`/`ownerHistory` are, before this metric can return anything
-but `not_instrumented`. Not implemented until that capability lands — same
-deferral shape as `median_next_step_age_days` (D2).
+`StageHistoryEntry.closeDateAtChange` remains explicitly disallowed as a
+stand-in — a snapshot of the close date *at a stage change* is not the
+same as field-history on Close Date itself, and inferring this capability
+from whether such snapshots happen to exist would be exactly the "infer
+from whether history records happen to exist" this entry's rule forbids.
+**Adapter contract:** `AdapterCapabilities.closeDateHistory: boolean`.
+**Salesforce-specific finding, locked 2026-09-26 (verified against docs and
+a live read-only query, not assumed):** Salesforce's standard
+`OpportunityHistory` object — the same object `stageHistory`/
+`getStageHistoryByOpportunity` already read — snapshots **Stage, Amount,
+Probability, and Close Date** on every change to any of those four fields,
+individually. This is **not** gated by the admin-toggle Field History
+Tracking feature (`OpportunityFieldHistory`, a different object) — it is
+always queryable, the same unconditional guarantee `stageHistory: true`
+already rests on. Confirmed live: every multi-row opportunity in a real
+dev-org query showed a same-Stage, different-CloseDate consecutive pair,
+and the object's own `describe()` exposes `PrevCloseDate`/`PrevAmount` as
+standard fields. `SalesforceAdapter.capabilities().closeDateHistory` is
+therefore declared **statically `true`**, not the static `false` that
+would apply to a genuinely admin-gated capability (contrast
+`nextStepHistory`, which stays `false` — `OpportunityHistory` has no
+`NextStep` field at all, confirmed via the same `describe()` call, so Next
+Step genuinely has no always-on tracking path). Do not generalize this
+finding to other adapters without checking each one's own equivalent
+object — HubSpot/other CRMs may or may not have a comparable always-on
+mechanism.
 **Threshold:** `close_date_history_enabled`.
 
 ### stage_history_months
@@ -486,7 +525,7 @@ enterprise motions in the meantime. Note this limitation in the report
 footer, same disclosure pattern as `RUBRIC_VERSION`.
 **Threshold:** `closed_deal_count_12m`.
 
-### win_rate_dispersion — BLOCKED, see "Deferred" in `STATUS.md`
+### win_rate_dispersion
 **Definition:** standard deviation of win rate (won / (won + lost)) computed
 per canonical stage the deal passed through, across sampled closed
 opportunities from the trailing 12 months.
@@ -497,22 +536,34 @@ means stage definitions aren't being applied consistently. This is
 unaffected by segment mix and is correctly kept as a gate on
 `forecast_assistance` (see `rubric.ts` rationale — do not reinterpret this
 as a segment metric in implementation).
-**Blocked (today):** "stage the deal passed through" cannot be read off
-`Opportunity.stage` for a closed deal — that field is only ever
-`closed_won`/`closed_lost` and retains no record of intermediate pipeline
-stages. The only source for that is `StageHistoryEntry.toStage`, keyed by
-`opportunityRef` (D4). No adapter method exists to fetch stage-history
-records by opportunity ref — `CrmAdapter.listStageHistory` is a
-since-window/cursor stream with no ref filter, the same gap
-`getAccounts`/`getContactsByRef`/`getNotesByOpportunity` each closed for
-their own record type — and D4's existing `hydrateStageHistory` glue only
-fetches one org-wide earliest entry (`stage_history_months`'s need), nowhere
-near a per-opportunity transition sequence for every sampled closed deal.
-Implementing this needs a new `getStageHistoryByOpportunity(oppRefs)`
-adapter method: a cross-package, multi-file change requiring a plan and
-sign-off first, same as any other adapter-contract addition. See
-`STATUS.md`'s "Deferred" section — bundled with `median_next_step_age_days`
-and `close_date_history_enabled` as one adapter-contract change.
+**Data source:** `StageHistoryEntry.toStage`, keyed by `opportunityRef`,
+fetched via `CrmAdapter.getStageHistoryByOpportunity(oppRefs)` (new,
+same shape as `getNotesByOpportunity` — a closed deal's `Opportunity.stage`
+alone is only ever `closed_won`/`closed_lost`, never the intermediate
+pipeline stages this metric needs).
+**Sample size (locked 2026-09-26):** count of sampled closed opportunities
+with at least one resolvable stage-history entry from
+`getStageHistoryByOpportunity` — same "filtered subset" convention as
+every other metric whose real denominator isn't the raw sample.
+**Per-stage exclusion and `not_applicable` boundary (locked 2026-09-26):**
+a canonical stage with fewer than 5 closed opportunities passing through it
+is excluded from the dispersion calculation entirely — too few deals for a
+per-stage win rate to mean anything. If fewer than 2 stages remain after
+that exclusion, the result is `not_applicable` (dispersion across fewer
+than 2 stages is undefined, not zero). The excluded-stage **count** (not
+which stages) is reported in `note` — same "note carries the excluded
+count" pattern `round_amount_rate`/`stage_mapping_coverage` already use.
+**Fixture requirement, found while locking this (2026-09-26):** every
+existing mock fixture (`healthy`/`fresh`/`legacy`/`volume`) seeds exactly
+**one** `StageHistoryEntry` per opportunity — its stage at creation, not a
+real multi-hop transition sequence. For a closed deal, that one entry's
+`toStage` is just `closed_won`/`closed_lost` itself, giving this metric no
+real intermediate-stage signal in any fixture today. The commit
+implementing this metric must add genuine multi-hop stage histories to
+`generateHealthy()` (a deal's real path through the canonical ladder before
+closing), plus at least one deliberate single-entry "degenerate" case
+(mirroring today's default) so the exclusion/`not_applicable` paths are
+exercised too, not just the happy path.
 **Threshold:** `win_rate_dispersion`.
 
 ### outcome_evidence_retention_rate
