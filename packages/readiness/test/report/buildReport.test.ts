@@ -65,7 +65,7 @@ describe('buildReportData shape', () => {
 
   it('shows the remaining explicit deferrals as status "deferred" with a reason', async () => {
     const data = await buildFor('healthy');
-    for (const metric of ['median_next_step_age_days', 'win_rate_dispersion'] as const) {
+    for (const metric of ['win_rate_dispersion'] as const) {
       const row = data.metrics.find((m) => m.metric === metric)!;
       expect(row.status).toBe('deferred');
       expect(row.value).toBeNull();

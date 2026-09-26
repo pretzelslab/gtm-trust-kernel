@@ -10,7 +10,15 @@
  */
 
 import type { CrmAdapter, SecondSourceAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import { buildCoverageSample, hydrateAccounts, hydrateActivities, hydrateContacts, hydrateNotes, hydrateStageHistory } from '../coverageSample.js';
+import {
+  buildCoverageSample,
+  hydrateAccounts,
+  hydrateActivities,
+  hydrateContacts,
+  hydrateNextStepChanges,
+  hydrateNotes,
+  hydrateStageHistory,
+} from '../coverageSample.js';
 import type { CoverageSample, MetricConfig, MetricResult } from '../metrics/types.js';
 import {
   closeDateFillRate,
@@ -21,7 +29,7 @@ import {
   ownerIdFillRate,
   activityCaptureRate,
 } from '../metrics/coverage.js';
-import { medianDaysSinceModified, pastDueCloseDateRate } from '../metrics/freshness.js';
+import { medianDaysSinceModified, medianNextStepAgeDays, pastDueCloseDateRate } from '../metrics/freshness.js';
 import { stageActivityContradictionRate, roundAmountRate, stageMappingCoverage, duplicateAccountRate } from '../metrics/consistency.js';
 import { closeDateHistoryEnabled, ownerHistoryEnabled, stageHistoryMonths } from '../metrics/history.js';
 import { accountResolutionRate, activityAttributionRate, contactIdentityResolutionRate, temporalAnomalyRate } from '../metrics/joinability.js';
@@ -112,6 +120,7 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
   note_coverage_rate: noteCoverageRate,
   median_days_since_modified: medianDaysSinceModified,
   past_due_close_date_rate: pastDueCloseDateRate,
+  median_next_step_age_days: medianNextStepAgeDays,
   stage_mapping_coverage: stageMappingCoverage,
   duplicate_account_rate: duplicateAccountRate,
   stage_activity_contradiction_rate: stageActivityContradictionRate,
@@ -132,8 +141,6 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
 };
 
 const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
-  median_next_step_age_days:
-    'Deferred: no adapter can report a per-field "Next Step last changed" timestamp yet; needs a nextStepHistory capability (docs/STATUS.md).',
   win_rate_dispersion:
     'Deferred: no adapter method exists yet to read stage-transition history by opportunity ref; bundled with the two deferrals above into one adapter-contract change (docs/STATUS.md).',
 };
@@ -234,6 +241,7 @@ export async function buildReportData(
   sample = (await hydrateStageHistory(sample, adapter)).sample;
   sample = (await hydrateNotes(sample, adapter)).sample;
   sample = (await hydrateActivities(sample, adapter)).sample;
+  sample = (await hydrateNextStepChanges(sample, adapter)).sample;
 
   // D5: only hydrate contacts / resolve the second source when one is
   // actually connected — otherwise this is pure wasted I/O for data

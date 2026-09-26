@@ -12,7 +12,7 @@
  */
 
 import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Activity, Contact, Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Contact, NextStepChange, Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { SampleResult, SampleStratum } from './sample.js';
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample } from './metrics/types.js';
@@ -66,6 +66,7 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     activitiesByOpportunity: new Map(),
     notesTruncatedOpportunityIds: new Set(),
     activitiesTruncatedOpportunityIds: new Set(),
+    nextStepChangesByOpportunity: new Map(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,
@@ -262,6 +263,29 @@ function groupByOpportunity<T extends { relatedTo: readonly RecordRef[] }>(
   return grouped;
 }
 
+/**
+ * Same purpose as groupByOpportunity, for a single-parent record shape
+ * (opportunityRef, not a multi-valued relatedTo) — NextStepChange, like
+ * StageHistoryEntry, belongs to exactly one opportunity, so no "appears in
+ * more than one bucket" case exists here.
+ */
+function groupBySingleOpportunityRef<T extends { opportunityRef: RecordRef }>(
+  items: readonly T[],
+  oppIds: ReadonlySet<string>,
+): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const item of items) {
+    if (!oppIds.has(item.opportunityRef.id)) continue;
+    const bucket = grouped.get(item.opportunityRef.id);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      grouped.set(item.opportunityRef.id, [item]);
+    }
+  }
+  return grouped;
+}
+
 export interface HydrateNotesResult {
   readonly sample: CoverageSample;
   readonly apiCallsConsumed: number;
@@ -337,6 +361,44 @@ export async function hydrateActivities(sample: CoverageSample, adapter: CrmAdap
 
   return {
     sample: { ...sample, activitiesByOpportunity, activitiesTruncatedOpportunityIds },
+    apiCallsConsumed,
+  };
+}
+
+export interface HydrateNextStepChangesResult {
+  readonly sample: CoverageSample;
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Minimal glue for median_next_step_age_days (D2): fetches NextStepChange
+ * history for every sampled opportunity via
+ * CrmAdapter.getNextStepHistoryByOpportunity, chunked at
+ * childRecordBatchLimit — same shape as hydrateNotes/hydrateActivities, not
+ * gated here on capabilities.nextStepHistory (the metric itself gates on
+ * that before ever reading nextStepChangesByOpportunity; the adapter
+ * contract already requires getNextStepHistoryByOpportunity to return empty
+ * rather than throw when the capability is false, so calling it
+ * unconditionally is safe).
+ */
+export async function hydrateNextStepChanges(sample: CoverageSample, adapter: CrmAdapter): Promise<HydrateNextStepChangesResult> {
+  const sortedRefs = sortedOpportunityRefs(sample);
+  const limit = adapter.capabilities().childRecordBatchLimit;
+  const chunks = chunk(sortedRefs, limit);
+
+  const allChanges: NextStepChange[] = [];
+  let apiCallsConsumed = 0;
+  for (const refChunk of chunks) {
+    const result = await adapter.getNextStepHistoryByOpportunity(refChunk);
+    apiCallsConsumed += result.apiCallsConsumed;
+    allChanges.push(...result.items);
+  }
+
+  const oppIds = new Set(sortedRefs.map((r) => r.id));
+  const nextStepChangesByOpportunity: ReadonlyMap<string, readonly NextStepChange[]> = groupBySingleOpportunityRef(allChanges, oppIds);
+
+  return {
+    sample: { ...sample, nextStepChangesByOpportunity },
     apiCallsConsumed,
   };
 }

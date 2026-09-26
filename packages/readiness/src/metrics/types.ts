@@ -8,7 +8,7 @@
  */
 
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Activity, Contact, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Contact, NextStepChange, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
 import type { SecondSourceResolution } from '../secondSource/resolve.js';
 
@@ -101,6 +101,17 @@ export interface CoverageSample {
   readonly notesTruncatedOpportunityIds: ReadonlySet<string>;
   /** Same as notesTruncatedOpportunityIds, for activitiesByOpportunity / hydrateActivities / activitiesPerOpportunityLimit. */
   readonly activitiesTruncatedOpportunityIds: ReadonlySet<string>;
+  /**
+   * NextStepChange history for sampled opportunities, keyed by
+   * Opportunity.ref.id, sorted ascending by changedAt (same order
+   * getNextStepHistoryByOpportunity's contract guarantees) — the last entry
+   * per opportunity is its latest change. Empty until hydrateNextStepChanges
+   * runs; no separate "hydrated" gate here either, same reasoning
+   * activitiesByOpportunity's docblock gives — median_next_step_age_days
+   * already gates on capabilities.nextStepHistory before ever reading this
+   * map, which is sufficient.
+   */
+  readonly nextStepChangesByOpportunity: ReadonlyMap<string, readonly NextStepChange[]>;
   /** Hydrated accounts for the sampled opportunities' accountRefs, keyed by Account.ref.id. Empty and meaningless until accountsHydrated is true. */
   readonly accountsByRef: ReadonlyMap<string, Account>;
   /**

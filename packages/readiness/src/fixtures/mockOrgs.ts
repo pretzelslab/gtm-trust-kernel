@@ -16,6 +16,7 @@ import type {
   Activity,
   CanonicalStage,
   Contact,
+  NextStepChange,
   Note,
   Opportunity,
   OwnerChange,
@@ -214,6 +215,10 @@ function makeOwnerChange(orgId: string, id: string, subjectRef: RecordRef, toOwn
   return { ref: ref(orgId, 'owner_change', id), subjectRef, toOwnerId, changedAt };
 }
 
+function makeNextStepChange(orgId: string, id: string, opportunityRef: RecordRef, changedAt: string): NextStepChange {
+  return { ref: ref(orgId, 'next_step_change', id), opportunityRef, changedAt };
+}
+
 const BASE_CAPABILITIES: AdapterCapabilities = {
   stageHistory: true,
   ownerHistory: true,
@@ -256,6 +261,7 @@ function generateHealthy(): MockOrgFixture {
   const notes: Note[] = [];
   const stageHistory: StageHistoryEntry[] = [];
   const ownerChanges: OwnerChange[] = [];
+  const nextStepChanges: NextStepChange[] = [];
 
   let n = 0;
   const perOpenStratum = 20;
@@ -295,6 +301,17 @@ function generateHealthy(): MockOrgFixture {
       );
 
       if (!isClosed) {
+        // median_next_step_age_days: most open deals with a Next Step also
+        // get a real change-history entry (n % 12 !== 0 is the same
+        // condition nextStep itself uses above). n % 11 === 0 is a second,
+        // independent exclusion — a Next Step that's set but whose change
+        // history hasn't been captured yet (capability just enabled, or
+        // retention doesn't reach back far enough) — so this metric reads a
+        // real, non-trivial excluded count on a fixture that's supposed to
+        // look healthy, not either 0% or 100% excluded.
+        if (n % 12 !== 0 && n % 11 !== 0) {
+          nextStepChanges.push(makeNextStepChange(orgId, `nsc-${n}`, ref(orgId, 'opportunity', id), daysBefore(asOf, n % 45)));
+        }
         // Recent qualifying activity for most open deals.
         if (n % 8 !== 0) {
           activities.push(makeActivity(orgId, `act-${n}`, ref(orgId, 'opportunity', id), daysBefore(asOf, n % 20)));
@@ -453,7 +470,7 @@ function generateHealthy(): MockOrgFixture {
     description: 'Good field hygiene, full capability matrix, clean unique account domains.',
     asOf,
     capabilities: BASE_CAPABILITIES,
-    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges, nextStepChanges: [] },
+    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges, nextStepChanges },
     secondSource: {
       capabilities: { kind: 'engagement', hasContacts: true, hasAccounts: true, hasActivities: true },
       data: { contacts: secondSourceContacts, accounts: secondSourceAccounts, activities: secondSourceActivities },
@@ -644,6 +661,7 @@ function generateLegacy(): MockOrgFixture {
       ...BASE_CAPABILITIES,
       stageHistory: false,
       ownerHistory: false,
+      nextStepHistory: false,
       activitySync: false,
       incrementalSync: false,
       bulkRead: false,
@@ -685,6 +703,7 @@ function generateVolume(): MockOrgFixture {
   const activities: Activity[] = [];
   const notes: Note[] = [];
   const stageHistory: StageHistoryEntry[] = [];
+  const nextStepChanges: NextStepChange[] = [];
 
   let n = 0;
   const perOpenStratum = 15;
@@ -720,6 +739,11 @@ function generateVolume(): MockOrgFixture {
 
       if (!isClosed) {
         activities.push(makeActivity(orgId, `act-${n}`, ref(orgId, 'opportunity', id), daysBefore(asOf, n % 20)));
+        // Every open opportunity has a Next Step (unconditional above) and a
+        // matching change-history entry — a clean, fully-covered baseline,
+        // contrasting with healthy's partial-exclusion and legacy's
+        // capability-off cases.
+        nextStepChanges.push(makeNextStepChange(orgId, `nsc-${n}`, ref(orgId, 'opportunity', id), daysBefore(asOf, n % 30)));
       }
       notes.push(makeNote(orgId, `note-${n}`, ref(orgId, 'opportunity', id), `Standard progress note for deal ${id}.`, daysBefore(asOf, n % 30)));
       stageHistory.push(makeStageHistoryEntry(orgId, `sh-${n}`, ref(orgId, 'opportunity', id), stage, createdAt));
@@ -737,7 +761,7 @@ function generateVolume(): MockOrgFixture {
     description: 'Ordinary field hygiene; exists solely to exceed the default per-stratum sample size on both closed strata (closed_deal_count_12m\'s floor path).',
     asOf,
     capabilities: BASE_CAPABILITIES,
-    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges: [], nextStepChanges: [] },
+    data: { accounts, opportunities, contacts, activities, notes, stageHistory, ownerChanges: [], nextStepChanges },
     // No second source: this fixture's only job is the D7 floor path, not D5.
   };
 }
