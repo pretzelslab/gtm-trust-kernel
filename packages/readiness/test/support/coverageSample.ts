@@ -54,6 +54,7 @@ export function makeCoverageSample(overrides: Partial<CoverageSample> = {}): Cov
     notesTruncatedOpportunityIds: new Set(),
     activitiesTruncatedOpportunityIds: new Set(),
     nextStepChangesByOpportunity: new Map(),
+    stageHistoryByOpportunity: new Map(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,

@@ -8,7 +8,7 @@
  */
 
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Activity, Contact, NextStepChange, Note, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Contact, NextStepChange, Note, Opportunity, StageHistoryEntry } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
 import type { SecondSourceResolution } from '../secondSource/resolve.js';
 
@@ -112,6 +112,17 @@ export interface CoverageSample {
    * map, which is sufficient.
    */
   readonly nextStepChangesByOpportunity: ReadonlyMap<string, readonly NextStepChange[]>;
+  /**
+   * Full per-opportunity stage-transition sequence for sampled CLOSED
+   * opportunities only (win_rate_dispersion is the only reader, and it only
+   * ever needs closed deals' journeys) — unlike every other *ByOpportunity
+   * map here, which covers open + closed. Sorted ascending by changedAt,
+   * same contract getStageHistoryByOpportunity guarantees. Empty until
+   * hydrateStageHistoryByOpportunity runs; no separate "hydrated" gate,
+   * same reasoning as nextStepChangesByOpportunity — the metric gates on
+   * capabilities.stageHistory before ever reading this map.
+   */
+  readonly stageHistoryByOpportunity: ReadonlyMap<string, readonly StageHistoryEntry[]>;
   /** Hydrated accounts for the sampled opportunities' accountRefs, keyed by Account.ref.id. Empty and meaningless until accountsHydrated is true. */
   readonly accountsByRef: ReadonlyMap<string, Account>;
   /**

@@ -529,6 +529,15 @@ footer, same disclosure pattern as `RUBRIC_VERSION`.
 **Definition:** standard deviation of win rate (won / (won + lost)) computed
 per canonical stage the deal passed through, across sampled closed
 opportunities from the trailing 12 months.
+**Intermediate stages only, found while implementing (2026-09-26):**
+"stage the deal passed through" means `CANONICAL_STAGE_ORDER` (prospecting
+through negotiation) — never `closed_won`/`closed_lost` themselves. Including
+the closing stage would be circular (every closed_won deal trivially shows
+a 100% win rate for the "closed_won" bucket), not a measure of whether
+pipeline stage predicts outcome. A real adapter's stage-history object may
+include a snapshot row for the closing transition itself (Salesforce's
+`OpportunityHistory` does) — that row is filtered out by the metric, not
+assumed absent from adapter data.
 **Resolved ambiguity (today):** this measures variance **across pipeline
 stages**, not across business segments. A low value means win rate barely
 differs by stage — i.e., stage isn't predictive of outcome, which usually

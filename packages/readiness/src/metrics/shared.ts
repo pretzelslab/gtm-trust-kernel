@@ -132,6 +132,22 @@ export function median(values: readonly number[]): number {
 }
 
 /**
+ * Population standard deviation, not sample (divide by N, not N-1) —
+ * win_rate_dispersion (D7) treats the per-stage win rates it computes as
+ * the entire population being measured (every eligible stage in this
+ * sample), not a sample drawn from some larger population of stages.
+ * Callers must guard the empty case themselves, same convention as median.
+ */
+export function standardDeviation(values: readonly number[]): number {
+  if (values.length === 0) {
+    throw new Error('standardDeviation called on an empty array');
+  }
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+/**
  * Whole calendar months between two ISO timestamps, partial months
  * dropped (stage_history_months, D4): Jan 15 -> Jun 20 is 5 months; Jan 15
  * -> Jun 10 is 4 (the Jan-15 boundary hasn't been reached again in June

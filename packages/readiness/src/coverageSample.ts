@@ -12,7 +12,7 @@
  */
 
 import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
-import type { Account, Activity, Contact, NextStepChange, Note, Opportunity, RecordRef } from '@gtm-trust-kernel/adapters/model/canonical.js';
+import type { Account, Activity, Contact, NextStepChange, Note, Opportunity, RecordRef, StageHistoryEntry } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { SampleResult, SampleStratum } from './sample.js';
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample } from './metrics/types.js';
@@ -67,6 +67,7 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     notesTruncatedOpportunityIds: new Set(),
     activitiesTruncatedOpportunityIds: new Set(),
     nextStepChangesByOpportunity: new Map(),
+    stageHistoryByOpportunity: new Map(),
     accountsByRef: new Map(),
     accountsHydrated: false,
     stageHistoryEarliestChangedAt: null,
@@ -399,6 +400,48 @@ export async function hydrateNextStepChanges(sample: CoverageSample, adapter: Cr
 
   return {
     sample: { ...sample, nextStepChangesByOpportunity },
+    apiCallsConsumed,
+  };
+}
+
+export interface HydrateStageHistoryByOpportunityResult {
+  readonly sample: CoverageSample;
+  readonly apiCallsConsumed: number;
+}
+
+/**
+ * Minimal glue for win_rate_dispersion (D7): fetches full per-opportunity
+ * stage-transition sequences via CrmAdapter.getStageHistoryByOpportunity,
+ * chunked at childRecordBatchLimit — same shape as hydrateNextStepChanges,
+ * but scoped to sample.closedOpportunities only (not open + closed like
+ * every other *ByOpportunity hydration step), since win_rate_dispersion is
+ * the only reader and it only ever needs closed deals' journeys. Not gated
+ * here on capabilities.stageHistory — the metric itself gates on that
+ * before ever reading stageHistoryByOpportunity, and
+ * getStageHistoryByOpportunity's own contract already requires returning
+ * empty rather than throwing when the capability is false.
+ */
+export async function hydrateStageHistoryByOpportunity(
+  sample: CoverageSample,
+  adapter: CrmAdapter,
+): Promise<HydrateStageHistoryByOpportunityResult> {
+  const sortedRefs = [...sample.closedOpportunities].map((o) => o.ref).sort((a, b) => a.id.localeCompare(b.id));
+  const limit = adapter.capabilities().childRecordBatchLimit;
+  const chunks = chunk(sortedRefs, limit);
+
+  const allEntries: StageHistoryEntry[] = [];
+  let apiCallsConsumed = 0;
+  for (const refChunk of chunks) {
+    const result = await adapter.getStageHistoryByOpportunity(refChunk);
+    apiCallsConsumed += result.apiCallsConsumed;
+    allEntries.push(...result.items);
+  }
+
+  const oppIds = new Set(sortedRefs.map((r) => r.id));
+  const stageHistoryByOpportunity: ReadonlyMap<string, readonly StageHistoryEntry[]> = groupBySingleOpportunityRef(allEntries, oppIds);
+
+  return {
+    sample: { ...sample, stageHistoryByOpportunity },
     apiCallsConsumed,
   };
 }

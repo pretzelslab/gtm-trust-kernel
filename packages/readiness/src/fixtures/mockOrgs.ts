@@ -357,7 +357,64 @@ function generateHealthy(): MockOrgFixture {
         }
       }
 
-      stageHistory.push(makeStageHistoryEntry(orgId, `sh-${n}`, ref(orgId, 'opportunity', id), stage, createdAt));
+      if (!isClosed) {
+        stageHistory.push(makeStageHistoryEntry(orgId, `sh-${n}`, ref(orgId, 'opportunity', id), stage, createdAt));
+      } else if (stage === 'closed_won' && i === 0) {
+        // win_rate_dispersion: deliberate degenerate case — one closed deal
+        // with only its closing snapshot, no intermediate-stage history at
+        // all (a real "history enabled, but this deal's journey wasn't
+        // captured" scenario). The old single-entry-per-opportunity
+        // behavior, kept for exactly this one opportunity rather than
+        // silently disappearing once the rest of healthy's closed
+        // opportunities below get real multi-hop histories.
+        stageHistory.push(makeStageHistoryEntry(orgId, `sh-${n}`, ref(orgId, 'opportunity', id), stage, createdAt));
+      } else {
+        // win_rate_dispersion: a realistic multi-hop path through the
+        // intermediate pipeline stages before closing, not one snapshot of
+        // the final stage. Depth deliberately correlates with outcome (won
+        // deals typically reach further into the pipeline — proposal/
+        // negotiation — before closing; lost deals more often stall earlier
+        // at evaluation/proposal) — a plausible sales pattern, not an
+        // arbitrary one, and it's what gives this metric a real signal:
+        // negotiation ends up won-only (6 deals, all won), proposal is
+        // mixed (12 won + 6 lost), prospecting/discovery/evaluation are
+        // reached by every deal regardless of outcome (~50/50). That
+        // produces a real, non-zero dispersion that reads as rubric.ts's
+        // "degraded" tier — a genuine imperfection, not a manufactured
+        // "viable", matching this fixture's established practice elsewhere
+        // (e.g. outcome_evidence_retention_rate's 11/12) of not making
+        // "healthy" mean "perfect". Timestamps spaced between createdAt and
+        // closeDate — all comfortably more recent than sh-earliest's
+        // 640-days-back entry below, so stage_history_months' org-wide-
+        // earliest reading is unaffected.
+        const pathLength = stage === 'closed_won' ? 4 + (n % 2) : 3 + (n % 2); // won: 4-5 stages reached; lost: 3-4
+        const path = CANONICAL_STAGE_ORDER.slice(0, pathLength);
+        const createdMs = new Date(createdAt).getTime();
+        const closeMs = new Date(closeDate!).getTime();
+        const span = closeMs - createdMs;
+        path.forEach((toStage, idx) => {
+          stageHistory.push({
+            ref: ref(orgId, 'stage_history', `sh-${n}-${idx}`),
+            opportunityRef: ref(orgId, 'opportunity', id),
+            fromStage: idx === 0 ? undefined : path[idx - 1],
+            toStage,
+            changedAt: new Date(createdMs + (span * (idx + 1)) / (path.length + 1)).toISOString(),
+          });
+        });
+        // Final transition into the closing stage itself, at closeDate —
+        // same shape a real adapter's stage-history object would show (e.g.
+        // Salesforce OpportunityHistory records a row for this too).
+        // win_rate_dispersion filters closed_won/closed_lost out (see
+        // metrics/labels.ts), so this row is inert for that metric but
+        // keeps the seeded sequence realistic.
+        stageHistory.push({
+          ref: ref(orgId, 'stage_history', `sh-${n}-close`),
+          opportunityRef: ref(orgId, 'opportunity', id),
+          fromStage: path[path.length - 1],
+          toStage: stage,
+          changedAt: closeDate!,
+        });
+      }
       if (n % 6 === 0) {
         ownerChanges.push(makeOwnerChange(orgId, `oc-${n}`, ref(orgId, 'opportunity', id), `rep-${n % 8}`, daysBefore(asOf, 200 + (n % 100))));
       }

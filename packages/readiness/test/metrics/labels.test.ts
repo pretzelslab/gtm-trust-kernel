@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closedDealCountTwelveMonths, outcomeEvidenceRetentionRate } from '../../src/metrics/labels.js';
+import { closedDealCountTwelveMonths, outcomeEvidenceRetentionRate, winRateDispersion } from '../../src/metrics/labels.js';
 import {
   CLOSED_DEAL_COUNT_12M_ASOF,
   CLOSED_DEAL_COUNT_12M_EXPECTED,
@@ -14,6 +14,17 @@ import {
   outcomeEvidenceRetentionRateFixture,
   outcomeEvidenceRetentionRateTruncatedFixture,
 } from '../fixtures/outcome_evidence_retention_rate.js';
+import {
+  WIN_RATE_DISPERSION_ASOF,
+  WIN_RATE_DISPERSION_EXCLUDED_STAGE_EXPECTED,
+  WIN_RATE_DISPERSION_EXPECTED,
+  winRateDispersionExcludedStageFixture,
+  winRateDispersionFewerThanTwoStagesFixture,
+  winRateDispersionFixture,
+  winRateDispersionGateOffFixture,
+  winRateDispersionNoEligibleFixture,
+  winRateDispersionOnlyClosingTransitionFixture,
+} from '../fixtures/win_rate_dispersion.js';
 
 describe('closedDealCountTwelveMonths', () => {
   it('matches the golden fixture: 5 closed opportunities, no floor', () => {
@@ -79,6 +90,75 @@ describe('outcomeEvidenceRetentionRate', () => {
       sampleSize: 0,
       lowConfidence: false,
       note: 'no closed opportunities (won or lost, trailing 12 months) in sample',
+    });
+  });
+});
+
+describe('winRateDispersion', () => {
+  it('matches the golden fixture: 2 qualifying stages at exactly the 5-opportunity minimum, dispersion 0.3', () => {
+    const result = winRateDispersion(winRateDispersionFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_EXPECTED.value, 10);
+    expect({ ...result, value: undefined }).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'ok',
+      value: undefined,
+      sampleSize: WIN_RATE_DISPERSION_EXPECTED.sampleSize,
+      lowConfidence: true,
+    });
+  });
+
+  it('excludes a stage below the 5-opportunity minimum, reporting exactly 1 excluded in note, value/sampleSize otherwise unchanged', () => {
+    const result = winRateDispersion(winRateDispersionExcludedStageFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_EXCLUDED_STAGE_EXPECTED.value, 10);
+    expect({ ...result, value: undefined }).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'ok',
+      value: undefined,
+      sampleSize: WIN_RATE_DISPERSION_EXCLUDED_STAGE_EXPECTED.sampleSize,
+      lowConfidence: true,
+      note: '1 stage excluded: fewer than 5 closed opportunities',
+    });
+  });
+
+  it('returns not_applicable when fewer than 2 canonical stages ever qualify', () => {
+    const result = winRateDispersion(winRateDispersionFewerThanTwoStagesFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'fewer than 2 canonical stages have at least 5 closed opportunities (0 stages excluded)',
+    });
+  });
+
+  it('filters out the closing transition itself (closed_won/closed_lost) — a fixture where every entry is the closing stage reads as no intermediate stages at all, not a trivial 1.0/0.0 dispersion', () => {
+    const result = winRateDispersion(winRateDispersionOnlyClosingTransitionFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result.status).toBe('not_applicable');
+    expect(result.value).toBeNull();
+  });
+
+  it('returns not_instrumented when the adapter reports no stageHistory capability for this org', () => {
+    const result = winRateDispersion(winRateDispersionGateOffFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'not_instrumented',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'adapter capability matrix reports no stage-history capability for this org',
+    });
+  });
+
+  it('returns not_applicable when no closed opportunity has a resolvable stage-history entry', () => {
+    const result = winRateDispersion(winRateDispersionNoEligibleFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(result).toEqual({
+      metric: 'win_rate_dispersion',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'no closed opportunities in sample with a resolvable stage-history entry',
     });
   });
 });

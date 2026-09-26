@@ -18,6 +18,7 @@ import {
   hydrateNextStepChanges,
   hydrateNotes,
   hydrateStageHistory,
+  hydrateStageHistoryByOpportunity,
 } from '../coverageSample.js';
 import type { CoverageSample, MetricConfig, MetricResult } from '../metrics/types.js';
 import {
@@ -34,7 +35,7 @@ import { stageActivityContradictionRate, roundAmountRate, stageMappingCoverage, 
 import { closeDateHistoryEnabled, ownerHistoryEnabled, stageHistoryMonths } from '../metrics/history.js';
 import { accountResolutionRate, activityAttributionRate, contactIdentityResolutionRate, temporalAnomalyRate } from '../metrics/joinability.js';
 import { medianNoteLengthChars, piiDensity, substantiveNoteRate, untrustedTextRatio } from '../metrics/textSubstrate.js';
-import { closedDealCountTwelveMonths, outcomeEvidenceRetentionRate } from '../metrics/labels.js';
+import { closedDealCountTwelveMonths, outcomeEvidenceRetentionRate, winRateDispersion } from '../metrics/labels.js';
 import { resolveSecondSource } from '../secondSource/resolve.js';
 import { runSample } from '../sample.js';
 import type { SampleConfig, StopReason } from '../sample.js';
@@ -138,12 +139,17 @@ const IMPLEMENTED: Readonly<Partial<Record<MetricId, MetricFn>>> = {
   untrusted_text_ratio: untrustedTextRatio,
   closed_deal_count_12m: closedDealCountTwelveMonths,
   outcome_evidence_retention_rate: outcomeEvidenceRetentionRate,
+  win_rate_dispersion: winRateDispersion,
 };
 
-const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {
-  win_rate_dispersion:
-    'Deferred: no adapter method exists yet to read stage-transition history by opportunity ref; bundled with the two deferrals above into one adapter-contract change (docs/STATUS.md).',
-};
+/**
+ * Every dimension in the original seven-dimension scope now has a shipped
+ * metric — nothing left to defer. Kept as an empty record, not deleted,
+ * so buildReportData's fallback branch (status: 'not_implemented') has
+ * something to fall through to if a future MetricId is added to
+ * rubric.ts's THRESHOLDS before its metric function exists.
+ */
+const DEFERRED_REASONS: Readonly<Partial<Record<MetricId, string>>> = {};
 
 // ---------------------------------------------------------------------------
 // Report shape
@@ -242,6 +248,7 @@ export async function buildReportData(
   sample = (await hydrateNotes(sample, adapter)).sample;
   sample = (await hydrateActivities(sample, adapter)).sample;
   sample = (await hydrateNextStepChanges(sample, adapter)).sample;
+  sample = (await hydrateStageHistoryByOpportunity(sample, adapter)).sample;
 
   // D5: only hydrate contacts / resolve the second source when one is
   // actually connected — otherwise this is pure wasted I/O for data

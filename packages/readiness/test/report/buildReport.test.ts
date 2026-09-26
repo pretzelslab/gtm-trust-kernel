@@ -63,14 +63,10 @@ describe('buildReportData shape', () => {
     }
   });
 
-  it('shows the remaining explicit deferrals as status "deferred" with a reason', async () => {
+  it('has zero deferred metrics — every dimension in the original 7-dimension scope now has a shipped metric', async () => {
     const data = await buildFor('healthy');
-    for (const metric of ['win_rate_dispersion'] as const) {
-      const row = data.metrics.find((m) => m.metric === metric)!;
-      expect(row.status).toBe('deferred');
-      expect(row.value).toBeNull();
-      expect(row.note).toBeTruthy();
-    }
+    expect(data.metrics.filter((m) => m.status === 'deferred')).toHaveLength(0);
+    expect(data.org.metricStatusCounts.deferred).toBe(0);
   });
 
   it('shows all 4 D5 metrics as not_instrumented with "no second source connected" when none is configured (fresh)', async () => {

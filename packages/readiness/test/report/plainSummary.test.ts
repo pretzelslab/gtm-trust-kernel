@@ -28,6 +28,29 @@ const TWO_BLOCKED_TIER_OVERRIDES: Readonly<Partial<Record<MetricId, Verdict>>> =
   amount_fill_rate: 'viable',
 };
 
+/**
+ * Synthetic override, not a real fixture outcome: exactly one viable-bucket
+ * capability set, one caution (forecast_assistance, degraded), and one
+ * genuine notReady (bulk_hygiene_automation, blocked) plus the writeback
+ * fail-safe (autonomous_writeback, degraded) — a deliberately fully-mixed
+ * set, decoupled from whatever healthy's real capability verdicts happen to
+ * be on a given day (in particular, close_date_realism/forecast_assistance
+ * moving off "blocked" once their metrics shipped this session, which is
+ * exactly what broke this test's original healthy-relies-on-a-real-blocked-
+ * capability premise).
+ */
+function fullyMixedVerdictSetFixture(base: ReportData): ReportData {
+  const capabilities = base.capabilities.map((c): ReportCapabilityRow => {
+    if (c.id === 'forecast_assistance') return { ...c, verdict: 'degraded' };
+    if (c.id === 'bulk_hygiene_automation') return { ...c, verdict: 'blocked' };
+    if (c.id === 'autonomous_writeback') return { ...c, verdict: 'degraded' };
+    return { ...c, verdict: 'viable' };
+  });
+  const capabilityVerdictCounts: Record<Verdict, number> = { viable: 0, degraded: 0, blocked: 0 };
+  for (const c of capabilities) capabilityVerdictCounts[c.verdict] += 1;
+  return { ...base, capabilities, org: { ...base.org, capabilityVerdictCounts } };
+}
+
 function twoBlockedDifferentReasonsFixture(base: ReportData): ReportData {
   const metrics = base.metrics.map((m) => {
     const tier = TWO_BLOCKED_TIER_OVERRIDES[m.metric];
@@ -83,8 +106,9 @@ describe('buildExecutiveSummary', () => {
     expect(buildExecutiveSummary(data)).toBe(buildExecutiveSummary(data));
   });
 
-  it('produces 3-6 sentences and hits 6 for a fully mixed set (healthy: viable + degraded + blocked all present)', async () => {
-    const data = await buildFixture('healthy');
+  it('produces 3-6 sentences and hits 6 for a fully mixed set (synthetic: viable + degraded + blocked all present)', async () => {
+    const base = await buildFixture('healthy');
+    const data = fullyMixedVerdictSetFixture(base);
     expect(data.org.capabilityVerdictCounts.viable).toBeGreaterThan(0);
     expect(data.org.capabilityVerdictCounts.degraded).toBeGreaterThan(0);
     expect(data.org.capabilityVerdictCounts.blocked).toBeGreaterThan(0);
@@ -134,7 +158,8 @@ describe('buildExecutiveSummary', () => {
   });
 
   it('never places a degraded, non-writeback capability in the not-ready sentence', async () => {
-    const data = await buildFixture('healthy');
+    const base = await buildFixture('healthy');
+    const data = fullyMixedVerdictSetFixture(base);
     // autonomous_writeback is the one deliberate exception (the fail-safe) — excluded here,
     // covered separately below.
     const degraded = data.capabilities.filter((c) => c.verdict === 'degraded' && c.id !== 'autonomous_writeback');
