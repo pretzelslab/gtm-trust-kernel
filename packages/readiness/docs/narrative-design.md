@@ -2,7 +2,7 @@
 
 ## Session handoff (2026-09-26)
 
-Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), + this session's uncommitted 2f — all local, none pushed until this session's final push.
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), c26f62a (2f) — all local, none pushed until this session's final push.
 
 **e01abcb (2c) was committed but NOT live-validated** at the time — all 12 smoke-run calls failed identically at the transport layer: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Fixed by 2d.
 
@@ -10,9 +10,9 @@ Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049
 
 **049198e (2e) fixed that leak (decision 18).** Root cause: `MetricRow.viableAt`/`degradedAt` — the literal JSON keys the model reads for every metric — are themselves named with the tier words, so the model had a structural cue no prose instruction reliably overrode. `NarrativePromptMetricRow` (new type) renames those two fields to `target`/`limit` (tier-neutral; not `floor`, to avoid colliding with the existing unrelated `floor: boolean` truncation flag); `buildPrompt()` gained two WRONG/RIGHT few-shot pairs teaching the new vocabulary. Validator unchanged. **Live-validated (`--runs 3`):** grounding fallback dropped to 25% (3/12), down from 2d's 75% — but all 3 failures were claim 7 (the last claim in each failing run): an aggregate/closing sentence ("All 8 capabilities are blocked", "5 of 8 blocked") or an otherwise-grounded claim with an uncited tier word tacked on at the end.
 
-**This session's uncommitted 2f fixes that leak (decision 19).** Root cause: `NarrativePromptInput.org` still carried `capabilityVerdictCounts`/`metricStatusCounts` — tier-keyed aggregate counts — giving the model the exact numbers to build a closing "N of M blocked" sentence from, the same "echoes what it sees" pattern as 2e's fix, just one field over. `NarrativePromptInput.org` is now `Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts'>`; `buildNarrativePromptInput()` no longer copies those two fields. `buildPrompt()` also gained an explicit "no closing/summary claim" rule and sharpened the tier-word rule to forbid tacking an uncited second tier word onto an otherwise-valid claim. Validator unchanged. This session's `--runs 3` live smoke results against 2f are reported in this session's own output, not duplicated here — see chat history or re-run `npm run narrative:smoke -- --runs 3` to reproduce.
+**c26f62a (2f) fixed that leak (decision 19).** Root cause: `NarrativePromptInput.org` still carried `capabilityVerdictCounts`/`metricStatusCounts` — tier-keyed aggregate counts — giving the model the exact numbers to build a closing "N of M blocked" sentence from, the same "echoes what it sees" pattern as 2e's fix, just one field over. `NarrativePromptInput.org` is now `Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts'>`; `buildNarrativePromptInput()` no longer copies those two fields. `buildPrompt()` also gained an explicit "no closing/summary claim" rule and sharpened the tier-word rule to forbid tacking an uncited second tier word onto an otherwise-valid claim. Validator unchanged. **Live-validated (`--runs 3`):** grounding fallback dropped to 8% (1/12), the lowest of every iteration since 2b (100% → 42% → 75% → 25% → 8%) and the first at or under decision 4's ~20% threshold — see decision 4's "Threshold met" note. Zero aggregate/closing-claim or tier-tack-on failures this run: decision 19's fix held. **The one failure is a new, unrelated shape:** `legacy` run 2, claim 3, `"activity_capture_rate is blocked because the org has no activity-sync capability"` — `activity_capture_rate` is gated off (`AdapterCapabilities.activitySync: false` on `legacy`), so its real tier is `null` ("none" in the validator's message), not `blocked`. The model used "blocked" colloquially to describe a *gate-off* metric rather than one that was actually evaluated and scored `blocked` — a plausible English reading of "not instrumented" that decision 6's strict tier-word check correctly rejects. Not a recurrence of 2d's threshold-echo or 2e's/2f's closing-claim/tack-on patterns; not chased further this timeboxed commit (rate is already within threshold, and the fallback is free and correct) — flagged as an open item if it recurs.
 
-Older open findings from the 2b run, largely superseded by the above (claim count too high, mixed-id tier claims, capability-only numeric citations, usage lost on parse failure) were addressed by 2c/2d's prompt and cap changes and were not the dominant failure in 2d's, 2e's, or 2f's live runs. Still open, unrelated to 2c-2f: the `volume` claim-4 note-derived-count hypothesis (see decision "open item" above, unconfirmed as of the 2b re-run).
+Older open findings from the 2b run, largely superseded by the above (claim count too high, mixed-id tier claims, capability-only numeric citations, usage lost on parse failure) were addressed by 2c/2d's prompt and cap changes and were not the dominant failure in 2d's, 2e's, or 2f's live runs. Still open, unrelated to 2c-2f: the `volume` claim-4 note-derived-count hypothesis (see decision "open item" above, unconfirmed as of the 2b re-run); and the new gate-off-described-as-"blocked" pattern flagged above.
 
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
@@ -71,6 +71,14 @@ out.
    to `claude-sonnet-5`.** This is an operational trigger for a human to
    act on after running the script, not a runtime threshold the code
    enforces — claim-level grounding stays strict regardless (decision 8).
+   **Threshold met, 2026-09-26 (commit 2f's live validation):** after
+   commit 2f's fix (decision 19), a `--runs 3` smoke run's grounding
+   fallback rate dropped to 8% (1/12) — the first live run at or under the
+   ~20% mark across every 2b–2f iteration (100% → 42% → 75% → 25% → 8%).
+   No escalation to `claude-sonnet-5` needed; `DEFAULT_MODEL` stays
+   `claude-haiku-4-5-20251001`. The one remaining failure is a new,
+   unrelated shape, not a recurrence of any prior one — see the
+   "Session handoff" section.
 
 5. **Every claim must cite at least one id.** `groundedIn` (an array of
    `MetricId`/`CapabilityId` values) must be non-empty on every claim; no
