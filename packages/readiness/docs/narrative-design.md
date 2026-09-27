@@ -1,5 +1,23 @@
 # report/narrative.ts — design note (draft plan, not implemented)
 
+## Session handoff (2026-09-26)
+
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c) — all local, none pushed until this session's final push.
+
+**e01abcb (2c) is committed but NOT live-validated.** All 12 smoke-run calls failed identically: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Items 2-4 of 2c (max_tokens 1536, the 4 tier-word prompt rules, stop_reason truncation detection) were never exercised as a result.
+
+Latest *validated* smoke run (2b, `--runs 3`): grounding fallback 42% (5/12); transport 5/12 (JSON truncation at max_tokens 1024, pre-2c).
+
+Open findings (from the 2b run): claim count too high (up to 19 per response); tier-word-as-threshold false positives ("short of viable"); mixed-id tier claims (two tier words, one sentence); capability-only numeric citations; usage lost on a parse failure; volume claim-4 note-derived-count hypothesis unconfirmed.
+
+**Next step:** fix 2c's schema first — drop `maxItems` (API rejects it on arrays), keep the prompt's "at most 8 claims" instruction only — then re-run `--runs 3` to validate the rest of 2c before starting commit 3. Original 2c spec, verbatim:
+1. Schema claims maxItems 8; prompt "at most 8 claims, prioritize most decision-relevant"
+2. max_tokens 1536
+3. stop_reason max_tokens -> "truncation" category; capture usage from raw response even on parse failure
+4. Prompt rules: tier words only for cited item's own tier; thresholds as numbers not tier names; one tier word per claim; numbers must cite metric id
+5. Record as decision 16: "validator stays strict; prompt constrains language"
+6. Tests: maxItems present; prompt contains each new rule
+
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
 still not built"). **Draft plan** — the decisions below are locked as in
