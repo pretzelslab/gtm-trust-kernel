@@ -2,7 +2,7 @@
 
 ## Session handoff (2026-09-26)
 
-Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), c26f62a (2f) — all local, none pushed until this session's final push.
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), c26f62a (2f), c232891 (3) — 1 through 2f were local until pushed at the end of the prior session; 3 pushed this session.
 
 **e01abcb (2c) was committed but NOT live-validated** at the time — all 12 smoke-run calls failed identically at the transport layer: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Fixed by 2d.
 
@@ -13,6 +13,25 @@ Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049
 **c26f62a (2f) fixed that leak (decision 19).** Root cause: `NarrativePromptInput.org` still carried `capabilityVerdictCounts`/`metricStatusCounts` — tier-keyed aggregate counts — giving the model the exact numbers to build a closing "N of M blocked" sentence from, the same "echoes what it sees" pattern as 2e's fix, just one field over. `NarrativePromptInput.org` is now `Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts'>`; `buildNarrativePromptInput()` no longer copies those two fields. `buildPrompt()` also gained an explicit "no closing/summary claim" rule and sharpened the tier-word rule to forbid tacking an uncited second tier word onto an otherwise-valid claim. Validator unchanged. **Live-validated (`--runs 3`):** grounding fallback dropped to 8% (1/12), the lowest of every iteration since 2b (100% → 42% → 75% → 25% → 8%) and the first at or under decision 4's ~20% threshold — see decision 4's "Threshold met" note. Zero aggregate/closing-claim or tier-tack-on failures this run: decision 19's fix held. **The one failure is a new, unrelated shape:** `legacy` run 2, claim 3, `"activity_capture_rate is blocked because the org has no activity-sync capability"` — `activity_capture_rate` is gated off (`AdapterCapabilities.activitySync: false` on `legacy`), so its real tier is `null` ("none" in the validator's message), not `blocked`. The model used "blocked" colloquially to describe a *gate-off* metric rather than one that was actually evaluated and scored `blocked` — a plausible English reading of "not instrumented" that decision 6's strict tier-word check correctly rejects. Not a recurrence of 2d's threshold-echo or 2e's/2f's closing-claim/tack-on patterns; not chased further this timeboxed commit (rate is already within threshold, and the fallback is free and correct) — flagged as an open item if it recurs.
 
 Older open findings from the 2b run, largely superseded by the above (claim count too high, mixed-id tier claims, capability-only numeric citations, usage lost on parse failure) were addressed by 2c/2d's prompt and cap changes and were not the dominant failure in 2d's, 2e's, or 2f's live runs. Still open, unrelated to 2c-2f: the `volume` claim-4 note-derived-count hypothesis (see decision "open item" above, unconfirmed as of the 2b re-run); and the new gate-off-described-as-"blocked" pattern flagged above.
+
+**c232891 (commit 3) built `narrative.ts`'s orchestration (decisions
+20-22)** — pure wiring/formatting, no prompt or grounding-rule change, so
+none of 2f's live-validated 8% fallback rate is expected to move. One
+mid-implementation correction from the plan handed off at the start of this
+session: the grounding-failure notice was originally going to quote
+`GroundingFailure.reason` directly (per decision 9's literal example
+wording). Caught before writing code — `reason`'s "cited id ... does not
+exist" shape echoes an unvalidated, model-supplied `groundedIn` string,
+which could in principle carry the claim's own rejected wording. Fixed by
+building the notice from a fixed category label (`checkNameFor`, prefix-
+matched against the four known failure shapes) plus the claim number only —
+see decision 21's full writeup. Also added, per explicit instruction: a
+`"(+N more)"` suffix when more than one claim fails grounding, and a
+direct test asserting the notice contains neither the failing claim's text
+nor an invalid cited id. `npm run ci` green (adapters 63, kernel 24,
+readiness 405 — 6 new in `narrative.test.ts`). Not live-validated against
+the real API this commit — no prompt/model-facing change to validate;
+the existing 2f live-validation result stands.
 
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
@@ -437,6 +456,65 @@ recur. Still open.
     decisions 16 and 18, this is a data/prompt-only fix. See this file's
     "Session handoff" section for this commit's live-validated results.
 
+20. **`NarrativeResult` shape (2026-09-26, commit 3).**
+    ```ts
+    type NarrativeResult =
+      | { ok: true; text: string; claims: NarrativeClaim[] }
+      | { ok: false; reasonKind: 'client_error' | 'grounding'; notice: string; text: string };
+    ```
+    `text` is present on **both** branches — a caller (commit 4's render
+    layer) never has to branch on `ok` just to find prose to show. On the
+    `ok: false` branch it is the deterministic summary: `plainSummary.ts`'s
+    `buildExecutiveSummary(data)` output, verbatim, not `buildFullNarrative`
+    (a separate, structured multi-part shape used only by `plainReport.ts`'s
+    own renderer — confirmed by grep, `render.ts` imports only
+    `buildExecutiveSummary`). `claims` is only present on `ok: true`
+    (decision 22), so a caller can walk each claim's own `groundedIn` for
+    traceability; the fallback branch has no model claims to expose.
+
+21. **Fallback notice text — fixed category strings, never raw error or
+    reason text (2026-09-26, commit 3, amended from the original plan per
+    explicit instruction).** Client-throw notice is a fixed string,
+    regardless of what was thrown or its `kind` (`NarrativeGenerationError`
+    or otherwise): `"LLM narrative unavailable (network/API error); showing
+    deterministic summary."` — never includes `error.message`, so no SDK
+    internals ever reach the report.
+    **Grounding notice does not quote `GroundingFailure.reason` either**,
+    contrary to the first draft of this decision. Three of
+    `narrativeGrounding.ts`'s four failure shapes interpolate only
+    `ReportData`-derived content (real metric/capability ids, decision 6's
+    fixed tier-word vocabulary) — safe on inspection — but the fourth
+    (`cited id "..." does not exist in this report`) echoes whatever
+    arbitrary string the model put in a claim's `groundedIn` array. Once
+    that string has failed the id-existence check it is unvalidated
+    model-generated content with no format guarantee beyond "a string", so
+    rather than trust that one shape apart from the other three, the notice
+    never quotes any `reason` text at all. Instead, `narrative.ts` maps each
+    `reason` to a fixed category label via prefix-matching against the four
+    known shapes (`checkNameFor`; an unrecognized future shape falls back to
+    a generic `"grounding check"` label rather than the raw reason) and
+    builds the notice from that label plus the 1-indexed claim number only:
+    `` `LLM narrative rejected: ${checkName} in claim ${claimIndex + 1}; showing deterministic summary.` ``
+    — following decision 9's example phrasing (`"ungrounded figure"` is
+    literally one of the four category labels). When more than one claim
+    fails, `" (+N more)"` is appended after the claim number (N = failure
+    count minus one) so a reader isn't misled into thinking only one claim
+    had a problem — only the *first* failure's check/claim is named in
+    full, matching decision 8's "any single failing claim discards the
+    whole narrative" framing (a reader doesn't need every failure
+    enumerated to know why). Tested directly: a claim whose text and whose
+    invalid cited id both carry a distinctive marker string produces a
+    notice containing neither marker.
+
+22. **Passing claims render as one bullet per claim (2026-09-26, commit
+    3).** `` `- ${claim.text}` ``, one per line, joined `\n`, in model order
+    (`response.claims`'s order — already preserved by `validateGrounding`,
+    which doesn't reorder, and by `capClaims`, which truncates but doesn't
+    reorder). This is `NarrativeResult.text` on the `ok: true` branch. The
+    raw `claims` array is also returned unmodified alongside it (decision
+    20) so a future render layer can inspect each claim's own `groundedIn`
+    ids rather than only the flattened prose.
+
 ## Non-goals (explicit)
 
 - No envelope/trust-tier wiring in this phase (see Scope).
@@ -538,10 +616,12 @@ recur. Still open.
    "one tier word per claim, only for that claim's own cited item" rule.
    Validator unchanged. See decision 19 and this file's "Session handoff"
    for the live-validated results.
-3. **`narrative.ts` orchestration.** Builds the prompt input from
-   `ReportData`, calls the client, validates, falls back with the visible
-   reason from decision 9 — fully testable via the fake client from
-   commit 1.
+3. **`narrative.ts` orchestration — done (2026-09-26, decisions 20-22).**
+   `buildNarrative(data, client)` builds the prompt input, calls the
+   client, validates grounding, and falls back with a visible,
+   leak-free notice (decisions 9/21) for a client throw or any grounding
+   failure (decision 8) — fully testable via `FakeNarrativeModelClient`,
+   no network. `npm run ci` green (`c232891`).
 4. **CLI/render wiring.** Opt-in `--narrative` flag in `cli.ts` (default
    off), a render slot showing either the narrative or the visible
    fallback notice.
