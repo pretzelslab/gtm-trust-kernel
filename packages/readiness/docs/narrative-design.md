@@ -2,15 +2,17 @@
 
 ## Session handoff (2026-09-26)
 
-Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), + this session's uncommitted 2e — all local, none pushed until this session's final push.
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), + this session's uncommitted 2f — all local, none pushed until this session's final push.
 
 **e01abcb (2c) was committed but NOT live-validated** at the time — all 12 smoke-run calls failed identically at the transport layer: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Fixed by 2d.
 
 **4094b76 (2d) fixed that schema rejection (decision 17).** `CLAIMS_SCHEMA`'s `claims` array no longer declares `maxItems`; the prompt's "at most 8 claims" instruction is unchanged and is still the model's only signal about the limit. `AnthropicNarrativeModelClient.generate()` enforces the cap client-side via a new pure `capClaims()`, called after the shape-guard passes, exposing the pre-cap count as `NarrativeModelResponse.originalClaimCount`. Validator untouched. **Live-validated (`--runs 3`):** 0 transport/truncation failures — the schema fix reached the model on all 12 calls for the first time — but grounding fallback rose to 75% (9/12), worse than 2b's 42% baseline. Every failure was the same new shape: a tier word ("viable"/"degraded") describing a *threshold number*, not the cited item's own tier (e.g. "below the 95% **viable** threshold", cited tier `degraded`).
 
-**This session's uncommitted 2e fixes that leak (decision 18).** Root cause: `MetricRow.viableAt`/`degradedAt` — the literal JSON keys the model reads for every metric — are themselves named with the tier words, so the model had a structural cue no prose instruction reliably overrode. `NarrativePromptMetricRow` (new type) renames those two fields to `target`/`limit` (tier-neutral; not `floor`, to avoid colliding with the existing unrelated `floor: boolean` truncation flag); `buildPrompt()` gained two WRONG/RIGHT few-shot pairs teaching the new vocabulary. Validator unchanged. This session's `--runs 3` live smoke results against 2e are reported in this session's own output, not duplicated here — see chat history or re-run `npm run narrative:smoke -- --runs 3` to reproduce.
+**049198e (2e) fixed that leak (decision 18).** Root cause: `MetricRow.viableAt`/`degradedAt` — the literal JSON keys the model reads for every metric — are themselves named with the tier words, so the model had a structural cue no prose instruction reliably overrode. `NarrativePromptMetricRow` (new type) renames those two fields to `target`/`limit` (tier-neutral; not `floor`, to avoid colliding with the existing unrelated `floor: boolean` truncation flag); `buildPrompt()` gained two WRONG/RIGHT few-shot pairs teaching the new vocabulary. Validator unchanged. **Live-validated (`--runs 3`):** grounding fallback dropped to 25% (3/12), down from 2d's 75% — but all 3 failures were claim 7 (the last claim in each failing run): an aggregate/closing sentence ("All 8 capabilities are blocked", "5 of 8 blocked") or an otherwise-grounded claim with an uncited tier word tacked on at the end.
 
-Older open findings from the 2b run, largely superseded by the above (claim count too high, mixed-id tier claims, capability-only numeric citations, usage lost on parse failure) were addressed by 2c/2d's prompt and cap changes and were not the dominant failure in 2d's or 2e's live runs. Still open, unrelated to 2c-2e: the `volume` claim-4 note-derived-count hypothesis (see decision "open item" above, unconfirmed as of the 2b re-run).
+**This session's uncommitted 2f fixes that leak (decision 19).** Root cause: `NarrativePromptInput.org` still carried `capabilityVerdictCounts`/`metricStatusCounts` — tier-keyed aggregate counts — giving the model the exact numbers to build a closing "N of M blocked" sentence from, the same "echoes what it sees" pattern as 2e's fix, just one field over. `NarrativePromptInput.org` is now `Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts'>`; `buildNarrativePromptInput()` no longer copies those two fields. `buildPrompt()` also gained an explicit "no closing/summary claim" rule and sharpened the tier-word rule to forbid tacking an uncited second tier word onto an otherwise-valid claim. Validator unchanged. This session's `--runs 3` live smoke results against 2f are reported in this session's own output, not duplicated here — see chat history or re-run `npm run narrative:smoke -- --runs 3` to reproduce.
+
+Older open findings from the 2b run, largely superseded by the above (claim count too high, mixed-id tier claims, capability-only numeric citations, usage lost on parse failure) were addressed by 2c/2d's prompt and cap changes and were not the dominant failure in 2d's, 2e's, or 2f's live runs. Still open, unrelated to 2c-2f: the `volume` claim-4 note-derived-count hypothesis (see decision "open item" above, unconfirmed as of the 2b re-run).
 
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
@@ -386,6 +388,47 @@ recur. Still open.
     validator is unchanged** — same rule as decision 16, this is a data/
     prompt-only fix.
 
+19. **Aggregate tier-count fields stripped from the prompt input; explicit
+    "no closing claim" / "no uncited tier tack-on" prompt rules added
+    (2026-09-26, commit 2f).** 2e's first live run (`--runs 3`, schema fix
+    and `target`/`limit` rename both live) showed a 25% grounding-fallback
+    rate (3/12) — an improvement on 2d's 75%, but all 3 failures were the
+    same new shape: claim 7, the *last* claim in each failing run, was
+    either an aggregate/closing sentence ("All 8 capabilities are blocked",
+    "5 of 8 blocked") or an otherwise-grounded claim with an extra,
+    uncited tier word tacked on at the end. Root cause: `NarrativePromptInput.org`
+    still carried `capabilityVerdictCounts`/`metricStatusCounts` —
+    tier-keyed aggregate counts — even though decision 14's prompt rule
+    already told the model not to write a sentence summarizing a count by
+    tier. Same lesson as decision 18: a prose instruction alone didn't
+    reliably override a structural cue sitting right there in the data the
+    model reads. **Fix is at the input, not just the instructions, same
+    pattern as decision 18:** `NarrativePromptInput.org` is now
+    `Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' |
+    'metricStatusCounts'>` (`narrativeTypes.ts`); `buildNarrativePromptInput()`
+    no longer copies those two fields (`narrativePromptInput.ts`). The 3
+    `SUMMARY_IDS` (decision 5's amendment) are unaffected and still passed
+    through — those are plain org-level counts, not tier-keyed breakdowns,
+    and remain the model's only legitimate way to cite a scan/sample count.
+    `buildPrompt()` (`anthropicNarrativeModelClient.ts`) additionally gained
+    two new rules on top of the data fix: (1) an explicit ban on any
+    closing/summary/overview claim — "every claim, including your last one,
+    must be about one specific, cited metric or capability... Stop after
+    your last per-item claim" — targeting the *position* pattern (last
+    claim tends to be where a model reaches for a wrap-up sentence), not
+    just the count-by-tier phrasing decision 14 already forbade; (2) the
+    existing "at most one tier word per claim" rule is sharpened to say
+    that tier word must describe *only that claim's own cited item*, and
+    explicitly forbids tacking a second, uncited tier word onto an
+    otherwise-valid claim to describe a different item, a group, or the
+    report overall. The "Do NOT cite structural field names" line dropped
+    `capabilityVerdictCounts`/`metricStatusCounts` (they no longer appear
+    in the data at all, so the line describing them as "appear[ing] in the
+    data" would now be false) but kept `gatesCapabilities`, which is still
+    present on every metric row. **Validator unchanged** — same rule as
+    decisions 16 and 18, this is a data/prompt-only fix. See this file's
+    "Session handoff" section for this commit's live-validated results.
+
 ## Non-goals (explicit)
 
 - No envelope/trust-tier wiring in this phase (see Scope).
@@ -476,6 +519,17 @@ recur. Still open.
    `buildPrompt()` gained two WRONG/RIGHT few-shot pairs. Validator
    unchanged. See decision 18 and this file's "Session handoff" for the
    live-validated results.
+2f. **Aggregate-tier-count-leak fix from 2e's live validation (2026-09-26,
+   decision 19).** 2e's first live run (`--runs 3`) showed a 25% (3/12)
+   grounding-fallback rate, down from 2d's 75%, but every failure was
+   claim 7 (the last claim): an aggregate/closing sentence ("All 8
+   capabilities are blocked") or an uncited tier word tacked onto an
+   otherwise-valid claim. `NarrativePromptInput.org` no longer carries
+   `capabilityVerdictCounts`/`metricStatusCounts` at all; `buildPrompt()`
+   gained an explicit "no closing/summary claim" rule and a sharpened
+   "one tier word per claim, only for that claim's own cited item" rule.
+   Validator unchanged. See decision 19 and this file's "Session handoff"
+   for the live-validated results.
 3. **`narrative.ts` orchestration.** Builds the prompt input from
    `ReportData`, calls the client, validates, falls back with the visible
    reason from decision 9 — fully testable via the fake client from

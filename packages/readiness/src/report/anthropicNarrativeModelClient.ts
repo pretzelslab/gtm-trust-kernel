@@ -44,6 +44,18 @@
  * literal word from the data the model reads; these examples reinforce
  * the resulting target/limit vocabulary in the prompt's own text.
  *
+ * buildPrompt() also carries decision 19's "no closing/summary claim" and
+ * "one tier word per claim, only for the cited item" rules, added after
+ * 2e's live run (schema fix + target/limit rename both live) still showed
+ * a 25% grounding-fallback rate, all 3 failures on the last claim: an
+ * aggregate/closing sentence ("All 8 capabilities are blocked", "5 of 8
+ * blocked") or an otherwise-valid claim with an uncited tier word tacked
+ * on. NarrativePromptInput's org no longer carries
+ * capabilityVerdictCounts/metricStatusCounts at all (narrativePromptInput.ts,
+ * narrativeTypes.ts) -- same "fix the input, not just the instructions"
+ * logic as decision 18 -- and the prompt gained an explicit rule against a
+ * final wrap-up claim.
+ *
  * Never logs or includes the API key in any error: only error.status/
  * .name/.message are read from a caught SDK error, never headers or the raw
  * request/response body.
@@ -166,7 +178,10 @@ export function listValidIds(input: NarrativePromptInput): readonly string[] {
  * the data dump (capabilityVerdictCounts, metricStatusCounts,
  * gatesCapabilities, and the 3 now-legitimate summary counts) as if they
  * were valid ids, and writing aggregate tier-count sentences with no single
- * id a real claim could cite.
+ * id a real claim could cite. capabilityVerdictCounts/metricStatusCounts no
+ * longer reach the model at all as of decision 19 (commit 2f) -- this
+ * function's list is unaffected either way, since it was never built from
+ * those fields.
  */
 export function buildPrompt(input: NarrativePromptInput): string {
   return [
@@ -182,9 +197,9 @@ export function buildPrompt(input: NarrativePromptInput): string {
     'even if it looks like a reasonable field name in the JSON below:',
     listValidIds(input).join(', '),
     '',
-    'Do NOT cite structural field names such as "capabilityVerdictCounts",',
-    '"metricStatusCounts", or "gatesCapabilities" -- those are groupings in',
-    'the JSON shape, not valid ids, even though they appear in the data.',
+    'Do NOT cite structural field names such as "gatesCapabilities" -- that',
+    'is a grouping in the JSON shape, not a valid id, even though it appears',
+    'in the data.',
     '',
     'Do not write a sentence that summarizes a COUNT across multiple',
     'capabilities or metrics by tier (e.g. "2 capabilities are blocked, 5',
@@ -193,15 +208,27 @@ export function buildPrompt(input: NarrativePromptInput): string {
     'own tier (e.g. "the pipeline_risk_signals capability is blocked") is',
     'fine and encouraged.',
     '',
+    'Do not write a closing, summary, or overview claim -- one that',
+    'describes the report, or a group of capabilities/metrics, as a whole',
+    '(e.g. "All 8 capabilities are blocked", "5 of 8 metrics are',
+    'degraded", "Overall, this org is not ready"). There is no wrap-up',
+    'sentence: every claim, including your last one, must be about one',
+    'specific, cited metric or capability, exactly like every other claim.',
+    'Stop after your last per-item claim.',
+    '',
     'A tier word ("viable"/"degraded"/"blocked", or their listed synonyms',
     'ready/strong/not ready/weak) may ONLY state the cited item\'s own',
     'current tier -- never use a tier word to describe a threshold,',
     'benchmark, or comparison. Write "below the 95% threshold", never "short',
     'of viable" or "against a viable benchmark": the threshold is a number,',
-    'not a tier. Use at most one tier word per claim -- if you want to',
-    'mention that one metric contributes to a different capability\'s tier,',
-    'write that as a separate claim, not combined with the capability\'s own',
-    'tier word in the same sentence.',
+    'not a tier. Use at most one tier word per claim, and it must describe',
+    'only that claim\'s own cited item -- if you want to mention that one',
+    'metric contributes to a different capability\'s tier, write that as a',
+    'separate claim citing that capability, not combined with it in the',
+    'same sentence. Never tack a second tier word onto an otherwise-valid',
+    'claim to describe a different item, a group of items, or the report',
+    'overall (e.g. do not follow a specific claim with ", overall still',
+    'degraded" or similar) -- that phrase would have no cited id of its own.',
     '',
     'Each metric below carries a `target` and a `limit` -- these are plain',
     'numbers, not tiers. Never call a target or limit "viable" or',

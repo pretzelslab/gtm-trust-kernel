@@ -101,13 +101,11 @@ describe('listValidIds / buildPrompt (decisions 14/15, commit 2b)', () => {
     expect(validIds).not.toContain('gatesCapabilities');
   });
 
-  it('prompt text still names and explicitly forbids those structural field names, even though they are never valid ids', async () => {
+  it('prompt text still names and explicitly forbids gatesCapabilities, even though it is never a valid id', async () => {
     const input = await buildHealthyPromptInput();
 
     const prompt = buildPrompt(input);
 
-    expect(prompt).toContain('capabilityVerdictCounts');
-    expect(prompt).toContain('metricStatusCounts');
     expect(prompt).toContain('gatesCapabilities');
   });
 
@@ -232,5 +230,35 @@ describe('NarrativePromptMetricRow / buildPrompt (decision 18, commit 2e)', () =
     expect(prompt).toContain('RIGHT: "at 66%, below the 95% target; tier: degraded"');
     expect(prompt).toContain('20-deal degraded threshold');
     expect(prompt).toContain('below the 40 target and above the 20 limit; tier:');
+  });
+});
+
+describe('NarrativePromptInput / buildPrompt (decision 19, commit 2f)', () => {
+  it('prompt input carries no aggregate tier-keyed counts (capabilityVerdictCounts, metricStatusCounts)', async () => {
+    const input = await buildHealthyPromptInput();
+
+    expect('capabilityVerdictCounts' in input.org).toBe(false);
+    expect('metricStatusCounts' in input.org).toBe(false);
+    expect(JSON.stringify(input)).not.toContain('capabilityVerdictCounts');
+    expect(JSON.stringify(input)).not.toContain('metricStatusCounts');
+  });
+
+  it('prompt forbids a closing/summary claim describing the report or a group of items as a whole', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('Do not write a closing, summary, or overview claim');
+    expect(prompt).toContain('There is no wrap-up');
+    expect(prompt).toContain('Stop after your last per-item claim');
+  });
+
+  it('prompt forbids tacking an uncited second tier word onto an otherwise-valid claim', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('Never tack a second tier word');
+    expect(prompt).toContain('that phrase would have no cited id of its own');
   });
 });

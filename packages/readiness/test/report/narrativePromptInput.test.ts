@@ -54,9 +54,18 @@ describe('buildNarrativePromptInput', () => {
       closedSampleSize: data.org.closedSampleSize,
       recordsScanned: data.org.recordsScanned,
       stopReason: data.org.stopReason,
-      capabilityVerdictCounts: data.org.capabilityVerdictCounts,
-      metricStatusCounts: data.org.metricStatusCounts,
     });
+  });
+
+  it('excludes capabilityVerdictCounts and metricStatusCounts entirely (decision 19, commit 2f)', async () => {
+    const data = await buildFixture('healthy');
+
+    const input = buildNarrativePromptInput(data);
+
+    expect('capabilityVerdictCounts' in input.org).toBe(false);
+    expect('metricStatusCounts' in input.org).toBe(false);
+    expect(JSON.stringify(input)).not.toContain('capabilityVerdictCounts');
+    expect(JSON.stringify(input)).not.toContain('metricStatusCounts');
   });
 
   it('copies each metric field-for-field, renaming viableAt/degradedAt to target/limit (decision 18, commit 2e)', async () => {

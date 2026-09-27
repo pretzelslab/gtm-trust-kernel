@@ -52,10 +52,20 @@ export interface NarrativePromptMetricRow {
  * (decision 18) -- same "excluded at the type level" guarantee, applied to
  * the tier-labeled threshold field names instead of a whole field. See
  * narrativePromptInput.ts for the builder.
+ *
+ * org also excludes capabilityVerdictCounts/metricStatusCounts (decision
+ * 19, commit 2f). Both are aggregate tier-keyed counts (e.g. "5 blocked, 2
+ * viable"); the live smoke run showed the model using exactly these
+ * numbers to write a closing "N of M blocked" claim with no single id to
+ * cite -- decision 18's "the model echoes what it sees" logic applies here
+ * too, so the fix is removing the data, not just instructing against the
+ * sentence (decision 5's amendment already established the 3 SUMMARY_IDS
+ * as the one exception for plain org-level counts; these two are
+ * tier-keyed breakdowns, not plain counts, and stay excluded).
  */
 export interface NarrativePromptInput {
   readonly generatedAt: string;
-  readonly org: Omit<ReportOrgSummary, 'orgDescription'>;
+  readonly org: Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts'>;
   readonly metrics: readonly NarrativePromptMetricRow[];
   readonly capabilities: ReportData['capabilities'];
 }

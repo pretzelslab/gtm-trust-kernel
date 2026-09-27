@@ -20,6 +20,12 @@
  * literal field names ("viable"/"degraded") were leaking into the model's
  * prose about threshold values, not just about a metric's own tier. See
  * NarrativePromptMetricRow's docblock (narrativeTypes.ts) for why.
+ *
+ * org.capabilityVerdictCounts/metricStatusCounts are dropped entirely, not
+ * copied (decision 19, commit 2f) -- both are tier-keyed aggregate counts,
+ * and the live smoke run showed the model reading them straight into a
+ * closing "N of M blocked" claim with no id to cite. See
+ * NarrativePromptInput's docblock (narrativeTypes.ts) for why.
  */
 
 import type { ReportData } from './buildReport.js';
@@ -35,8 +41,6 @@ export function buildNarrativePromptInput(data: ReportData): NarrativePromptInpu
       closedSampleSize: data.org.closedSampleSize,
       recordsScanned: data.org.recordsScanned,
       stopReason: data.org.stopReason,
-      capabilityVerdictCounts: data.org.capabilityVerdictCounts,
-      metricStatusCounts: data.org.metricStatusCounts,
     },
     metrics: data.metrics.map((m) => ({
       metric: m.metric,
