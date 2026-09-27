@@ -2,17 +2,15 @@
 
 ## Session handoff (2026-09-26)
 
-Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), + this session's uncommitted 2d — all local, none pushed until this session's final push.
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), + this session's uncommitted 2e — all local, none pushed until this session's final push.
 
-**e01abcb (2c) was committed but NOT live-validated.** All 12 smoke-run calls failed identically: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Items 2-4 of 2c (max_tokens 1536, the 4 tier-word prompt rules, stop_reason truncation detection) were never exercised as a result — the request never reached the model.
+**e01abcb (2c) was committed but NOT live-validated** at the time — all 12 smoke-run calls failed identically at the transport layer: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Fixed by 2d.
 
-**2d fixes that schema rejection (decision 17).** `CLAIMS_SCHEMA`'s `claims` array no longer declares `maxItems` (the API doesn't support it on an array-typed property at all); the prompt's "at most 8 claims" instruction is unchanged and is still the model's only signal about the limit. `AnthropicNarrativeModelClient.generate()` now enforces the cap client-side via a new pure `capClaims()`, called after the shape-guard (`isClaimsShape`) passes: keeps the first 8 claims in order, drops the rest, and exposes the pre-cap count as `NarrativeModelResponse.originalClaimCount` (set only when capping fires) so a caller can log e.g. "capped 12→8". Safe because every claim is grounded and checked independently — dropping extras removes no verified content and adds no unverified content to the ones kept. The validator (`narrativeGrounding.ts`) is untouched, per decision 16's "stays strict, unchanged" rule — this is a transport-layer fix only.
+**4094b76 (2d) fixed that schema rejection (decision 17).** `CLAIMS_SCHEMA`'s `claims` array no longer declares `maxItems`; the prompt's "at most 8 claims" instruction is unchanged and is still the model's only signal about the limit. `AnthropicNarrativeModelClient.generate()` enforces the cap client-side via a new pure `capClaims()`, called after the shape-guard passes, exposing the pre-cap count as `NarrativeModelResponse.originalClaimCount`. Validator untouched. **Live-validated (`--runs 3`):** 0 transport/truncation failures — the schema fix reached the model on all 12 calls for the first time — but grounding fallback rose to 75% (9/12), worse than 2b's 42% baseline. Every failure was the same new shape: a tier word ("viable"/"degraded") describing a *threshold number*, not the cited item's own tier (e.g. "below the 95% **viable** threshold", cited tier `degraded`).
 
-This session's `--runs 3` live smoke results against 2d (the first live validation of everything 2c/2d changed) are reported in this session's own output, not duplicated here — see chat history or re-run `npm run narrative:smoke -- --runs 3` to reproduce.
+**This session's uncommitted 2e fixes that leak (decision 18).** Root cause: `MetricRow.viableAt`/`degradedAt` — the literal JSON keys the model reads for every metric — are themselves named with the tier words, so the model had a structural cue no prose instruction reliably overrode. `NarrativePromptMetricRow` (new type) renames those two fields to `target`/`limit` (tier-neutral; not `floor`, to avoid colliding with the existing unrelated `floor: boolean` truncation flag); `buildPrompt()` gained two WRONG/RIGHT few-shot pairs teaching the new vocabulary. Validator unchanged. This session's `--runs 3` live smoke results against 2e are reported in this session's own output, not duplicated here — see chat history or re-run `npm run narrative:smoke -- --runs 3` to reproduce.
 
-Latest smoke run validated *before* this fix (2b, `--runs 3`): grounding fallback 42% (5/12); transport 5/12 (JSON truncation at max_tokens 1024, pre-2c). 2c's schema-rejection bug meant this remained the most recent live signal until 2d.
-
-Open findings (from the 2b run, not yet re-confirmed against 2c/2d's prompt changes): claim count too high (up to 19 per response — 2c/2d's cap addresses this if the live run confirms the schema fix actually reaches the model now); tier-word-as-threshold false positives ("short of viable" — 2c's prompt rules target this); mixed-id tier claims (two tier words, one sentence — 2c's "one tier word per claim" rule targets this); capability-only numeric citations (2c's "numbers must cite their own metric id" rule targets this); usage lost on a parse failure (fixed in 2c, per decision 16); volume claim-4 note-derived-count hypothesis unconfirmed (still open, unrelated to 2c/2d).
+Older open findings from the 2b run, largely superseded by the above (claim count too high, mixed-id tier claims, capability-only numeric citations, usage lost on parse failure) were addressed by 2c/2d's prompt and cap changes and were not the dominant failure in 2d's or 2e's live runs. Still open, unrelated to 2c-2e: the `volume` claim-4 note-derived-count hypothesis (see decision "open item" above, unconfirmed as of the 2b re-run).
 
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
@@ -354,6 +352,40 @@ recur. Still open.
     by this decision too -- this is a transport-layer fix, not a grounding
     change.
 
+18. **Model echoes tier-labeled data; neutralize at the input, not only via
+    instructions (2026-09-26, commit 2e).** The first live-validated run
+    after 2d's schema fix (`--runs 3`, all 12 calls reaching the model for
+    the first time) showed a 75% grounding-fallback rate — worse than 2b's
+    42% baseline — with every failure the same shape: a tier word
+    ("viable"/"degraded") describing a *threshold*, not the cited item's
+    own tier, e.g. "below the 95% **viable** threshold" (cited tier:
+    `degraded`) or "below the 20-deal **degraded** threshold" (cited tier:
+    `blocked`). This is exactly the pattern decision 16's prompt rule
+    ("never use a tier word to describe a threshold... write 'below the
+    95% threshold'") was meant to stop, and the rule was still in the
+    prompt — but `MetricRow.viableAt`/`degradedAt` (the JSON keys the model
+    reads for every metric) are themselves named with the literal tier
+    words, so the model had a structural cue to echo that no amount of
+    prose instruction reliably overrode. **Fix is at the input, not just
+    the instructions:** `NarrativePromptMetricRow` (new type,
+    `narrativeTypes.ts`) copies `MetricRow` field-for-field except
+    `viableAt`/`degradedAt`, renamed to `target`/`limit` — tier-neutral,
+    and deliberately not `target`/`floor` (the user's own suggested naming)
+    since a row already has an unrelated `floor: boolean` (the
+    truncation-floor flag from decision "applyTruncationFloor" in
+    `docs/STATUS.md`) and reusing that name on the same object would
+    collide. `tier` itself is unchanged — citing a metric's or capability's
+    own real tier is decision 6's legitimate case, not the leak.
+    `buildNarrativePromptInput()` now maps `data.metrics` through this
+    rename (previously passed through by reference; `NarrativePromptInput`
+    is no longer identical to a subset of `ReportData` for metrics, same as
+    decision 11 already made true for `org`). `buildPrompt()` additionally
+    gained two WRONG/RIGHT few-shot pairs demonstrating the `target`/`limit`
+    vocabulary and the "state the tier as a separate fact" pattern, to
+    reinforce the renamed data with matching prose guidance. **The
+    validator is unchanged** — same rule as decision 16, this is a data/
+    prompt-only fix.
+
 ## Non-goals (explicit)
 
 - No envelope/trust-tier wiring in this phase (see Scope).
@@ -432,6 +464,18 @@ recur. Still open.
    rationale and this file's "Session handoff" section for the
    live-validated results (per-fixture pass rate, grounding/truncation/
    transport rates, how often the cap applied).
+2e. **Tier-word-leakage fix from 2d's live validation (2026-09-26, decision
+   18).** 2d's first fully-live run (schema fix reached the model on all 12
+   calls) showed grounding fallback rise to 75% (vs. 2b's 42% baseline),
+   with every failure the same shape: a tier word describing a threshold
+   number, not the cited item's own tier. Root cause: `viableAt`/
+   `degradedAt`, the JSON keys the model reads for every metric, are
+   themselves named with the literal tier words — a structural cue prompt
+   instructions alone couldn't reliably override. Fixed at the input:
+   `NarrativePromptMetricRow` renames those fields to `target`/`limit`;
+   `buildPrompt()` gained two WRONG/RIGHT few-shot pairs. Validator
+   unchanged. See decision 18 and this file's "Session handoff" for the
+   live-validated results.
 3. **`narrative.ts` orchestration.** Builds the prompt input from
    `ReportData`, calls the client, validates, falls back with the visible
    reason from decision 9 — fully testable via the fake client from

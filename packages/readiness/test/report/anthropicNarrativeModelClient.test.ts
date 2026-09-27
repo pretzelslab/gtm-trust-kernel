@@ -197,3 +197,40 @@ describe('CLAIMS_SCHEMA / buildPrompt (decision 16, commit 2c)', () => {
     expect(prompt).toContain('must cite that number\'s own metric id');
   });
 });
+
+describe('NarrativePromptMetricRow / buildPrompt (decision 18, commit 2e)', () => {
+  it('prompt input carries no tier words (viable/degraded/blocked) outside each item\'s own tier/verdict field', async () => {
+    const input = await buildHealthyPromptInput();
+
+    for (const row of input.metrics) {
+      expect(row).not.toHaveProperty('viableAt');
+      expect(row).not.toHaveProperty('degradedAt');
+      expect(row).toHaveProperty('target');
+      expect(row).toHaveProperty('limit');
+    }
+
+    // Scoped to input.metrics -- decision 18 is specifically about
+    // MetricRow's threshold field names, not about capabilities.description
+    // (human-authored prose from rubric.ts that legitimately contains a
+    // tier word, e.g. autonomous_writeback: "Almost always Blocked, and
+    // correctly so.") or org.capabilityVerdictCounts (an aggregate
+    // breakdown keyed by tier name, already handled by decision 14's
+    // "don't cite this as an id" prompt rule) -- neither is the leak this
+    // decision fixes. Redact each row's own `tier` (the one legitimate
+    // spot), then confirm no tier word survives anywhere else in a metric
+    // row.
+    const redactedMetrics = JSON.stringify(input.metrics, (key, value) => (key === 'tier' ? 'REDACTED' : value));
+    expect(redactedMetrics).not.toMatch(/\b(viable|degraded|blocked)\b/i);
+  });
+
+  it('prompt contains both WRONG/RIGHT few-shot pairs teaching target/limit vocabulary', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('WRONG: "at 66%, below the 95% viable threshold"');
+    expect(prompt).toContain('RIGHT: "at 66%, below the 95% target; tier: degraded"');
+    expect(prompt).toContain('20-deal degraded threshold');
+    expect(prompt).toContain('below the 40 target and above the 20 limit; tier:');
+  });
+});

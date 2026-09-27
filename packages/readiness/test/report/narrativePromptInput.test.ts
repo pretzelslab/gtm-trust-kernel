@@ -46,7 +46,6 @@ describe('buildNarrativePromptInput', () => {
     const input = buildNarrativePromptInput(data);
 
     expect(input.generatedAt).toBe(data.generatedAt);
-    expect(input.metrics).toBe(data.metrics);
     expect(input.capabilities).toBe(data.capabilities);
     expect(input.org).toEqual({
       orgLabel: data.org.orgLabel,
@@ -57,6 +56,33 @@ describe('buildNarrativePromptInput', () => {
       stopReason: data.org.stopReason,
       capabilityVerdictCounts: data.org.capabilityVerdictCounts,
       metricStatusCounts: data.org.metricStatusCounts,
+    });
+  });
+
+  it('copies each metric field-for-field, renaming viableAt/degradedAt to target/limit (decision 18, commit 2e)', async () => {
+    const data = await buildFixture('healthy');
+
+    const input = buildNarrativePromptInput(data);
+
+    expect(input.metrics).toHaveLength(data.metrics.length);
+    input.metrics.forEach((row, i) => {
+      const original = data.metrics[i]!;
+      expect(row.metric).toBe(original.metric);
+      expect(row.dimension).toBe(original.dimension);
+      expect(row.dimensionLabel).toBe(original.dimensionLabel);
+      expect(row.status).toBe(original.status);
+      expect(row.value).toBe(original.value);
+      expect(row.sampleSize).toBe(original.sampleSize);
+      expect(row.lowConfidence).toBe(original.lowConfidence);
+      expect(row.note).toBe(original.note);
+      expect(row.tier).toBe(original.tier);
+      expect(row.floor).toBe(original.floor);
+      expect(row.unit).toBe(original.unit);
+      expect(row.target).toBe(original.viableAt);
+      expect(row.limit).toBe(original.degradedAt);
+      expect(row.gatesCapabilities).toBe(original.gatesCapabilities);
+      expect(row).not.toHaveProperty('viableAt');
+      expect(row).not.toHaveProperty('degradedAt');
     });
   });
 });

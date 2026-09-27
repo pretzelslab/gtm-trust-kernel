@@ -14,6 +14,12 @@
  * field added to ReportOrgSummary does not silently reach the model --
  * same "a new field must be a deliberate decision" property decision 12's
  * structural guard test enforces for ReportData as a whole.
+ *
+ * Metrics are likewise copied field-for-field, not spread (decision 18,
+ * commit 2e) -- viableAt/degradedAt are renamed to target/limit, since the
+ * literal field names ("viable"/"degraded") were leaking into the model's
+ * prose about threshold values, not just about a metric's own tier. See
+ * NarrativePromptMetricRow's docblock (narrativeTypes.ts) for why.
  */
 
 import type { ReportData } from './buildReport.js';
@@ -32,7 +38,22 @@ export function buildNarrativePromptInput(data: ReportData): NarrativePromptInpu
       capabilityVerdictCounts: data.org.capabilityVerdictCounts,
       metricStatusCounts: data.org.metricStatusCounts,
     },
-    metrics: data.metrics,
+    metrics: data.metrics.map((m) => ({
+      metric: m.metric,
+      dimension: m.dimension,
+      dimensionLabel: m.dimensionLabel,
+      status: m.status,
+      value: m.value,
+      sampleSize: m.sampleSize,
+      lowConfidence: m.lowConfidence,
+      note: m.note,
+      tier: m.tier,
+      floor: m.floor,
+      unit: m.unit,
+      target: m.viableAt,
+      limit: m.degradedAt,
+      gatesCapabilities: m.gatesCapabilities,
+    })),
     capabilities: data.capabilities,
   };
 }

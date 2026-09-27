@@ -5,19 +5,58 @@
  * call and no orchestration logic lives here.
  */
 
-import type { CapabilityId, MetricId } from '../rubric.js';
-import type { ReportData, ReportOrgSummary } from './buildReport.js';
+import type { CapabilityId, MetricId, Unit, Verdict } from '../rubric.js';
+import type { CapabilityRef, MetricDimension, MetricRowStatus, ReportData, ReportOrgSummary } from './buildReport.js';
+
+/**
+ * Per-metric row sent to the model -- MetricRow copied field-for-field,
+ * except viableAt/degradedAt (decision 18, commit 2e). Those two are
+ * rubric.ts's literal gate-boundary field names ("At or better than this:
+ * the gate is Viable" / "...Degraded. Worse: Blocked."), and the live
+ * smoke run showed the model echoing them verbatim when describing a
+ * threshold number ("the 95% viable threshold", "the 20-deal degraded
+ * threshold") -- a mismatch decision 16's prompt-only tier-word rule
+ * couldn't fully suppress, since the model was reading the tier word
+ * directly off a JSON key, not just reasoning about the metric's state.
+ * Renamed to target/limit -- tier-neutral, and not `floor`, since a row
+ * already has an unrelated `floor: boolean` (the truncation-floor flag).
+ * This is a rename, not a strip: the model still needs the numbers to
+ * write a comparative claim (e.g. "at 66%, below the 95% target").
+ * `tier` itself is unchanged and still carries the metric's own real tier
+ * -- that citation is legitimate (decision 6) and is not the leak.
+ */
+export interface NarrativePromptMetricRow {
+  readonly metric: MetricId;
+  readonly dimension: MetricDimension;
+  readonly dimensionLabel: string;
+  readonly status: MetricRowStatus;
+  readonly value: number | null;
+  readonly sampleSize: number;
+  readonly lowConfidence: boolean;
+  readonly note: string | null;
+  readonly tier: Verdict | null;
+  readonly floor: boolean;
+  readonly unit: Unit;
+  /** Renamed from MetricRow.viableAt (decision 18). */
+  readonly target: number | null;
+  /** Renamed from MetricRow.degradedAt (decision 18). */
+  readonly limit: number | null;
+  readonly gatesCapabilities: readonly CapabilityRef[];
+}
 
 /**
  * What narrative.ts sends to the model. Deliberately not ReportData itself
  * -- org.orgDescription is excluded at the type level (decision 11), not
  * filtered at runtime, so there's no code path that could forget to strip
- * it. See narrativePromptInput.ts for the builder.
+ * it. metrics is NarrativePromptMetricRow, not ReportData['metrics']
+ * (decision 18) -- same "excluded at the type level" guarantee, applied to
+ * the tier-labeled threshold field names instead of a whole field. See
+ * narrativePromptInput.ts for the builder.
  */
 export interface NarrativePromptInput {
   readonly generatedAt: string;
   readonly org: Omit<ReportOrgSummary, 'orgDescription'>;
-  readonly metrics: ReportData['metrics'];
+  readonly metrics: readonly NarrativePromptMetricRow[];
   readonly capabilities: ReportData['capabilities'];
 }
 

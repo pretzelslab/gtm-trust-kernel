@@ -36,6 +36,14 @@
  * only when capClaims() actually trimmed the response, so a caller can tell
  * "8 claims, none dropped" apart from "12 claims, capped to 8" (decision 17).
  *
+ * buildPrompt() also carries decision 18's two WRONG/RIGHT few-shot pairs,
+ * added after a live run showed the model echoing MetricRow's literal
+ * viableAt/degradedAt field names as tier words describing the threshold
+ * itself, not the cited item's own tier. NarrativePromptMetricRow
+ * (narrativeTypes.ts) renamed those fields to target/limit to remove the
+ * literal word from the data the model reads; these examples reinforce
+ * the resulting target/limit vocabulary in the prompt's own text.
+ *
  * Never logs or includes the API key in any error: only error.status/
  * .name/.message are read from a caught SDK error, never headers or the raw
  * request/response body.
@@ -194,6 +202,17 @@ export function buildPrompt(input: NarrativePromptInput): string {
     'mention that one metric contributes to a different capability\'s tier,',
     'write that as a separate claim, not combined with the capability\'s own',
     'tier word in the same sentence.',
+    '',
+    'Each metric below carries a `target` and a `limit` -- these are plain',
+    'numbers, not tiers. Never call a target or limit "viable" or',
+    '"degraded": state the number, then state the item\'s own tier',
+    'separately. Two examples:',
+    '  WRONG: "at 66%, below the 95% viable threshold"',
+    '  RIGHT: "at 66%, below the 95% target; tier: degraded"',
+    '  WRONG: "24 deals, below the 40-deal viable threshold and above the',
+    '  20-deal degraded threshold"',
+    '  RIGHT: "24 deals, below the 40 target and above the 20 limit; tier:',
+    '  degraded"',
     '',
     'Any number you write must cite that number\'s own metric id in',
     '`groundedIn` -- citing only a capability id (or only a different',
