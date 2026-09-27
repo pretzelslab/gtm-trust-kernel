@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import {
   AnthropicNarrativeModelClient,
+  CLAIMS_SCHEMA,
   buildPrompt,
   isClaimsShape,
   listValidIds,
@@ -115,5 +116,46 @@ describe('listValidIds / buildPrompt (decisions 14/15, commit 2b)', () => {
 
     expect(prompt).toContain('2 capabilities are blocked, 5');
     expect(prompt).toContain('pipeline_risk_signals capability is blocked');
+  });
+});
+
+describe('CLAIMS_SCHEMA / buildPrompt (decision 16, commit 2c)', () => {
+  it('schema caps claims at 8 via maxItems, matching the prompt instruction', () => {
+    expect(CLAIMS_SCHEMA.properties.claims.maxItems).toBe(8);
+  });
+
+  it('prompt tells the model to write at most 8 claims, prioritizing decision-relevant ones', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('at most 8 claims');
+    expect(prompt).toContain('prioritize the most decision-relevant');
+  });
+
+  it('prompt restricts tier words to the cited item\'s own tier and forbids describing thresholds with tier words', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('may ONLY state the cited item');
+    expect(prompt).toContain('never use a tier word to describe a threshold');
+    expect(prompt).toContain('below the 95% threshold');
+  });
+
+  it('prompt caps tier words at one per claim', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('at most one tier word per claim');
+  });
+
+  it('prompt requires any number to cite its own metric id, not just a capability id', async () => {
+    const input = await buildHealthyPromptInput();
+
+    const prompt = buildPrompt(input);
+
+    expect(prompt).toContain('must cite that number\'s own metric id');
   });
 });

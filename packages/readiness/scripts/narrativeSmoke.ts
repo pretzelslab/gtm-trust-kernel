@@ -3,11 +3,18 @@
  * Manual smoke script for Phase E's narrative pass (docs/narrative-design.md
  * decision 4). Runs the real AnthropicNarrativeModelClient against every
  * fixture and reports, per fixture, whether the narrative would be accepted
- * or would fall back -- tagged as one of two kinds:
+ * or would fall back -- tagged as one of three kinds (decision 16, commit
+ * 2c: truncation split out from transport, both distinct from grounding):
  *
- *   - transport: generate() itself threw (network error, timeout, API
- *     error, or a malformed/shape-invalid response that never became a
- *     gradable set of claims).
+ *   - transport: generate() itself threw for a reason other than
+ *     max_tokens truncation (network error, API error, a JSON parse
+ *     failure that wasn't caused by hitting the token cap, or a
+ *     shape-mismatched response).
+ *   - truncation: generate() threw because the response's stop_reason was
+ *     max_tokens -- the model was cut off before finishing. Kept separate
+ *     from transport since it's a token-budget problem, not a
+ *     network/API/shape problem, and usage IS available for it (see
+ *     below), unlike a genuine transport failure.
  *   - grounding: generate() returned a well-formed response, but
  *     validateGrounding() found at least one claim that fails id-citation,
  *     tier-word, or numeric-tolerance checks. Each failure line includes
@@ -16,12 +23,18 @@
  *     metric's own note-derived count) can be confirmed from this output
  *     alone.
  *
+ * Token totals are now complete regardless of outcome (decision 16):
+ * NarrativeGenerationError carries usage whenever the SDK returned a
+ * Message at all, so a truncation or parse/shape failure still contributes
+ * its real token consumption to the totals below -- only a genuine
+ * api_error (no Message came back) has no usage to report.
+ *
  * The ~20% escalation threshold (decision 4: "switch the hardcoded default
- * to claude-sonnet-5") is about claim quality, not network flakiness, so it
- * is called out against the grounding fallback rate only -- transport
- * failures are reported but never counted toward it. With --runs N > 1,
- * the threshold call-out and per-fixture pass rate are both computed over
- * every fixture x run.
+ * to claude-sonnet-5") is about claim quality, not network/token-budget
+ * flakiness, so it is called out against the grounding fallback rate only
+ * -- transport and truncation failures are reported but never counted
+ * toward it. With --runs N > 1, the threshold call-out and per-fixture
+ * pass rate are both computed over every fixture x run.
  *
  * Excluded from `npm run ci`: this file's name doesn't match vitest's
  * default *.test.ts/*.spec.ts glob, so it's never picked up as a test, and
@@ -44,7 +57,7 @@
  */
 
 import { parseArgs } from 'node:util';
-import { AnthropicNarrativeModelClient } from '../src/report/anthropicNarrativeModelClient.js';
+import { AnthropicNarrativeModelClient, NarrativeGenerationError } from '../src/report/anthropicNarrativeModelClient.js';
 import { buildFromFixture } from '../src/report/buildFromFixture.js';
 import { loadEnvFileIfPresent } from '../src/report/envFile.js';
 import { FIXTURE_NAMES, type FixtureName } from '../src/fixtures/mockOrgs.js';
@@ -61,7 +74,7 @@ interface Usage {
 interface FixtureOutcome {
   readonly fixture: FixtureName;
   readonly runIndex: number;
-  readonly kind: 'ok' | 'transport' | 'grounding';
+  readonly kind: 'ok' | 'transport' | 'truncation' | 'grounding';
   readonly reasons: readonly string[];
   readonly usage?: Usage;
 }
@@ -83,11 +96,14 @@ async function runFixture(client: AnthropicNarrativeModelClient, fixture: Fixtur
   try {
     response = await client.generate(promptInput);
   } catch (error) {
+    const usage = error instanceof NarrativeGenerationError ? error.usage : undefined;
+    const kind = error instanceof NarrativeGenerationError && error.kind === 'truncation' ? 'truncation' : 'transport';
     return {
       fixture,
       runIndex,
-      kind: 'transport',
+      kind,
       reasons: [error instanceof Error ? error.message : String(error)],
+      usage,
     };
   }
 
@@ -115,6 +131,7 @@ function formatUsage(usage: Usage | undefined): string {
 function formatStatus(kind: FixtureOutcome['kind']): string {
   if (kind === 'ok') return 'OK (grounded)';
   if (kind === 'transport') return 'FALLBACK (transport)';
+  if (kind === 'truncation') return 'FALLBACK (truncation)';
   return 'FALLBACK (grounding)';
 }
 
@@ -176,6 +193,7 @@ async function main(): Promise<void> {
   }
 
   const groundingFallbacks = outcomes.filter((o) => o.kind === 'grounding').length;
+  const truncationFailures = outcomes.filter((o) => o.kind === 'truncation').length;
   const transportFailures = outcomes.filter((o) => o.kind === 'transport').length;
   const groundingRate = groundingFallbacks / outcomes.length;
 
@@ -185,7 +203,12 @@ async function main(): Promise<void> {
         ? " -- ABOVE the ~20% escalation threshold (decision 4); consider switching NARRATIVE_MODEL's default to claude-sonnet-5."
         : ' -- within the ~20% escalation threshold.'),
   );
-  console.log(`Transport failures: ${transportFailures}/${outcomes.length} (not counted toward the escalation threshold above)`);
+  console.log(
+    `Truncation rate: ${((truncationFailures / outcomes.length) * 100).toFixed(0)}% (${truncationFailures}/${outcomes.length}) (not counted toward the escalation threshold above)`,
+  );
+  console.log(
+    `Transport failures: ${transportFailures}/${outcomes.length} (not counted toward the escalation threshold above)`,
+  );
   console.log(`Total tokens: in=${totalInputTokens} out=${totalOutputTokens}`);
 
   const costLine = maybeCostLine(totalInputTokens, totalOutputTokens);

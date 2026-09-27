@@ -254,6 +254,66 @@ fixed this commit** — commit 2b adds claim text to the smoke script's
 failure output specifically to confirm or refute this on the next live
 run. If confirmed, this is a separate gap from decisions 5/14/15 above and
 needs its own decision before any fix.
+**Status after the commit-2b live re-run (`--runs 3`, 2026-09-26):
+inconclusive, not confirmed or refuted.** None of the 3 `volume` runs
+produced a claim referencing `stage_mapping_coverage` at all — the
+model's claim selection varies run to run, and this exact pattern didn't
+recur. Still open.
+
+16. **Validator stays strict; prompt constrains language (2026-09-26,
+    commit 2c).** The commit-2b live re-run (`--runs 3`) showed the
+    grounding-fallback rate was still above threshold (42%, 5/12) and
+    surfaced two new problems, neither fixed by loosening
+    `narrativeGrounding.ts` — **per explicit instruction, the validator is
+    not touched by this decision, in any commit**:
+    - **Token-budget truncation.** Responses got long enough (encouraged by
+      decision 15's per-item tier claims) to hit the old `max_tokens: 1024`
+      cap mid-JSON, throwing a JSON-parse error indistinguishable from a
+      genuine transport failure. Fixed by: `max_tokens` raised to 1536;
+      `CLAIMS_SCHEMA`'s `claims` array gained `maxItems: 8`, paired with a
+      prompt instruction to write at most 8 claims and prioritize the most
+      decision-relevant ones; and `AnthropicNarrativeModelClient.generate()`
+      now checks `message.stop_reason === 'max_tokens'` **before**
+      attempting to parse, throwing a distinct `NarrativeGenerationError`
+      (`kind: 'truncation'`) rather than letting it surface as an
+      indistinguishable JSON-parse failure.
+    - **Tier-word-as-threshold false positives.** The dominant failure
+      pattern in the live re-run was the model using a tier word to
+      describe a *threshold or benchmark* ("falling short of the 95%
+      threshold required for viable status") rather than the cited item's
+      *own current tier* — `findTierWordMismatches` correctly has no way to
+      tell those apart (it's a literal-word match, per decision 6's
+      documented limitation), and **that check is not being changed**.
+      Fixed entirely in the prompt instead: tier words may only state the
+      cited item's own current tier; a threshold/benchmark must be
+      expressed as a number, never a tier word; at most one tier word per
+      claim (the other live-run failure shape was two tier words in one
+      sentence — the capability's own tier plus a contributing metric's —
+      getting cross-checked against a merged expected-tier set that
+      neither alone would fail). A fourth prompt rule, not itself motivated
+      by a new failure but tightening an existing one: any number must
+      cite its own metric id, restating decision 5/7's existing rule
+      explicitly so the model doesn't waste a generation on a
+      capability-only numeric claim that was already going to fail.
+    - `NarrativeModelClient.generate()`'s switch from `messages.parse()` to
+      `messages.create()` + manual `JSON.parse` (see
+      `anthropicNarrativeModelClient.ts`'s docblock) was necessary, not
+      optional, to satisfy the "capture usage even when parsing fails"
+      requirement below: `.parse()` discards the raw `Message` on a parse
+      failure, since parsing happens inside its own `.then()` and only the
+      thrown error escapes the promise chain.
+    - **Token accounting is now complete on every outcome.**
+      `NarrativeGenerationError.usage` is populated whenever the SDK
+      returned a `Message` at all (truncation, parse failure, or shape
+      mismatch), not just on success -- only a genuine `api_error` (no
+      `Message` came back) has no usage to report. The smoke script's
+      totals are consequently now accurate rather than undercounting
+      failed calls, which the previous live re-run's report flagged as a
+      gap.
+    **Rationale, stated plainly per the user's framing:** the validator
+    stays strict and unchanged; the prompt is what constrains the model's
+    language to stay inside what the validator can already correctly
+    judge.
 
 ## Non-goals (explicit)
 
@@ -310,6 +370,17 @@ needs its own decision before any fix.
    failure reason) and `--runs N` (default 1) for a multi-run pass-rate
    signal, both to support confirming the separate note-derived-count
    hypothesis flagged as an open item above — not fixed this commit.
+2c. **Token-budget and tier-word-phrasing correction from commit 2b's live
+   re-run (2026-09-26, decision 16).** `--runs 3` still showed a 42%
+   (5/12) grounding-fallback rate, plus a new max_tokens-truncation
+   failure mode (5/12) the old `max_tokens: 1024` cap hadn't triggered
+   before commit 2b's prompt changes made responses longer. Validator
+   unchanged, per explicit instruction — fixed entirely via prompt
+   constraints (own-tier-only tier words, thresholds as numbers, one tier
+   word per claim, numbers must cite their own metric id) plus
+   `max_tokens` 1536, `claims` capped at 8 (schema `maxItems` + prompt),
+   and a `stop_reason === 'max_tokens'` check that classifies truncation
+   separately from transport and still captures usage. See decision 16.
 3. **`narrative.ts` orchestration.** Builds the prompt input from
    `ReportData`, calls the client, validates, falls back with the visible
    reason from decision 9 — fully testable via the fake client from
