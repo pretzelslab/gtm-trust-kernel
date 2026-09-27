@@ -1,4 +1,4 @@
-# report/narrative.ts — design note (draft plan, not implemented)
+# report/narrative.ts — design note (locked, implemented)
 
 ## Session handoff (2026-09-26)
 

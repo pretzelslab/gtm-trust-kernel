@@ -426,6 +426,26 @@ metric's own computed value there.
   session) — deterministic, template-based, no model call. The LLM
   narrative pass (`report/narrative.ts`, Phase E) is still not built.
 
+  **Resolved, 2026-09-27: Phase E is now built, not just planned.**
+  `report/narrative.ts` (`buildNarrative`), `AnthropicNarrativeModelClient`,
+  `narrativeGrounding.ts`, and the `cli.ts`/`render.ts` wiring all shipped
+  across commits 1-4 (`fe398cb` through `b70470b`) — see
+  `docs/narrative-design.md`, now titled "locked, implemented," for the
+  full decision history (1-27) and this doc's "Next steps" entry below for
+  current status. Operationally: `--narrative` is an opt-in CLI flag only
+  (default off; fixture and `--live` modes; rejected with `--all` per
+  decision 24) — no automatic report path calls it. `narrative:smoke` (the
+  manual live-validation script, decision 4) is excluded from `npm run ci`,
+  same manual-only precedent as `--live`. Default model is
+  `claude-haiku-4-5-20251001` (`NARRATIVE_MODEL` env override, decision 3),
+  never escalated to `claude-sonnet-5` since the live fallback rate stayed
+  under the ~20% trigger. The last live smoke run (commit 2f, `--runs 3`)
+  measured an 8% grounding-fallback rate (1/12 calls) — a small sample,
+  not a statistically robust rate. One open item, not chased further: that
+  one failure described a gate-off (`not_instrumented`) metric as "blocked"
+  in prose, a colloquial reading decision 6's strict tier-word check
+  correctly rejects — see `narrative-design.md`'s "Session handoff" section.
+
 - **No `redact.ts` — injection defence relies on typed envelope + omission
   from output surface.** A cold adversarial review (this session) confirmed
   there is no PII-redaction or text-scrubbing module anywhere in this repo.
@@ -533,15 +553,22 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
-- **Phase E (LLM narrative pass, `report/narrative.ts`) has a draft plan,
-  not yet built: see `docs/narrative-design.md`.** Covers the model-calling
-  layer, why it doesn't need the `UntrustedEnvelope`/`TrustTier` machinery,
-  the grounding checks (id citation, tier-word match, numeric tolerance),
-  the whole-narrative-discard fallback rule and its visible-to-the-reader
-  requirement, the model-selection escalation rule, and a 5-commit
-  breakdown starting with a free-text-verification gate. Per `CLAUDE.md`
-  rule 4, each commit still needs its own plan-and-wait pass before
-  writing — this note is the agreed shape, not a green light to build.
+- **Superseded, 2026-09-27: Phase E (LLM narrative pass, `report/narrative.ts`)
+  is now fully implemented, not a draft plan.** The bullet that used to sit
+  here described a 5-commit breakdown agreed but not yet built. All 5
+  landed: commits 1-2f (types, prompt/grounding, real client + 4 live-
+  validation correction rounds), commit 3 (`narrative.ts` orchestration,
+  `c232891`), commit 4 (CLI `--narrative` flag + render fallback-notice
+  slot, `b70470b`), and commit 5 (this doc update). `docs/narrative-design.md`
+  is now titled "locked, implemented" and its "Session handoff" section
+  carries the full decision history (1-27) and live-validation results.
+  See the "Known Gaps" entry above (the "Plain-English summary added"
+  bullet's "Resolved, 2026-09-27" note) for the operational summary:
+  `--narrative` is opt-in and CLI-only, `narrative:smoke` stays outside
+  `npm run ci`, the default model is `claude-haiku-4-5-20251001`, and the
+  last live run measured an 8% grounding-fallback rate (1/12 calls, a
+  small sample) with one open, not-yet-chased item (a gate-off metric
+  described as "blocked" in prose).
 - **Superseded, 2026-09-26: all seven dimensions (D1–D7) are now fully
   implemented, zero deferred metrics.** The bullet that used to sit here
   described D2/D4/D7 each carrying one metric blocked on a new adapter
