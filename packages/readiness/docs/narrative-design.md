@@ -2,7 +2,8 @@
 
 ## Session handoff (2026-09-26)
 
-Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), c26f62a (2f), c232891 (3) — 1 through 2f were local until pushed at the end of the prior session; 3 pushed this session.
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), c26f62a (2f), c232891 (3), b70470b (4) — 1 through 2f were local until pushed at the end of that session; 3 and 4 pushed this session.
+
 
 **e01abcb (2c) was committed but NOT live-validated** at the time — all 12 smoke-run calls failed identically at the transport layer: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Fixed by 2d.
 
@@ -32,6 +33,20 @@ nor an invalid cited id. `npm run ci` green (adapters 63, kernel 24,
 readiness 405 — 6 new in `narrative.test.ts`). Not live-validated against
 the real API this commit — no prompt/model-facing change to validate;
 the existing 2f live-validation result stands.
+
+**b70470b (commit 4) wired `--narrative` into `cli.ts` and a render slot
+into `render.ts` (decisions 23-27)** — see those decisions below for the
+full design. Pure CLI/render plumbing, same "no prompt/grounding change"
+category as commit 3: nothing here can move 2f's live-validated 8%
+fallback rate. `npm run ci` green (adapters 63, kernel 24, readiness 409 —
+4 new in `render.test.ts`, canned `NarrativeResult`, no network). Manually
+verified with `tsx src/report/cli.ts` (not part of `npm run ci`, same
+precedent as `--live`'s manual-only path): `--all --narrative` exits 1 with
+the CLI error (decision 24); `--narrative` with `ANTHROPIC_API_KEY` unset
+exits 1 naming the var (decision 25); a plain default run's HTML is
+byte-identical to pre-commit-4 output (confirmed no
+`<div class="narrative-fallback-notice">` appears and the "Plain-English
+summary" paragraph is unchanged).
 
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
@@ -515,6 +530,61 @@ recur. Still open.
     20) so a future render layer can inspect each claim's own `groundedIn`
     ids rather than only the flattened prose.
 
+23. **Fallback-notice CSS: a new, neutral-info class, not the mock-data
+    banner style (2026-09-26, commit 4).** `.narrative-fallback-notice`
+    (`shell.ts`'s `STYLE`) reuses the existing `--ninstr-bg`/`--ninstr-fg`
+    tokens (the same blue-ish "informational" color already used for the
+    `not_instrumented` status pill) rather than the red `.banner`/
+    `.banner-live` treatment reserved for the top-of-page mock/live-data
+    banners — a rejected narrative is a normal, expected report state, not
+    a warning about the report's data source. Rendered as a `<div>`
+    directly above the deterministic summary `<p>` inside the existing
+    `.plain-summary` block (see `render.ts`'s `renderNarrativeBody`), never
+    replacing it.
+
+24. **`--narrative` with `--all` is a CLI error, exit 1 (2026-09-26, commit
+    4).** Checked immediately after `parseArgs`, before any I/O.
+    `renderComparisonHtml` never took a narrative option and still doesn't
+    — same "no plain-English narrative for a multi-org comparison page"
+    precedent `cli.ts`'s own docblock already states for `plainReport.ts`.
+    An explicit CLI error (not a silently-ignored flag) so a caller who
+    typed `--narrative --all` finds out immediately, not by noticing its
+    absence in the output.
+
+25. **`--narrative` with `ANTHROPIC_API_KEY` unset fails the whole run,
+    exit 1, naming the var (2026-09-26, commit 4).** `--narrative` is an
+    explicit opt-in — per the user's framing, "fail loud" rather than
+    silently producing a report with no narrative and no explanation.
+    `AnthropicNarrativeModelClient`'s constructor already throws
+    `"Missing required env var: ANTHROPIC_API_KEY. ..."`; `cli.ts`'s new
+    `resolveNarrative()` catches only that construction step and reuses the
+    message verbatim (never inventing a second message). This is distinct
+    from a grounding/client-throw failure *during* generation, which still
+    falls back to the deterministic summary per decisions 8/21 — the
+    difference is configuration-missing (nothing to even attempt) vs.
+    generation-failed (attempted, and the free deterministic fallback
+    exists precisely for that case).
+
+26. **`loadEnvFileIfPresent()` hoisted to an unconditional call at the top
+    of `main()` (2026-09-26, commit 4).** Previously only called inside
+    `buildLive()`, so `.env` (and `ANTHROPIC_API_KEY`) was never loaded on
+    the fixture path. `--narrative` needs the key in fixture mode too, not
+    only under `--live` — hoisting once, unconditionally, avoids
+    duplicating the call across three branches (`--live`, `--all`, fixture)
+    and matches `--live`'s own precedent of loading `.env` before checking
+    whether any of its values are actually needed.
+
+27. **Render tests use a canned `NarrativeResult`, never a real client
+    (2026-09-26, commit 4).** `render.test.ts` gained 4 cases:
+    `narrative` undefined produces byte-identical output to a call with no
+    narrative option at all; `ok: true` renders one `<li>` per claim in
+    model order with `groundedIn` ids joined into the `title` attribute;
+    `ok: false` renders the notice `<div>` strictly before the deterministic
+    `<p>`; and a hostile claim (`<script>`, quotes) is escaped in both the
+    `<li>` body and the `title` attribute. No network, no
+    `ANTHROPIC_API_KEY` — same "no live API call in `npm run ci`" non-goal
+    every other test file in this phase already honors.
+
 ## Non-goals (explicit)
 
 - No envelope/trust-tier wiring in this phase (see Scope).
@@ -622,9 +692,10 @@ recur. Still open.
    leak-free notice (decisions 9/21) for a client throw or any grounding
    failure (decision 8) — fully testable via `FakeNarrativeModelClient`,
    no network. `npm run ci` green (`c232891`).
-4. **CLI/render wiring.** Opt-in `--narrative` flag in `cli.ts` (default
-   off), a render slot showing either the narrative or the visible
-   fallback notice.
+4. **CLI/render wiring — done (2026-09-26, decisions 23-27).** Opt-in
+   `--narrative` flag in `cli.ts` (default off, fixture + `--live` only,
+   rejected with `--all`), a render slot in `render.ts` showing either the
+   narrative or the visible fallback notice. `npm run ci` green (`b70470b`).
 5. **Docs.** `STATUS.md` update; fold this note's "draft" status to
    "locked, implemented" once all four commits land and `npm run ci` is
    green.
