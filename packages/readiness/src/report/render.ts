@@ -8,6 +8,7 @@ import type { MetricRow, MetricRowStatus, ReportCapabilityRow, ReportData } from
 import type { Unit, Verdict } from '../rubric.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildExecutiveSummary } from './plainSummary.js';
+import type { NarrativeResult } from './narrative.js';
 
 type StatusKey = Verdict | MetricRowStatus;
 
@@ -122,7 +123,36 @@ function renderMetricsTable(rows: readonly MetricRow[]): string {
   </table>`;
 }
 
-export function renderReportHtml(data: ReportData, options?: { readonly mode?: 'fixture' | 'live' }): string {
+/**
+ * The "Plain-English summary" slot's body. `narrative` undefined (the
+ * default -- commit 4's --narrative CLI flag is opt-in) reproduces the
+ * exact prior markup, unchanged. `ok: true` renders one <li> per claim
+ * (decision 22's model order, preserved by buildNarrative), each with a
+ * `title` tooltip listing its groundedIn ids for traceability -- ids are
+ * already grounding-validated by the time a caller builds a NarrativeResult,
+ * but escaped anyway, same defense-in-depth as everything else here.
+ * `ok: false` shows the visible fallback notice (decision 9) directly above
+ * the same deterministic paragraph the undefined case already shows --
+ * `result.text` on the fallback branch is exactly buildExecutiveSummary's
+ * output (decision 20), so this never duplicates or diverges from it.
+ */
+function renderNarrativeBody(data: ReportData, narrative: NarrativeResult | undefined): string {
+  if (!narrative) {
+    return `<p>${escapeHtml(buildExecutiveSummary(data))}</p>`;
+  }
+  if (narrative.ok) {
+    const items = narrative.claims
+      .map((c) => `<li title="${escapeHtml(c.groundedIn.join(', '))}">${escapeHtml(c.text)}</li>`)
+      .join('');
+    return `<ul>${items}</ul>`;
+  }
+  return `<div class="narrative-fallback-notice">${escapeHtml(narrative.notice)}</div><p>${escapeHtml(narrative.text)}</p>`;
+}
+
+export function renderReportHtml(
+  data: ReportData,
+  options?: { readonly mode?: 'fixture' | 'live'; readonly narrative?: NarrativeResult },
+): string {
   const { org } = data;
   const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel);
   const body = `
@@ -130,7 +160,7 @@ export function renderReportHtml(data: ReportData, options?: { readonly mode?: '
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
-  <details class="plain-summary"><summary>Plain-English summary</summary><p>${escapeHtml(buildExecutiveSummary(data))}</p></details>
+  <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
   ${renderSummaryCards(data)}
   ${renderCapabilitiesTable(data.capabilities)}
   ${renderMetricsTable(data.metrics)}

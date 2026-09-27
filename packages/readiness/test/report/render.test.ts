@@ -3,6 +3,9 @@ import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters
 import { MOCK_ORG_FIXTURES } from '../../src/fixtures/mockOrgs.js';
 import { buildReportData, type ReportData } from '../../src/report/buildReport.js';
 import { renderComparisonHtml, renderReportHtml } from '../../src/report/render.js';
+import type { NarrativeResult } from '../../src/report/narrative.js';
+import { buildExecutiveSummary } from '../../src/report/plainSummary.js';
+import { escapeHtml } from '../../src/report/shell.js';
 
 /**
  * render.ts's own docblock claims "self-contained ... no external
@@ -90,5 +93,85 @@ describe('render.ts escaping under adversarial input', () => {
     // The Cyrillic "а" lookalike isn't an HTML metacharacter — it survives as
     // ordinary text, which is correct: escaping isn't meant to strip it.
     expect(html).toContain('аdmin');
+  });
+});
+
+/**
+ * Phase E commit 4 (decision 27): renderReportHtml's narrative option is a
+ * canned NarrativeResult only -- no network, no real NarrativeModelClient.
+ * buildNarrative (narrative.ts) already has its own orchestration tests
+ * (narrative.test.ts); these cover only render.ts's own rendering of the
+ * result it's handed.
+ */
+describe('render.ts narrative slot (Phase E commit 4)', () => {
+  it('narrative undefined (the default) produces byte-identical output to a call with no narrative option at all', async () => {
+    const data = await buildHealthy();
+
+    const withoutOption = renderReportHtml(data);
+    const withUndefined = renderReportHtml(data, { narrative: undefined });
+
+    expect(withUndefined).toBe(withoutOption);
+    expect(withoutOption).toContain(`<p>${escapeHtml(buildExecutiveSummary(data))}</p>`);
+    // The class name itself is always present in the global <style> block; only the <div> using it is conditional.
+    expect(withoutOption).not.toContain('<div class="narrative-fallback-notice">');
+  });
+
+  it('ok:true renders one <li> per claim, in order, with groundedIn ids in the title attribute', async () => {
+    const data = await buildHealthy();
+    const narrative: NarrativeResult = {
+      ok: true,
+      text: '- Claim one.\n- Claim two.',
+      claims: [
+        { text: 'Claim one.', groundedIn: ['metric_a' as never] },
+        { text: 'Claim two.', groundedIn: ['metric_b' as never, 'metric_c' as never] },
+      ],
+    };
+
+    const html = renderReportHtml(data, { narrative });
+
+    expect(html.match(/<li/g)).toHaveLength(2);
+    expect(html).toContain('<li title="metric_a">Claim one.</li>');
+    expect(html).toContain('<li title="metric_b, metric_c">Claim two.</li>');
+    expect(html.indexOf('Claim one.')).toBeLessThan(html.indexOf('Claim two.'));
+  });
+
+  it('ok:false renders the fallback notice callout directly above the deterministic summary paragraph', async () => {
+    const data = await buildHealthy();
+    const notice = 'LLM narrative rejected: ungrounded figure in claim 3; showing deterministic summary.';
+    const narrative: NarrativeResult = {
+      ok: false,
+      reasonKind: 'grounding',
+      notice,
+      text: buildExecutiveSummary(data),
+    };
+
+    const html = renderReportHtml(data, { narrative });
+
+    expect(html).toContain(`<div class="narrative-fallback-notice">${notice}</div>`);
+    expect(html).toContain(`<p>${escapeHtml(buildExecutiveSummary(data))}</p>`);
+    const noticeIndex = html.indexOf('narrative-fallback-notice');
+    const summaryParaIndex = html.indexOf(`<p>${escapeHtml(buildExecutiveSummary(data))}</p>`);
+    expect(noticeIndex).toBeLessThan(summaryParaIndex);
+  });
+
+  it('escapes hostile claim text and cited ids in both the <li> body and the title attribute', async () => {
+    const data = await buildHealthy();
+    const narrative: NarrativeResult = {
+      ok: true,
+      text: '',
+      claims: [
+        {
+          text: `<script>alert(1)</script> "double" 'single'`,
+          groundedIn: [`<script>bad</script>` as never],
+        },
+      ],
+    };
+
+    const html = renderReportHtml(data, { narrative });
+
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).not.toContain('<script>bad</script>');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt; &quot;double&quot; &#39;single&#39;');
+    expect(html).toContain('title="&lt;script&gt;bad&lt;/script&gt;"');
   });
 });
