@@ -16,12 +16,15 @@
  * not proven unreachable.
  *
  * Timeout/retries (confirmed with the user, commit 2): 30s timeout,
- * maxRetries 0. max_tokens raised 1024 -> 1536 and claims capped at 8
- * (decision 16, commit 2c) after the commit-2b live run showed responses
- * were long enough to hit the old cap and truncate mid-JSON. A failed call
- * here has a free, always-correct fallback -- the deterministic
- * plainSummary -- so this client fails fast rather than retrying or making a
- * report viewer wait a long time before narrative.ts (commit 3) falls back.
+ * maxRetries 0. max_tokens raised 1024 -> 1536 (decision 16, commit 2c)
+ * after the commit-2b live run showed responses were long enough to hit the
+ * old cap and truncate mid-JSON. Claims are capped at 8, but not via the
+ * schema -- the API rejects `maxItems` on an array property outright
+ * (decision 17, commit 2d) -- so capClaims() enforces it client-side, after
+ * the shape-guard, on the parsed response. A failed call here has a free,
+ * always-correct fallback -- the deterministic plainSummary -- so this
+ * client fails fast rather than retrying or making a report viewer wait a
+ * long time before narrative.ts (commit 3) falls back.
  *
  * generate() either returns a well-shaped NarrativeModelResponse or throws
  * NarrativeGenerationError (never a partial response). Its `kind` lets a
@@ -29,7 +32,9 @@
  * distinguish a max_tokens truncation from every other failure, and its
  * `usage` is populated whenever the SDK returned a Message at all -- even
  * when parsing failed or the shape didn't match -- so token totals stay
- * complete regardless of outcome (decision 16).
+ * complete regardless of outcome (decision 16). `originalClaimCount` is set
+ * only when capClaims() actually trimmed the response, so a caller can tell
+ * "8 claims, none dropped" apart from "12 claims, capped to 8" (decision 17).
  *
  * Never logs or includes the API key in any error: only error.status/
  * .name/.message are read from a caught SDK error, never headers or the raw
@@ -57,13 +62,19 @@ export function resolveNarrativeModel(env: NodeJS.ProcessEnv = process.env): str
   return env.NARRATIVE_MODEL || DEFAULT_MODEL;
 }
 
-/** Exported for direct unit testing (no network): asserts claims.maxItems is actually wired up, not just intended. */
+/**
+ * Exported for direct unit testing (no network). No `maxItems` on the
+ * `claims` array (decision 17, commit 2d): the API rejected it outright --
+ * `output_config.format.schema: For 'array' type, property 'maxItems' is not
+ * supported` -- on every one of commit 2c's 12 live smoke-run calls, so the
+ * cap the prompt still asks for ("at most 8 claims") is enforced client-side
+ * instead, by capClaims() below.
+ */
 export const CLAIMS_SCHEMA = {
   type: 'object',
   properties: {
     claims: {
       type: 'array',
-      maxItems: MAX_CLAIMS,
       items: {
         type: 'object',
         properties: {
@@ -111,6 +122,22 @@ export function isClaimsShape(value: unknown): value is { claims: NarrativeClaim
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return Array.isArray(candidate['claims']) && candidate['claims'].every(isNarrativeClaim);
+}
+
+/**
+ * Enforces the "at most 8 claims" cap client-side (decision 17, commit 2d),
+ * since the schema itself can no longer express it. Keeps the first
+ * MAX_CLAIMS claims, in order, and drops the rest -- each claim is grounded
+ * independently (validateGrounding() checks one claim at a time), so
+ * dropping extras never introduces unverified content into the ones kept.
+ * `originalCount` lets a caller (the smoke script) log how often the cap
+ * actually fired. Exported for direct unit testing (no network).
+ */
+export function capClaims(claims: readonly NarrativeClaim[]): { claims: readonly NarrativeClaim[]; originalCount: number } {
+  return {
+    claims: claims.length > MAX_CLAIMS ? claims.slice(0, MAX_CLAIMS) : claims,
+    originalCount: claims.length,
+  };
 }
 
 /**
@@ -256,6 +283,11 @@ export class AnthropicNarrativeModelClient implements NarrativeModelClient {
       throw new NarrativeGenerationError('Anthropic response did not match the expected narrative claims shape.', 'shape_mismatch', usage);
     }
 
-    return { claims: parsed.claims, usage };
+    const { claims, originalCount } = capClaims(parsed.claims);
+    return {
+      claims,
+      usage,
+      ...(originalCount > MAX_CLAIMS ? { originalClaimCount: originalCount } : {}),
+    };
   }
 }

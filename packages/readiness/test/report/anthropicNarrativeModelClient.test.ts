@@ -11,10 +11,12 @@ import {
   AnthropicNarrativeModelClient,
   CLAIMS_SCHEMA,
   buildPrompt,
+  capClaims,
   isClaimsShape,
   listValidIds,
   resolveNarrativeModel,
 } from '../../src/report/anthropicNarrativeModelClient.js';
+import type { NarrativeClaim } from '../../src/report/narrativeTypes.js';
 import { MOCK_ORG_FIXTURES } from '../../src/fixtures/mockOrgs.js';
 import { buildReportData } from '../../src/report/buildReport.js';
 import { buildNarrativePromptInput } from '../../src/report/narrativePromptInput.js';
@@ -119,11 +121,47 @@ describe('listValidIds / buildPrompt (decisions 14/15, commit 2b)', () => {
   });
 });
 
-describe('CLAIMS_SCHEMA / buildPrompt (decision 16, commit 2c)', () => {
-  it('schema caps claims at 8 via maxItems, matching the prompt instruction', () => {
-    expect(CLAIMS_SCHEMA.properties.claims.maxItems).toBe(8);
+describe('CLAIMS_SCHEMA (decision 17, commit 2d)', () => {
+  it('has no maxItems on the claims array -- the API rejects that keyword on an array schema', () => {
+    expect(CLAIMS_SCHEMA.properties.claims).not.toHaveProperty('maxItems');
+  });
+});
+
+function makeClaim(id: number): NarrativeClaim {
+  return { text: `claim ${id}`, groundedIn: ['close_date_fill_rate'] };
+}
+
+describe('capClaims (decision 17, commit 2d)', () => {
+  it('leaves 8 or fewer claims untouched and reports the original count unchanged', () => {
+    const claims = [makeClaim(1), makeClaim(2), makeClaim(3)];
+
+    const result = capClaims(claims);
+
+    expect(result.claims).toEqual(claims);
+    expect(result.originalCount).toBe(3);
   });
 
+  it('caps 12 claims down to the first 8, preserving order', () => {
+    const claims = Array.from({ length: 12 }, (_, i) => makeClaim(i + 1));
+
+    const result = capClaims(claims);
+
+    expect(result.claims).toHaveLength(8);
+    expect(result.claims).toEqual(claims.slice(0, 8));
+    expect(result.originalCount).toBe(12);
+  });
+
+  it('does not cap exactly 8 claims', () => {
+    const claims = Array.from({ length: 8 }, (_, i) => makeClaim(i + 1));
+
+    const result = capClaims(claims);
+
+    expect(result.claims).toEqual(claims);
+    expect(result.originalCount).toBe(8);
+  });
+});
+
+describe('CLAIMS_SCHEMA / buildPrompt (decision 16, commit 2c)', () => {
   it('prompt tells the model to write at most 8 claims, prioritizing decision-relevant ones', async () => {
     const input = await buildHealthyPromptInput();
 

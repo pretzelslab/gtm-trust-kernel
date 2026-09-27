@@ -2,21 +2,17 @@
 
 ## Session handoff (2026-09-26)
 
-Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c) — all local, none pushed until this session's final push.
+Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), + this session's uncommitted 2d — all local, none pushed until this session's final push.
 
-**e01abcb (2c) is committed but NOT live-validated.** All 12 smoke-run calls failed identically: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Items 2-4 of 2c (max_tokens 1536, the 4 tier-word prompt rules, stop_reason truncation detection) were never exercised as a result.
+**e01abcb (2c) was committed but NOT live-validated.** All 12 smoke-run calls failed identically: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Items 2-4 of 2c (max_tokens 1536, the 4 tier-word prompt rules, stop_reason truncation detection) were never exercised as a result — the request never reached the model.
 
-Latest *validated* smoke run (2b, `--runs 3`): grounding fallback 42% (5/12); transport 5/12 (JSON truncation at max_tokens 1024, pre-2c).
+**2d fixes that schema rejection (decision 17).** `CLAIMS_SCHEMA`'s `claims` array no longer declares `maxItems` (the API doesn't support it on an array-typed property at all); the prompt's "at most 8 claims" instruction is unchanged and is still the model's only signal about the limit. `AnthropicNarrativeModelClient.generate()` now enforces the cap client-side via a new pure `capClaims()`, called after the shape-guard (`isClaimsShape`) passes: keeps the first 8 claims in order, drops the rest, and exposes the pre-cap count as `NarrativeModelResponse.originalClaimCount` (set only when capping fires) so a caller can log e.g. "capped 12→8". Safe because every claim is grounded and checked independently — dropping extras removes no verified content and adds no unverified content to the ones kept. The validator (`narrativeGrounding.ts`) is untouched, per decision 16's "stays strict, unchanged" rule — this is a transport-layer fix only.
 
-Open findings (from the 2b run): claim count too high (up to 19 per response); tier-word-as-threshold false positives ("short of viable"); mixed-id tier claims (two tier words, one sentence); capability-only numeric citations; usage lost on a parse failure; volume claim-4 note-derived-count hypothesis unconfirmed.
+This session's `--runs 3` live smoke results against 2d (the first live validation of everything 2c/2d changed) are reported in this session's own output, not duplicated here — see chat history or re-run `npm run narrative:smoke -- --runs 3` to reproduce.
 
-**Next step:** fix 2c's schema first — drop `maxItems` (API rejects it on arrays), keep the prompt's "at most 8 claims" instruction only — then re-run `--runs 3` to validate the rest of 2c before starting commit 3. Original 2c spec, verbatim:
-1. Schema claims maxItems 8; prompt "at most 8 claims, prioritize most decision-relevant"
-2. max_tokens 1536
-3. stop_reason max_tokens -> "truncation" category; capture usage from raw response even on parse failure
-4. Prompt rules: tier words only for cited item's own tier; thresholds as numbers not tier names; one tier word per claim; numbers must cite metric id
-5. Record as decision 16: "validator stays strict; prompt constrains language"
-6. Tests: maxItems present; prompt contains each new rule
+Latest smoke run validated *before* this fix (2b, `--runs 3`): grounding fallback 42% (5/12); transport 5/12 (JSON truncation at max_tokens 1024, pre-2c). 2c's schema-rejection bug meant this remained the most recent live signal until 2d.
+
+Open findings (from the 2b run, not yet re-confirmed against 2c/2d's prompt changes): claim count too high (up to 19 per response — 2c/2d's cap addresses this if the live run confirms the schema fix actually reaches the model now); tier-word-as-threshold false positives ("short of viable" — 2c's prompt rules target this); mixed-id tier claims (two tier words, one sentence — 2c's "one tier word per claim" rule targets this); capability-only numeric citations (2c's "numbers must cite their own metric id" rule targets this); usage lost on a parse failure (fixed in 2c, per decision 16); volume claim-4 note-derived-count hypothesis unconfirmed (still open, unrelated to 2c/2d).
 
 Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
@@ -333,6 +329,31 @@ recur. Still open.
     language to stay inside what the validator can already correctly
     judge.
 
+17. **The API doesn't support `maxItems` on an array-typed schema property;
+    the 8-claim cap is enforced client-side instead (2026-09-26, commit
+    2d).** Commit 2c's live validation (all 12 smoke-run calls) failed
+    identically at the transport layer: `output_config.format.schema: For
+    'array' type, property 'maxItems' is not supported` -- the request
+    never reached the model, so none of 2c's other changes (max_tokens
+    1536, the 4 tier-word prompt rules, `stop_reason` truncation detection)
+    were exercised. `CLAIMS_SCHEMA`'s `claims` array no longer declares
+    `maxItems`; the prompt's "at most 8 claims, prioritize the most
+    decision-relevant" instruction is unchanged and is still the model's
+    only signal about the limit. `AnthropicNarrativeModelClient.generate()`
+    now calls a new pure `capClaims()` after the shape-guard (`isClaimsShape`)
+    passes: if the parsed response has more than 8 claims, keeps the first
+    8 and drops the rest, in order. Safe to truncate rather than reject
+    outright because every claim is grounded and checked independently
+    (`validateGrounding()` validates one claim at a time) -- dropping
+    claims 9+ removes zero verified content and adds zero unverified
+    content to the 8 that remain. `NarrativeModelResponse` gained an
+    optional `originalClaimCount`, set only when capping actually fired, so
+    a caller (the smoke script) can distinguish "8 claims, none dropped"
+    from "N claims, capped to 8" and log the latter as `capped N→8`. The
+    validator (decision 16's "stays strict, unchanged" rule) is untouched
+    by this decision too -- this is a transport-layer fix, not a grounding
+    change.
+
 ## Non-goals (explicit)
 
 - No envelope/trust-tier wiring in this phase (see Scope).
@@ -399,6 +420,18 @@ recur. Still open.
    `max_tokens` 1536, `claims` capped at 8 (schema `maxItems` + prompt),
    and a `stop_reason === 'max_tokens'` check that classifies truncation
    separately from transport and still captures usage. See decision 16.
+   **Committed but not live-validated until 2d** — see below.
+2d. **Schema-rejection fix from 2c's live validation (2026-09-26, decision
+   17).** All 12 of 2c's live smoke-run calls failed identically at the
+   transport layer (`maxItems` unsupported on an array schema property), so
+   none of 2c's other changes were actually exercised against the live API
+   before this commit. Dropped `maxItems` from `CLAIMS_SCHEMA`; kept the
+   prompt's "at most 8 claims" instruction; added client-side `capClaims()`
+   enforcing the same cap after the shape-guard, exposing
+   `originalClaimCount` when it fires. See decision 17 for the full
+   rationale and this file's "Session handoff" section for the
+   live-validated results (per-fixture pass rate, grounding/truncation/
+   transport rates, how often the cap applied).
 3. **`narrative.ts` orchestration.** Builds the prompt input from
    `ReportData`, calls the client, validates, falls back with the visible
    reason from decision 9 — fully testable via the fake client from

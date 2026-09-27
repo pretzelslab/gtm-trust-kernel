@@ -49,6 +49,14 @@ export interface NarrativeModelUsage {
 export interface NarrativeModelResponse {
   readonly claims: readonly NarrativeClaim[];
   readonly usage?: NarrativeModelUsage;
+  /**
+   * Set only when the model returned more than 8 claims and
+   * AnthropicNarrativeModelClient's capClaims() trimmed them client-side
+   * (decision 17, commit 2d, since the schema itself can't express
+   * `maxItems`). The value is the count before trimming; `claims` above is
+   * already the capped array. Absent when no capping occurred.
+   */
+  readonly originalClaimCount?: number;
 }
 
 /**

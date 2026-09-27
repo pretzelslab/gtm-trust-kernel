@@ -77,6 +77,8 @@ interface FixtureOutcome {
   readonly kind: 'ok' | 'transport' | 'truncation' | 'grounding';
   readonly reasons: readonly string[];
   readonly usage?: Usage;
+  /** Set when the client capped >8 returned claims to 8 (decision 17, commit 2d) -- the count before capping. */
+  readonly cappedFrom?: number;
 }
 
 function parseRunsArg(): number {
@@ -118,10 +120,11 @@ async function runFixture(client: AnthropicNarrativeModelClient, fixture: Fixtur
         return `claim ${f.claimIndex} ["${claimText}"]: ${f.reason}`;
       }),
       usage: response.usage,
+      cappedFrom: response.originalClaimCount,
     };
   }
 
-  return { fixture, runIndex, kind: 'ok', reasons: [], usage: response.usage };
+  return { fixture, runIndex, kind: 'ok', reasons: [], usage: response.usage, cappedFrom: response.originalClaimCount };
 }
 
 function formatUsage(usage: Usage | undefined): string {
@@ -167,6 +170,9 @@ async function main(): Promise<void> {
 
       const label = runs > 1 ? `[run ${runIndex}/${runs}] ${outcome.fixture}` : outcome.fixture;
       console.log(`${label}: ${formatStatus(outcome.kind)}  [usage: ${formatUsage(outcome.usage)}]`);
+      if (outcome.cappedFrom !== undefined) {
+        console.log(`  - capped ${outcome.cappedFrom}→8`);
+      }
       for (const reason of outcome.reasons) {
         console.log(`  - ${reason}`);
       }
@@ -195,8 +201,12 @@ async function main(): Promise<void> {
   const groundingFallbacks = outcomes.filter((o) => o.kind === 'grounding').length;
   const truncationFailures = outcomes.filter((o) => o.kind === 'truncation').length;
   const transportFailures = outcomes.filter((o) => o.kind === 'transport').length;
+  const cappedCount = outcomes.filter((o) => o.cappedFrom !== undefined).length;
   const groundingRate = groundingFallbacks / outcomes.length;
 
+  console.log(
+    `Claims capped (>8 returned): ${cappedCount}/${outcomes.length} (decision 17, commit 2d)`,
+  );
   console.log(
     `Grounding fallback rate: ${(groundingRate * 100).toFixed(0)}% (${groundingFallbacks}/${outcomes.length})` +
       (groundingRate > GROUNDING_FALLBACK_THRESHOLD
