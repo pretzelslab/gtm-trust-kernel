@@ -5,3 +5,4 @@ out/
 .env.local
 coverage/
 .cache/
+.claude/scheduled_tasks.lock
