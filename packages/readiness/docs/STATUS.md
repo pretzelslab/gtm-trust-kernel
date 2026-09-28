@@ -553,6 +553,31 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
+- **Phase F, 2026-09-27: npx packaging done locally, not yet published.**
+  `@gtm-trust-kernel/adapters` is now a real buildable library (`tsc`
+  build to `dist/`, `files: ["dist"]`, conditional `"source"`/`"types"`/
+  `"default"` exports so `kernel`/`readiness` still resolve straight to
+  `.ts` source in-repo with no build step) and a new package,
+  `packages/cli` (npm name `gtm-trust-kernel`), wraps this package's
+  existing report-building functions into an npx-runnable
+  `scan --demo` command against a bundled, `healthy`-only mock org —
+  see `src/fixtures/healthy.ts`/`mockOrgShared.ts`, the fixture split
+  (out of the old single-file `mockOrgs.ts`) that made a healthy-only
+  CLI bundle possible without also shipping `fresh`/`legacy`/`volume`'s
+  data. Both `npm pack --dry-run` and a clean-folder `npx` install/run
+  smoke test passed. Committed and tagged: `883efe6`
+  ("Phase F: npx packaging for adapters library and gtm-trust-kernel
+  CLI"), tag `phase-f-packaging`.
+  **Remaining before an actual `npm publish`:**
+  1. Pick a license — no package in the repo has a `license` field or a
+     `LICENSE` file yet.
+  2. Create the `@gtm-trust-kernel` npm org/scope — unclaimed as of this
+     session (checked via `npm view @gtm-trust-kernel/adapters`, 404),
+     but not yet created.
+  3. Publish order: `@gtm-trust-kernel/adapters` first, then
+     `gtm-trust-kernel` — the CLI depends on the published `adapters`
+     package (not a workspace link) once it's installed outside this
+     monorepo, so `adapters` has to exist on the registry first.
 - **Superseded, 2026-09-27: Phase E (LLM narrative pass, `report/narrative.ts`)
   is now fully implemented, not a draft plan.** The bullet that used to sit
   here described a 5-commit breakdown agreed but not yet built. All 5
