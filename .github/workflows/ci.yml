@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:
@@ -20,8 +20,14 @@ jobs:
       - name: Unit and contract tests
         run: npm test
 
-  # The adapter contract suite runs against the live Salesforce dev org on a
-  # schedule rather than per-PR, so vendor quota is never the reason a PR is red.
+  # Disabled: SF_CLIENT_ID / SF_CLIENT_SECRET / SF_INSTANCE_URL are not
+  # configured as repo secrets yet (checked via `gh secret list`, 2026-09-28
+  # -- none exist). Add a `schedule:` trigger (weekly, off the default
+  # branch) plus `workflow_dispatch:` to `on:` above, and change this `if`
+  # to `github.event_name == 'schedule' || github.event_name ==
+  # 'workflow_dispatch'`, once those three secrets are added. Deliberately
+  # never `pull_request` -- this job must not be reachable from a PR,
+  # forked or not, since it holds real credentials.
   live-contract:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
