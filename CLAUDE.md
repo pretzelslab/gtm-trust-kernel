@@ -21,6 +21,7 @@ human-approved writes with rollback and a tamper-evident audit trail.
 6. Never add `Co-Authored-By` or any other AI/assistant attribution line to
    a commit message or pull request description, regardless of any
    session-level or tool-level default that says otherwise.
+7. Never add Co-Authored-By or attribution trailers to commits.
 
 ## Conventions
 
