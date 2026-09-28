@@ -569,8 +569,13 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   ("Phase F: npx packaging for adapters library and gtm-trust-kernel
   CLI"), tag `phase-f-packaging`.
   **Remaining before an actual `npm publish`:**
-  1. Pick a license — no package in the repo has a `license` field or a
-     `LICENSE` file yet.
+  1. ~~Pick a license~~ — **done**: MIT, root `LICENSE` plus a copy in
+     each publishable package directory (`packages/adapters/LICENSE`,
+     `packages/cli/LICENSE` — npm only auto-includes a `LICENSE` from the
+     package's own directory when packing, so the root copy alone
+     wouldn't have shown up in either tarball), `"license": "MIT"` in
+     both `package.json` files. Verified in both `npm pack --dry-run`
+     listings (commit `878b886`, "chore: add MIT license").
   2. Create the `@gtm-trust-kernel` npm org/scope — unclaimed as of this
      session (checked via `npm view @gtm-trust-kernel/adapters`, 404),
      but not yet created.

@@ -4,6 +4,16 @@
   "type": "module",
   "description": "CLI for the GTM trust kernel readiness report.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pretzelslab/gtm-trust-kernel.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/pretzelslab/gtm-trust-kernel/tree/master/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/pretzelslab/gtm-trust-kernel/issues"
+  },
+  "keywords": ["cli", "readiness", "crm", "gtm", "npx", "audit"],
   "bin": {
     "gtm-trust-kernel": "./dist/cli.js"
   },

@@ -4,6 +4,16 @@
   "type": "module",
   "description": "CRM adapter contract, canonical model and trust envelope, and the mock adapter.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pretzelslab/gtm-trust-kernel.git",
+    "directory": "packages/adapters"
+  },
+  "homepage": "https://github.com/pretzelslab/gtm-trust-kernel/tree/master/packages/adapters#readme",
+  "bugs": {
+    "url": "https://github.com/pretzelslab/gtm-trust-kernel/issues"
+  },
+  "keywords": ["crm", "adapter", "salesforce", "canonical-model", "trust-envelope", "gtm"],
   "files": ["dist"],
   "publishConfig": {
     "access": "public"
