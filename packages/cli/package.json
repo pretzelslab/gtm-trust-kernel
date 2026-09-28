@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "CLI for the GTM trust kernel readiness report.",
+  "license": "MIT",
   "bin": {
     "gtm-trust-kernel": "./dist/cli.js"
   },

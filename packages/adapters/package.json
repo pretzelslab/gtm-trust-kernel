@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "CRM adapter contract, canonical model and trust envelope, and the mock adapter.",
+  "license": "MIT",
   "files": ["dist"],
   "publishConfig": {
     "access": "public"
