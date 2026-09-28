@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Readiness assessment: scored CRM data-health diagnostic. Not yet built.",
+  "exports": {
+    "./fixtures/healthy.js": "./src/fixtures/healthy.ts",
+    "./report/buildReport.js": "./src/report/buildReport.ts",
+    "./report/render.js": "./src/report/render.ts",
+    "./report/plainReport.js": "./src/report/plainReport.ts",
+    "./report/narrative.js": "./src/report/narrative.ts",
+    "./report/anthropicNarrativeModelClient.js": "./src/report/anthropicNarrativeModelClient.ts"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
     "@gtm-trust-kernel/adapters": "*",

@@ -1,0 +1,24 @@
+{
+  "name": "gtm-trust-kernel",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CLI for the GTM trust kernel readiness report.",
+  "bin": {
+    "gtm-trust-kernel": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@gtm-trust-kernel/adapters": "^0.1.0",
+    "@anthropic-ai/sdk": "0.128.0",
+    "tldts": "7.4.13"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit"
+  }
+}

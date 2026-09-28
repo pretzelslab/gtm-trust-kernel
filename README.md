@@ -95,6 +95,12 @@ npm run typecheck
 npm test
 ```
 
+Try the readiness report without installing anything:
+
+```bash
+npx gtm-trust-kernel scan --demo
+```
+
 ---
 
 ## Roadmap

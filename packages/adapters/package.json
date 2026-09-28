@@ -1,20 +1,65 @@
 {
   "name": "@gtm-trust-kernel/adapters",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "CRM adapter contract, canonical model and trust envelope, and the mock adapter.",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
-    "./types.js": "./src/types.ts",
-    "./mock.js": "./src/mock.ts",
-    "./salesforce.js": "./src/salesforce.ts",
-    "./model/canonical.js": "./src/model/canonical.ts",
-    "./model/trust.js": "./src/model/trust.ts",
-    "./test/fixtures.js": "./test/fixtures.ts",
-    "./test/contract/adapter.contract.js": "./test/contract/adapter.contract.ts",
-    "./test/contract/secondSource.contract.js": "./test/contract/secondSource.contract.ts"
+    "./types.js": {
+      "source": "./src/types.ts",
+      "types": "./dist/src/types.d.ts",
+      "default": "./dist/src/types.js"
+    },
+    "./mock.js": {
+      "source": "./src/mock.ts",
+      "types": "./dist/src/mock.d.ts",
+      "default": "./dist/src/mock.js"
+    },
+    "./salesforce.js": {
+      "source": "./src/salesforce.ts",
+      "types": "./dist/src/salesforce.d.ts",
+      "default": "./dist/src/salesforce.js"
+    },
+    "./model/canonical.js": {
+      "source": "./src/model/canonical.ts",
+      "types": "./dist/src/model/canonical.d.ts",
+      "default": "./dist/src/model/canonical.js"
+    },
+    "./model/trust.js": {
+      "source": "./src/model/trust.ts",
+      "types": "./dist/src/model/trust.d.ts",
+      "default": "./dist/src/model/trust.js"
+    },
+    "./test/fixtures.js": {
+      "source": "./test/fixtures.ts",
+      "types": "./dist/test/fixtures.d.ts",
+      "default": "./dist/test/fixtures.js"
+    },
+    "./test/contract/adapter.contract.js": {
+      "source": "./test/contract/adapter.contract.ts",
+      "types": "./dist/test/contract/adapter.contract.d.ts",
+      "default": "./dist/test/contract/adapter.contract.js"
+    },
+    "./test/contract/secondSource.contract.js": {
+      "source": "./test/contract/secondSource.contract.ts",
+      "types": "./dist/test/contract/secondSource.contract.d.ts",
+      "default": "./dist/test/contract/secondSource.contract.js"
+    }
+  },
+  "peerDependencies": {
+    "vitest": "^2.1.3"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
