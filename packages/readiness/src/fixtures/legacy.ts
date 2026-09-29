@@ -36,7 +36,7 @@ function generateLegacy(): MockOrgFixture {
     'oldco.com',
     'gmail.com',
     'gmail.com',
-    'legacypartner.com',
+    'legacypartner.example',
     undefined,
   ];
   const accounts: Account[] = accountDomains.map((domain, i) => makeAccount(orgId, `acc-${i}`, domain, daysBefore(asOf, 2000)));
@@ -103,14 +103,14 @@ function generateLegacy(): MockOrgFixture {
   }
 
   // D5 second source: poor overlap, no activities. Only acc-4/con-4 (the
-  // one unique, non-denylisted domain — legacypartner.com) resolves; the
+  // one unique, non-denylisted domain — legacypartner.example) resolves; the
   // shared oldco.com pair, the denylisted gmail.com pair, and the
   // domain-less account all deliberately have no second-source match.
   // hasActivities: false mirrors this org's activitySync: false on the
   // CRM side — no engagement-tool activity log for a legacy org.
-  const secondSourceAccounts: SecondSourceAccount[] = [makeSecondSourceAccount(orgId, 'ss-acc-4', 'legacypartner.com', daysBefore(asOf, 1000))];
+  const secondSourceAccounts: SecondSourceAccount[] = [makeSecondSourceAccount(orgId, 'ss-acc-4', 'legacypartner.example', daysBefore(asOf, 1000))];
   const secondSourceContacts: SecondSourceContact[] = [
-    makeSecondSourceContact(orgId, 'ss-con-4', 'person4@legacypartner.com', daysBefore(asOf, 1000)),
+    makeSecondSourceContact(orgId, 'ss-con-4', 'person4@legacypartner.example', daysBefore(asOf, 1000)),
   ];
 
   return {

@@ -149,4 +149,4 @@ No seller pilot is claimed. Evidence comes from:
 - chaos and failure-injection results against the named failure modes
 - think-aloud sessions with practitioners
 
-Language used consistently across repo, resume and interview: **working application with a documented evaluation suite and adversarial test results.** Not "production tool used daily by sales."
+Language used consistently across the repo and in any write-up: **working application with a documented evaluation suite and adversarial test results.** Not "production tool used daily by sales."
