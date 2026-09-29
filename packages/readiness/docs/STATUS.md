@@ -25,26 +25,26 @@ repeated here.
 (`median_next_step_age_days`, `close_date_history_enabled`,
 `win_rate_dispersion`) shipped this session via the bundled
 adapter-contract change (`getStageHistoryByOpportunity`/`nextStepHistory`/
-`closeDateHistory`, `9a0d823`/`b9ba754`), then the three metric commits
-(`5935dd1`, `706916b`, `5dba202`). `buildReport.test.ts`'s deferral test now
+`closeDateHistory`, `0e22bc0`/`16170f0`), then the three metric commits
+(`3c2881e`, `de82eac`, `c7c6596`). `buildReport.test.ts`'s deferral test now
 asserts the deferred set is empty.
 
 | Metric group | State | Commit |
 |---|---|---|
-| D1 coverage, original 6 (`close_date_fill_rate`, `amount_fill_rate`, `next_step_fill_rate`, `activity_capture_rate`, `contact_linkage_rate`, `note_coverage_rate`) | Done, tested | `9200b08` |
+| D1 coverage, original 6 (`close_date_fill_rate`, `amount_fill_rate`, `next_step_fill_rate`, `activity_capture_rate`, `contact_linkage_rate`, `note_coverage_rate`) | Done, tested | `5134989` |
 | D1 `owner_id_fill_rate` | Done, tested. **Report-only** — not wired into any `CapabilitySpec`'s gates | this session, see git log |
-| D2 `median_days_since_modified` | Done, tested | `1590803` |
-| D2 `past_due_close_date_rate` | Done, tested | `1590803` |
-| D2 `median_next_step_age_days` | **Done, tested.** Unblocked 2026-09-26 (adapter-contract change), shipped | `706916b` |
+| D2 `median_days_since_modified` | Done, tested | `ee2edf9` |
+| D2 `past_due_close_date_rate` | Done, tested | `ee2edf9` |
+| D2 `median_next_step_age_days` | **Done, tested.** Unblocked 2026-09-26 (adapter-contract change), shipped | `de82eac` |
 | D3 `stage_activity_contradiction_rate`, `round_amount_rate` | Done, tested | prior session, see git log |
 | D3 `stage_mapping_coverage`, `duplicate_account_rate` | **Done, tested.** D3 is now fully implemented (all 4 metrics) | this session ("D3 part 2b"), see git log |
 | D4 `owner_history_enabled`, `stage_history_months` | Done, tested | this session ("D4 part 1"), see git log |
-| D4 `close_date_history_enabled` | **Done, tested.** Root cause corrected (Salesforce's `OpportunityHistory` snapshots Close Date unconditionally) — statically `true` on `SalesforceAdapter` | `5935dd1` |
+| D4 `close_date_history_enabled` | **Done, tested.** Root cause corrected (Salesforce's `OpportunityHistory` snapshots Close Date unconditionally) — statically `true` on `SalesforceAdapter` | `3c2881e` |
 | D5 part 1: `SecondSourceAdapter` contract + `MockSecondSourceAdapter` + fixtures | Done, tested. **No D5 metric code** — adapter/mock/contract-test/fixture scaffolding only | this session ("D5 part 1"), see git log |
 | D5 part 2a: joinability orchestration (independent second-source sampling, hashing at ingestion, contact/account resolution) | Done, tested | prior session ("D5 part 2a"), see git log |
 | D5 part 2b: the 4 D5 metrics + `buildReportData`/`cli.ts`/`--json` wiring | **Done, tested. D5 is now fully implemented** — all 4 metrics live in the report, no longer greyed out | this session ("D5 part 2b"), see git log |
 | D6 (4 metrics), D7's `closed_deal_count_12m`/`outcome_evidence_retention_rate` | **Done, tested.** Scoped and locked in `metric-definitions.md`, then implemented in 3 phases (CoverageSample plumbing, the 6 metric functions, fixture support) — all 6 live in the report, no longer greyed out | this session ("D6/D7 phase 1/2/3"), see git log |
-| D7 `win_rate_dispersion` | **Done, tested.** Last of the 3-metric bundle — see "Known Gaps" for its single-real-fixture caveat | `5dba202` |
+| D7 `win_rate_dispersion` | **Done, tested.** Last of the 3-metric bundle — see "Known Gaps" for its single-real-fixture caveat | `c7c6596` |
 
 `notesByOpportunity`/`activitiesByOpportunity` hydration — the gap flagged
 when the visual report shipped (`note_coverage_rate`,
@@ -241,7 +241,7 @@ above if this doc ever drifts, but treat this list as authoritative for
 - **`past_due_close_date_rate`:** past-due is `closeDate < asOf`, strict — exactly-`asOf` is not past-due (mirrors `close_date_fill_rate`'s existing exactly-`asOf`-counts-as-filled edge case). Null `closeDate` excluded from both numerator and denominator (that gap belongs to `close_date_fill_rate`, don't double-penalize it).
 - **`owner_id_fill_rate`:** empty-string and whitespace-only `ownerId` count as unfilled, same as `undefined` — `(ownerId?.trim().length ?? 0) > 0`, not a bare non-null check (same shape as `next_step_fill_rate`'s edge case, different field). Deliberately **not** added to any `CapabilitySpec.gates` in `rubric.ts` — report-only for now. If a capability should eventually gate on it, that's a separate decision, not implied by this metric existing.
 - **`shared.ts`** (`src/metrics/shared.ts`) holds `rateOverOpportunities` (the share-of-denominator-with-a-predicate pattern used by most D1 metrics and by `past_due_close_date_rate`), `median()`, and `DAY_MS`. Originally lived only in `coverage.ts`; extracted when D2 needed the same shape. `coverage.ts`'s behavior/output did not change in that extraction — confirm this stays true if you touch either file.
-- **Canonical model additions made to support D1** (not just Phase C internals — these are cross-package changes, already committed in `9200b08`): `AdapterCapabilities.activitySync: boolean` (`packages/adapters/src/types.ts`), and `OpportunityContactLink` + `Opportunity.contactLinks: readonly OpportunityContactLink[]` (`packages/adapters/src/model/canonical.ts`). Both went through full interface review before being written — see git history on those files if the rationale is needed again.
+- **Canonical model additions made to support D1** (not just Phase C internals — these are cross-package changes, already committed in `5134989`): `AdapterCapabilities.activitySync: boolean` (`packages/adapters/src/types.ts`), and `OpportunityContactLink` + `Opportunity.contactLinks: readonly OpportunityContactLink[]` (`packages/adapters/src/model/canonical.ts`). Both went through full interface review before being written — see git history on those files if the rationale is needed again.
 - **`stage_activity_contradiction_rate`:** the qualifying-activity predicate is imported, not copied, from `activity_capture_rate` — extracted into `hasQualifyingActivity` (`shared.ts`), parameterized on window start/`asOf` so each caller supplies its own window length. This metric's window is **21 days**, not `activity_capture_rate`'s 30 — a late-stage deal implies more frequent expected touchpoints. "Late-stage" = `CANONICAL_STAGE_ORDER.slice(-2)` (today: `proposal`, `negotiation`), derived rather than hardcoded so it tracks the canonical ladder if it changes. Gated on `AdapterCapabilities.activitySync`, same as `activity_capture_rate` (same underlying activity data) — `not_instrumented` with the same note text when the gate is off.
 - **`round_amount_rate`:** denominator excludes null and zero amount, mirroring `amount_fill_rate`'s zero-exclusion and `past_due_close_date_rate`'s null-exclusion pattern — amount = 0 is already counted as unfilled by `amount_fill_rate`, not double-counted here. **Negative amounts are left in the denominator** and evaluated by the same `% 1000 === 0` rule as any other amount (e.g. -5000 counts as round) — this is an **open question for v0.2**, not resolved this session; flag it if negative amounts turn out to be common enough to matter (they generally shouldn't occur in a real CRM, but nothing currently rejects them upstream).
 - **Excluded-count reporting (`round_amount_rate`, and now `stage_mapping_coverage`):** `MetricResult` has no dedicated field for "count excluded from the denominator" (or, for `stage_mapping_coverage`, the mapped/inferred/unmapped split), so both surface it via `note` on the `'ok'` path, built by calling `rateOverOpportunities` and then overwriting `note`. **This is now the second use of the pattern** (D3 part 2b, this session) — per the original tech-debt call: **a third metric needing this should stop reusing `note` and add a structured field (`excludedCount` or similar) to `MetricResult` instead.** `duplicate_account_rate`'s note (below) is related but heavier — it packs five distinct counts into one string — and is itself a candidate for that structured field if a third "plain" excluded-count case doesn't show up first.
@@ -299,7 +299,7 @@ candidate, on `nextStep`) is documented as citation/audit provenance, not a
 field-change date, and using it as a stand-in would silently overload its
 meaning.
 
-`metric-definitions.md` now specifies (as of `031ad35`): no fallback to
+`metric-definitions.md` now specifies (as of `85ba39b`): no fallback to
 `LastModifiedDate`/`approximate: true` — this metric returns
 `not_instrumented` until a real `nextStepHistory` adapter capability exists
 (field-history backed, the same shape as `stageHistory`/`ownerHistory`).
@@ -429,7 +429,7 @@ metric's own computed value there.
   **Resolved, 2026-09-27: Phase E is now built, not just planned.**
   `report/narrative.ts` (`buildNarrative`), `AnthropicNarrativeModelClient`,
   `narrativeGrounding.ts`, and the `cli.ts`/`render.ts` wiring all shipped
-  across commits 1-4 (`fe398cb` through `b70470b`) — see
+  across commits 1-4 (`8b558c1` through `c54a1a9`) — see
   `docs/narrative-design.md`, now titled "locked, implemented," for the
   full decision history (1-27) and this doc's "Next steps" entry below for
   current status. Operationally: `--narrative` is an opt-in CLI flag only
@@ -467,7 +467,7 @@ metric's own computed value there.
   control proving the canaries actually reach the hydrated `CoverageSample`
   (and the second-source adapter's pre-hash output), not just the input
   fixture. Findings from the one cold adversarial review that has been run
-  (commit `66d0553`) are now written up, ranked by severity, in
+  (commit `0d48967`) are now written up, ranked by severity, in
   `docs/redaction-review.md`, per `claude/RUNBOOK.md` Step 10's format.
   **Decision: `redact.ts`/`redact.test.ts` (per the original scope-doc
   architecture) will not be built** — redaction is by construction (no
@@ -483,7 +483,7 @@ metric's own computed value there.
 
 - **`win_rate_dispersion` has exactly one real-fixture witness.** By
   design, only `generateHealthy()` was given the multi-hop stage-history
-  data this metric needs (`5dba202`) — `fresh`/`volume` read
+  data this metric needs (`c7c6596`) — `fresh`/`volume` read
   `not_applicable` and `legacy` reads `not_instrumented`, none of which
   exercises the actual dispersion computation (the per-stage win-rate
   split, the closed-stage exclusion, the <5-closed-opps/<2-remaining-
@@ -560,8 +560,10 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
   | Package | Version | Tag / commit | Registry shasum |
   |---|---|---|---|
-  | `@gtm-trust-kernel/adapters` | 0.1.0 | `adapters-v0.1.0` on `096056a` | `aedd35eb0da7cda4f6bc81fdc73d9c7db69cb6b7` |
-  | `gtm-trust-kernel` (CLI) | 0.1.0 | `cli-v0.1.0` on `3e3cbd5` | `e9f7c81119556c7b7ca5890c457b7cd91f862cc4` |
+  | `@gtm-trust-kernel/adapters` | 0.1.0 | `adapters-v0.1.0` on `9c3d5dc` | `aedd35eb0da7cda4f6bc81fdc73d9c7db69cb6b7` |
+  | `gtm-trust-kernel` (CLI) | 0.1.0 | `cli-v0.1.0` on `581dcf9` | `e9f7c81119556c7b7ca5890c457b7cd91f862cc4` |
+
+  npm 0.1.0 package metadata was recorded before a history rewrite, so its gitHead values will not resolve in this repo.
 
   Verification: `adapters` — installed from the registry, imports of `.`,
   `./fixtures` and `./mock.js` resolved and ran. CLI —
@@ -610,7 +612,7 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   (out of the old single-file `mockOrgs.ts`) that made a healthy-only
   CLI bundle possible without also shipping `fresh`/`legacy`/`volume`'s
   data. Both `npm pack --dry-run` and a clean-folder `npx` install/run
-  smoke test passed. Committed and tagged: `883efe6`
+  smoke test passed. Committed and tagged: `99721a1`
   ("Phase F: npx packaging for adapters library and gtm-trust-kernel
   CLI"), tag `phase-f-packaging`.
   **Remaining before an actual `npm publish`:**
@@ -620,7 +622,7 @@ added to the repo and confirmed to match: its Step 7 is exactly the
      package's own directory when packing, so the root copy alone
      wouldn't have shown up in either tarball), `"license": "MIT"` in
      both `package.json` files. Verified in both `npm pack --dry-run`
-     listings (commit `878b886`, "chore: add MIT license").
+     listings (commit `70ff861`, "chore: add MIT license").
   2. ~~Create the `@gtm-trust-kernel` npm org/scope~~ — **done**
      (the `@gtm-trust-kernel` org was created manually on npmjs.com by
      `pretzelslabs_org` before the first publish).
@@ -632,8 +634,8 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   here described a 5-commit breakdown agreed but not yet built. All 5
   landed: commits 1-2f (types, prompt/grounding, real client + 4 live-
   validation correction rounds), commit 3 (`narrative.ts` orchestration,
-  `c232891`), commit 4 (CLI `--narrative` flag + render fallback-notice
-  slot, `b70470b`), and commit 5 (this doc update). `docs/narrative-design.md`
+  `48e94ef`), commit 4 (CLI `--narrative` flag + render fallback-notice
+  slot, `c54a1a9`), and commit 5 (this doc update). `docs/narrative-design.md`
   is now titled "locked, implemented" and its "Session handoff" section
   carries the full decision history (1-27) and live-validation results.
   See the "Known Gaps" entry above (the "Plain-English summary added"
@@ -648,8 +650,8 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   described D2/D4/D7 each carrying one metric blocked on a new adapter
   capability — that capability shipped this session
   (`getStageHistoryByOpportunity`/`nextStepHistory`/`closeDateHistory`,
-  `9a0d823`/`b9ba754`) and all three metrics followed (`5935dd1`,
-  `706916b`, `5dba202`). See the "Status as of 2026-09-26" table at the
+  `0e22bc0`/`16170f0`) and all three metrics followed (`3c2881e`,
+  `de82eac`, `c7c6596`). See the "Status as of 2026-09-26" table at the
   top of this doc for the current per-dimension state; the historical
   "Deferred: ..." sections below are kept as the record of *why* each was
   blocked and how it was unblocked, not as current status.
@@ -662,7 +664,7 @@ added to the repo and confirmed to match: its Step 7 is exactly the
   (D2), `close_date_history_enabled` (D4), and `win_rate_dispersion` (D7)~~
   — **done, 2026-09-26**: `nextStepHistory` capability, `closeDateHistory`
   capability, and `getStageHistoryByOpportunity(oppRefs)` all shipped
-  (`9a0d823`/`b9ba754`), followed by the three metrics themselves.
+  (`0e22bc0`/`16170f0`), followed by the three metrics themselves.
 - **`healthy`'s `outcome_evidence_retention_rate` used to read 0%
   (`tier: "blocked"`) — found while spot-checking D6/D7 phase 3, fixed this
   session.** Root cause was `generateHealthy()` (`src/fixtures/mockOrgs.ts`)
