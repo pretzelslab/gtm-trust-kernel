@@ -15,6 +15,7 @@
   },
   "keywords": ["crm", "adapter", "salesforce", "canonical-model", "trust-envelope", "gtm"],
   "files": ["dist"],
+  "engines": { "node": ">=22" },
   "publishConfig": {
     "access": "public"
   },

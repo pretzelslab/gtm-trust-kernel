@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "CRM-agnostic trust kernel for GTM AI: evidence-grounded, injection-resistant, human-approved writes with rollback and a tamper-evident audit trail.",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
   "workspaces": ["packages/*"],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",

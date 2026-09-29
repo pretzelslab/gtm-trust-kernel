@@ -18,7 +18,10 @@
     "gtm-trust-kernel": "./dist/cli.js"
   },
   "files": ["dist"],
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@gtm-trust-kernel/adapters": "^0.1.0",
     "@anthropic-ai/sdk": "0.128.0",
