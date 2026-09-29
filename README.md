@@ -1,5 +1,28 @@
 # GTM Trust Kernel
 
+## What is this
+
+Your sales team's CRM (Salesforce, HubSpot and the like) is only as useful as the data in it. This project checks how healthy and trustworthy that data is, so you know whether it's safe to build AI on top of. It also provides the safety layer that stops an AI from making changes to your CRM without evidence and a person's approval. Salesforce is supported today, and other CRMs can be added via adapters.
+
+## Who it's for
+
+- **Sales, RevOps and GTM leaders** who want to know if their CRM data is good enough to trust before adding AI.
+- **Developers and security reviewers** building or assessing AI tools that read from or write to a CRM.
+
+## Try it in 1 minute
+
+You need [Node.js](https://nodejs.org) 22 or newer. Then run:
+
+```bash
+npx gtm-trust-kernel scan --demo
+```
+
+This uses a built-in sample CRM, so it doesn't connect to any real CRM and needs no login or account. You'll see a short sampling plan in the terminal. The command then writes an HTML health report to an `out` folder in your current directory. Open `out/latest.html` in a browser to read it.
+
+Want the raw numbers? Add `--json` and the report data prints to stdout instead. Want a plain-English AI summary in the report? Add `--narrative` and set an `ANTHROPIC_API_KEY` first. Note that `--narrative` sends report data to Anthropic's API.
+
+## Reference
+
 A CRM-agnostic trust kernel for GTM AI: evidence-grounded, injection-resistant, human-approved writes with rollback and a tamper-evident audit trail.
 
 This repository is the **core**. Seller-facing surfaces (Deal Review, Pipeline Hygiene, Enablement Answer Engine, Evaluation Console) are thin layers on top of it.
@@ -8,7 +31,7 @@ Status: core complete and tested. 36 tests, typecheck clean.
 
 ---
 
-## Why this exists
+### Why this exists
 
 CRM free text is untrusted input. Notes, email bodies, call transcripts and attachments are authored by customers, partners, and anyone with a portal link. An agent that reads those fields and can propose CRM writes is an indirect prompt injection target with a real blast radius.
 
@@ -18,7 +41,7 @@ Most GTM AI tooling treats this as a prompt-engineering problem. It is an archit
 
 ---
 
-## The seven invariants
+### The seven invariants
 
 Enforced in code, not by UI convention. See `src/proposals/kernel.ts` and `test/kernel.test.ts`.
 
@@ -36,7 +59,7 @@ Plus a grounding requirement: a proposed change with no citations, or a citation
 
 ---
 
-## Architecture
+### Architecture
 
 ```
 src/
@@ -53,7 +76,7 @@ test/
   contract/adapter.contract.ts  The suite every adapter must pass identically.
 ```
 
-### Design rules
+#### Design rules
 
 **Arithmetic in code, interpretation in the model.** Stage age, close-date pushes, activity silence and contact breadth are computed deterministically and unit-tested. The model reads the numbers and writes the language. Without this split, evals measure model noise rather than system behaviour.
 
@@ -67,7 +90,7 @@ test/
 
 ---
 
-## The adapter contract
+### The adapter contract
 
 `test/contract/adapter.contract.ts` is the proof that "CRM-agnostic" is a property rather than a claim. Every adapter runs the identical suite:
 
@@ -87,7 +110,7 @@ Planned adapters: Salesforce (primary), HubSpot (second, chosen because its obje
 
 ---
 
-## Running it
+### Development
 
 ```bash
 npm install
@@ -95,15 +118,9 @@ npm run typecheck
 npm test
 ```
 
-Try the readiness report without installing anything:
-
-```bash
-npx gtm-trust-kernel scan --demo
-```
-
 ---
 
-## Roadmap
+### Roadmap
 
 Ordered by dependency. Every step from 3 onward is a complete, presentable state.
 
@@ -121,7 +138,7 @@ Ordered by dependency. Every step from 3 onward is a complete, presentable state
 
 ---
 
-## Evidence approach
+### Evidence approach
 
 No seller pilot is claimed. Evidence comes from:
 
