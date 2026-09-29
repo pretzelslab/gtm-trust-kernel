@@ -27,7 +27,9 @@ A CRM-agnostic trust kernel for GTM AI: evidence-grounded, injection-resistant, 
 
 This repository is the **core**. Seller-facing surfaces (Deal Review, Pipeline Hygiene, Enablement Answer Engine, Evaluation Console) are thin layers on top of it.
 
-Status: core complete and tested. 36 tests, typecheck clean.
+Status: core complete, typecheck clean, tested in CI.
+
+[![ci](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml)
 
 ---
 
