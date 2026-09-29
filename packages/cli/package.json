@@ -15,7 +15,7 @@
   },
   "keywords": ["cli", "readiness", "crm", "gtm", "npx", "audit"],
   "bin": {
-    "gtm-trust-kernel": "./dist/cli.js"
+    "gtm-trust-kernel": "dist/cli.js"
   },
   "files": ["dist"],
   "engines": { "node": ">=22" },
