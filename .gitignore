@@ -6,3 +6,7 @@ out/
 coverage/
 .cache/
 .claude/scheduled_tasks.lock
+
+# local-only Claude notes/settings (not for the public repo)
+.claude/
+claude/
