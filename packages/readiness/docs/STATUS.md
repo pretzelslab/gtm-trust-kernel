@@ -622,7 +622,8 @@ added to the repo and confirmed to match: its Step 7 is exactly the
      both `package.json` files. Verified in both `npm pack --dry-run`
      listings (commit `878b886`, "chore: add MIT license").
   2. ~~Create the `@gtm-trust-kernel` npm org/scope~~ — **done**
-     (2026-09-28; the scope was claimed by the first `adapters` publish).
+     (the `@gtm-trust-kernel` org was created manually on npmjs.com by
+     `pretzelslabs_org` before the first publish).
   3. ~~Publish order: `@gtm-trust-kernel/adapters` first, then
      `gtm-trust-kernel`~~ — **done**, in that order (the CLI depends on the
      published `adapters`, not a workspace link). See "Release 0.1.0" below.
