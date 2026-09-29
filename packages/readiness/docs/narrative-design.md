@@ -4,6 +4,7 @@
 
 Commits: fe398cb (1), 065cded (2), d93a0ac (2b), e01abcb (2c), 4094b76 (2d), 049198e (2e), c26f62a (2f), c232891 (3), b70470b (4) — 1 through 2f were local until pushed at the end of that session; 3 and 4 pushed this session.
 
+**Known gap: two docs-only commits, `9321ad0` (commit 3's decisions 20-22 writeup) and `2adb774` (commit 4's decisions 23-27 writeup), were pushed without the attribution trailer the session convention then required.** Both were caught only after already being pushed to `origin/master` (shared branch) and were deliberately left as-is rather than amended and force-pushed without asking first. If this needs fixing later it requires an explicit force-push decision, not a routine amend.
 
 **e01abcb (2c) was committed but NOT live-validated** at the time — all 12 smoke-run calls failed identically at the transport layer: API 400, `output_config.format.schema: For 'array' type, property 'maxItems' is not supported`. Fixed by 2d.
 
