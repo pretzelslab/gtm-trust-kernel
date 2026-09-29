@@ -476,10 +476,10 @@ metric's own computed value there.
   `claude/gtm-readiness-scope.md`'s decision log for the scope this
   guarantee covers and the rule for extending it.
 
-- **npx packaging not built.** No `bin` entry, no compiled output,
-  `@gtm-trust-kernel/adapters` unpublished (clean install fails), test
-  fixtures + internal docs leak into the tarball (no `files` allowlist).
-  Full packaging plan required before public release.
+- **npx packaging — resolved, 2026-09-28.** This gap (no `bin`, no compiled
+  output, `adapters` unpublished, no `files` allowlist) is closed: both
+  packages are built, allowlisted and published as 0.1.0. See "Release 0.1.0"
+  under "Next steps" below.
 
 - **`win_rate_dispersion` has exactly one real-fixture witness.** By
   design, only `generateHealthy()` was given the multi-hop stage-history
@@ -553,6 +553,51 @@ added to the repo and confirmed to match: its Step 7 is exactly the
 
 ## Next steps (not started, no plan agreed yet)
 
+- **Release 0.1.0, 2026-09-28: `@gtm-trust-kernel/adapters` and the
+  `gtm-trust-kernel` CLI are published.** Both were published manually from
+  PowerShell with a temporary npm token, since revoked, and each verified by
+  a clean-room install from the registry in a temp folder outside the repo.
+
+  | Package | Version | Tag / commit | Registry shasum |
+  |---|---|---|---|
+  | `@gtm-trust-kernel/adapters` | 0.1.0 | `adapters-v0.1.0` on `096056a` | `aedd35eb0da7cda4f6bc81fdc73d9c7db69cb6b7` |
+  | `gtm-trust-kernel` (CLI) | 0.1.0 | `cli-v0.1.0` on `3e3cbd5` | `e9f7c81119556c7b7ca5890c457b7cd91f862cc4` |
+
+  Verification: `adapters` — installed from the registry, imports of `.`,
+  `./fixtures` and `./mock.js` resolved and ran. CLI —
+  `npx -y gtm-trust-kernel@0.1.0 --version` printed `0.1.0` and
+  `scan --demo --json` piped into `JSON.parse` succeeded. Both checks ran
+  on Node v24.16.0, not Node 22 (no Node 22 available on the dev machine);
+  CI runs on Node 22.
+
+  Fixes made before publishing:
+  - `scan --demo --json` now prints only the report JSON to stdout; the
+    sampling plan and "Report written" lines go to stderr. HTML reports are
+    still written to `./out`; the old `out/report-*.json` file is gone. The
+    scan moved to `packages/cli/src/scan.ts` with in-process tests
+    (`test/scan.json.test.ts`).
+  - CLI `bin` path changed from `./dist/cli.js` to `dist/cli.js`: npm 12
+    drops a `./`-prefixed bin entry at publish time (warning:
+    "script name … was invalid and removed"), which would have shipped the
+    CLI with no `bin`.
+  - `engines.node` is `>=22` in the root, `adapters` and `cli`; CI and the
+    CLI's tsup target moved to Node 22.
+  - `adapters` exports tidied: `.` (types only), `./fixtures`,
+    `./contract/adapter`, `./contract/secondSource` (the contract
+    suites need `vitest`, an optional peer dependency); the old
+    `./test/...` keys were dropped. The fixture company was renamed
+    "Quillfeather" (`quillfeather.example`).
+
+  Next steps:
+  1. Trusted publishing via GitHub Actions for 0.1.1 and later (npm trusted
+     publisher per package plus a publish workflow), so no long-lived token
+     is needed. 0.1.0 cannot be re-published; any fix ships as 0.1.1.
+  2. Make the repo public — both packages' `repository`, `homepage` and
+     `bugs` links point at it.
+  3. Optional: run the clean-room install checks on a real Node 22.
+  4. READMEs: a plain-English rewrite of all of them (root README, including
+     a user-facing quickstart, is planned for a separate session).
+
 - **Phase F, 2026-09-27: npx packaging done locally, not yet published.**
   `@gtm-trust-kernel/adapters` is now a real buildable library (`tsc`
   build to `dist/`, `files: ["dist"]`, conditional `"source"`/`"types"`/
@@ -576,13 +621,11 @@ added to the repo and confirmed to match: its Step 7 is exactly the
      wouldn't have shown up in either tarball), `"license": "MIT"` in
      both `package.json` files. Verified in both `npm pack --dry-run`
      listings (commit `878b886`, "chore: add MIT license").
-  2. Create the `@gtm-trust-kernel` npm org/scope — unclaimed as of this
-     session (checked via `npm view @gtm-trust-kernel/adapters`, 404),
-     but not yet created.
-  3. Publish order: `@gtm-trust-kernel/adapters` first, then
-     `gtm-trust-kernel` — the CLI depends on the published `adapters`
-     package (not a workspace link) once it's installed outside this
-     monorepo, so `adapters` has to exist on the registry first.
+  2. ~~Create the `@gtm-trust-kernel` npm org/scope~~ — **done**
+     (2026-09-28; the scope was claimed by the first `adapters` publish).
+  3. ~~Publish order: `@gtm-trust-kernel/adapters` first, then
+     `gtm-trust-kernel`~~ — **done**, in that order (the CLI depends on the
+     published `adapters`, not a workspace link). See "Release 0.1.0" below.
 - **Superseded, 2026-09-27: Phase E (LLM narrative pass, `report/narrative.ts`)
   is now fully implemented, not a draft plan.** The bullet that used to sit
   here described a 5-commit breakdown agreed but not yet built. All 5
