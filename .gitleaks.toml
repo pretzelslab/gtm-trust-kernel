@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "intentional prompt-injection canary, not a credential"
+regexes = ['''GTMK-CANARY-7F3A''']
