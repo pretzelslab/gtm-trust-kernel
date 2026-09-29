@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeSignals, riskScore } from '../src/signals/deterministic.js';
-import { makeMockAdapter, makeEvidenceSet, NOW } from '@gtm-trust-kernel/adapters/test/fixtures.js';
+import { makeMockAdapter, makeEvidenceSet, NOW } from '@gtm-trust-kernel/adapters/fixtures';
 import { buildEnvelope, canaryTripped, CANARY_TOKEN, TrustTier } from '@gtm-trust-kernel/adapters/model/trust.js';
 
 const caps = makeMockAdapter().capabilities();

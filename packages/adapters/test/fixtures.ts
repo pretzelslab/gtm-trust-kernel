@@ -43,8 +43,8 @@ export function makeOrgData(): MockOrgData {
   const accounts: Account[] = [
     {
       ref: ref('account', 'acc-1'),
-      name: 'Northwind Logistics',
-      domain: 'northwind.example',
+      name: 'Quillfeather Logistics',
+      domain: 'quillfeather.example',
       createdAt: iso(400),
       modifiedAt: iso(30),
       ownerId: 'user:rep-1',
@@ -55,7 +55,7 @@ export function makeOrgData(): MockOrgData {
     {
       ref: ref('opportunity', 'opp-1'),
       accountRef: ref('account', 'acc-1'),
-      name: 'Northwind — Platform expansion',
+      name: 'Quillfeather — Platform expansion',
       amount: 120_000,
       currency: 'USD',
       stage: 'negotiation',
@@ -78,7 +78,7 @@ export function makeOrgData(): MockOrgData {
     {
       ref: ref('opportunity', 'opp-2'),
       accountRef: ref('account', 'acc-1'),
-      name: 'Northwind — Pilot',
+      name: 'Quillfeather — Pilot',
       amount: 20_000,
       stage: 'discovery',
       stageConfidence: 'unmapped',
@@ -197,7 +197,7 @@ export function makeSecondSourceOrgData(): MockSecondSourceOrgData {
   const contacts: SecondSourceContact[] = [
     {
       ref: secondSourceRef('contact', 'con-1'),
-      email: 'dana@northwind.example',
+      email: 'dana@quillfeather.example',
       modifiedAt: iso(20),
     },
   ];
@@ -205,7 +205,7 @@ export function makeSecondSourceOrgData(): MockSecondSourceOrgData {
   const accounts: SecondSourceAccount[] = [
     {
       ref: secondSourceRef('account', 'acc-1'),
-      domain: 'northwind.example',
+      domain: 'quillfeather.example',
       modifiedAt: iso(15),
     },
   ];

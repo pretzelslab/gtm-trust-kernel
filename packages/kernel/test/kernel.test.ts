@@ -8,7 +8,7 @@ import {
   type Actor,
   type ProposedChange,
 } from '../src/proposals/kernel.js';
-import { makeOrgData } from '@gtm-trust-kernel/adapters/test/fixtures.js';
+import { makeOrgData } from '@gtm-trust-kernel/adapters/fixtures';
 import { CANARY_TOKEN } from '@gtm-trust-kernel/adapters/model/trust.js';
 
 const rep: Actor = { id: 'user:rep-1', role: 'rep' };

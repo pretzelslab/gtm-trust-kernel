@@ -19,6 +19,11 @@
     "access": "public"
   },
   "exports": {
+    ".": {
+      "source": "./src/types.ts",
+      "types": "./dist/src/types.d.ts",
+      "default": "./dist/src/types.js"
+    },
     "./types.js": {
       "source": "./src/types.ts",
       "types": "./dist/src/types.d.ts",
@@ -44,17 +49,17 @@
       "types": "./dist/src/model/trust.d.ts",
       "default": "./dist/src/model/trust.js"
     },
-    "./test/fixtures.js": {
+    "./fixtures": {
       "source": "./test/fixtures.ts",
       "types": "./dist/test/fixtures.d.ts",
       "default": "./dist/test/fixtures.js"
     },
-    "./test/contract/adapter.contract.js": {
+    "./contract/adapter": {
       "source": "./test/contract/adapter.contract.ts",
       "types": "./dist/test/contract/adapter.contract.d.ts",
       "default": "./dist/test/contract/adapter.contract.js"
     },
-    "./test/contract/secondSource.contract.js": {
+    "./contract/secondSource": {
       "source": "./test/contract/secondSource.contract.ts",
       "types": "./dist/test/contract/secondSource.contract.d.ts",
       "default": "./dist/test/contract/secondSource.contract.js"
