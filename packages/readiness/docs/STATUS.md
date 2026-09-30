@@ -14,6 +14,48 @@ repeated here.
 
 ---
 
+## Status as of 2026-09-30 (Phase 3a: Salesforce adapter fixes)
+
+From the product gap audit (kept outside the repo). All on master, not
+pushed at the time of writing; `npm run ci` green after each commit.
+
+| Commit | What |
+|---|---|
+| `7111b08` | "Not measured" verdict (tool can't see the data) vs blocked (data missing); bool gates below target are blocked |
+| `1d24255` | D5 with no second source connected is blocked (missing data), not "not measured"; `MetricRow.notMeasured` |
+| `93b63e7` | Plain-English blocked reason ignores not-measured gates |
+| `6a1ceed` | In-memory Salesforce API fake and adapter unit tests |
+| `d0de47b` | Contact roles loaded in the Salesforce listing (contact_linkage_rate was always 0) |
+| `c004bea` | `SF_ACTIVITY_CAPTURE` (declared, not detected); adapter setting hints in the plain report |
+| `8e1ff75` | Enhanced Notes (ContentNote) and Events read; note length floor past the full-text budget |
+| `b49a566` | Sample population listed newest created first and counted; report says when older open deals were excluded |
+| `6635956` | Custom stage map file (`SF_STAGE_MAP_PATH`); unmapped history rows skipped by win_rate_dispersion |
+
+Decisions (2026-09-30): definitions in `docs/metric-definitions.md`
+("Blocked vs Not measured", "Sample population and order", D1, D3, D5,
+D6, D7 notes). The adapters package's public interface changed
+(`listOpportunitiesForSample`, `countOpportunitiesForSample`,
+`settingHints`, `Note.bodyTruncated`, `StageHistoryEntry.toStageConfidence`),
+so its next release is 0.2.0.
+
+**To verify on the Developer Edition smoke run (unverified today):**
+the `ContentDocumentLink ... ContentDocument.FileType = 'SNOTE'` filter;
+`ContentNote.TextPreview`'s length cap (assumed 255,
+`ENHANCED_NOTE_PREVIEW_CAP`); the `sobjects/ContentNote/{id}/Content`
+endpoint and its HTML; `SELECT COUNT()` responses; the Event
+`ActivityDateTime` ordering; that activity capture can't be detected (not
+chased if the org has no activity capture).
+
+**Open, for the user to decide:** the sampler stops as soon as every
+stratum is full (`sample.ts`, `all_strata_full`), so with newest-first
+order the sample is drawn from the newest deals even on small orgs, and
+the exclusion notice will usually show on a real org.
+
+**Running the report from source:** `npm run report` runs under tsx, which
+resolves `@gtm-trust-kernel/adapters` to its built `dist/`, so build the
+adapters package first (`npm run build -w @gtm-trust-kernel/adapters`) or
+the report runs against stale adapter code. Tests resolve source directly.
+
 ## Status as of 2026-09-26
 
 **Zero deferred metrics.** All seven dimensions (D1–D7) are fully implemented

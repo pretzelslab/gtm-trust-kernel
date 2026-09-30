@@ -2,7 +2,7 @@
 
 ## What is this
 
-A CRM adapter is a small piece of code that lets the trust kernel read from, and safely write to, one particular CRM. This package defines the shared rules every adapter must follow, plus a fake in-memory CRM for testing. Because every adapter passes the same tests, the health check works the same way whichever CRM sits underneath. Salesforce is supported today, and other CRMs can be added via adapters.
+A CRM adapter is a small piece of code that lets the trust kernel read from, and safely write to, one particular CRM. This package defines the shared rules every adapter must follow, plus a fake in-memory CRM for testing. Every adapter is meant to pass the same tests, so the health check works the same way whichever CRM sits underneath. A read-only Salesforce adapter is included (experimental: unit-tested against a fake Salesforce API, not yet validated on a live org), and other CRMs can be added via adapters.
 
 ## Who it's for
 
@@ -33,7 +33,7 @@ The bare `@gtm-trust-kernel/adapters` import resolves to `types.js` only (types 
 |---|---|
 | `@gtm-trust-kernel/adapters` (and `/types.js`) | `CrmAdapter`, `SecondSourceAdapter` interfaces and their supporting types (`AdapterCapabilities`, `FieldWrite`, `SecondSourceCapabilities`, etc.) |
 | `@gtm-trust-kernel/adapters/mock.js` | `MockAdapter`, `MockSecondSourceAdapter` — in-memory reference implementations, useful for testing against the contract without a real CRM |
-| `@gtm-trust-kernel/adapters/salesforce.js` | `SalesforceAdapter`, `loadSalesforceConfigFromEnv` |
+| `@gtm-trust-kernel/adapters/salesforce.js` | `SalesforceAdapter`, `loadSalesforceConfigFromEnv`, `loadStageMapFile` (reads the `SF_STAGE_MAP_PATH` file) |
 | `@gtm-trust-kernel/adapters/model/canonical.js` | The canonical CRM record model (`Account`, `Contact`, `Opportunity`, `Activity`, `Note`, stage history types, `CANONICAL_STAGE_ORDER`) |
 | `@gtm-trust-kernel/adapters/model/trust.js` | `TrustTier`, `tag()` — the trust-envelope wrapper every free-text field is carried in |
 | `@gtm-trust-kernel/adapters/fixtures` | Shared mock-data builders (`makeMockAdapter`, `makeMockSecondSourceAdapter`, `makeOrgData`, `makeSecondSourceOrgData`, `makeEvidenceSet`) |

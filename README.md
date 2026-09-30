@@ -59,8 +59,9 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 
 - The report covers seven areas: coverage, freshness, consistency, history, cross-system matching, text quality and outcome labels.
 - Each metric is rated **viable**, **degraded** or **blocked** against a threshold. For some metrics lower is better (for example, days since a deal was last touched), and the threshold shows `≤`.
-- Each AI use case gets a verdict based on the metrics it needs.
+- Each AI use case gets a verdict based on the metrics it needs: **viable**, **degraded**, **not measured** or **blocked**. **Blocked** means the data it needs is missing or poor. **Not measured** means the scan can't see that data (for example, your CRM connection doesn't report how activity is captured), so it says nothing either way; where a setting would fix that, the plain-English report says which. The report lists every metric holding a use case back.
 - A **FLOOR** badge means the sample hit a limit, so the true value is at least what is shown.
+- The scan reads the newest deals first. If it stops before reaching every open deal, the report says how many older open deals were left out.
 - `latest-plain.html` is a short plain-English summary of the verdicts.
 
 ## Privacy
@@ -103,7 +104,10 @@ npm run ci
 - The injection guard is a short list of phrases plus a canary token. There is no injection test corpus or red-team report yet.
 - The audit ledger is in memory only and is not anchored outside itself, so rewriting the whole chain would go undetected.
 - Writes are per field today, not atomic per record. If a later field fails, the earlier ones are rolled back; if that rollback can't complete, the proposal can't be retried and the unrestored field is logged.
-- The Salesforce adapter is read-only and experimental, and it is not yet validated against the contract suite.
+- The Salesforce adapter is read-only and experimental. It is unit-tested against an in-memory copy of the Salesforce API, but not yet validated against the contract suite on a live org.
+- On Salesforce, activity capture is something you declare (`SF_ACTIVITY_CAPTURE=auto`), not something the scan detects. Until you set it, activity-based use cases read **not measured**.
+- Activities logged only against a deal's contacts (not the deal itself) aren't counted yet, so activity coverage can read lower than it is.
+- Enhanced Note text is read from Salesforce's preview; long notes are fetched in full up to 200 per run (`SF_NOTE_FULLTEXT_FETCH_LIMIT`). Past that, note length is shown as a floor.
 
 ## Status and roadmap
 
@@ -114,6 +118,8 @@ npm run ci
 | done | Readiness Scan: seven dimensions, HTML report, optional AI summary |
 | done | npm packages 0.1.0 |
 | done | Salesforce adapter (read-only, experimental, not yet validated against the contract suite) |
+| done | Salesforce: contact roles, Enhanced Notes and meetings, custom stage map, declared activity capture, newest-first sampling of eligible deals |
+| done | "Not measured" verdict for data the scan can't see |
 | next | `--out` flag to choose the report folder (0.1.1) |
 | next | Approver role check for I2 |
 | next | Per-record atomic writes via a multi-field adapter call (0.2) |

@@ -21,7 +21,8 @@ packages/
     src/model/trust.ts             Trust tiers, the typed untrusted envelope, canary.
     src/types.ts                   CrmAdapter interface and capability matrix.
     src/mock.ts                    In-memory adapter with faithful concurrency semantics.
-    src/salesforce.ts              Salesforce adapter (read-only, experimental).
+    src/salesforce.ts              Salesforce adapter (read-only, experimental; unit-tested
+                                   against test/support/fakeSalesforce.ts).
     test/contract/                 The suite every adapter is meant to pass.
 
   kernel/                          Not published
@@ -70,6 +71,8 @@ The injection phrase check is a crude backstop, not a defence on its own. The re
 - declare a complete capability matrix
 - return empty, not an exception, for undeclared history capabilities
 - paginate deterministically and without repeats
+- list the sample population (open deals, plus deals closed in the window) newest created first, and count it (`listOpportunitiesForSample`, `countOpportunitiesForSample`)
+- return the same contact links from a listing as from `getOpportunity`
 - report API calls consumed, for quota telemetry
 - supply a usable incremental-sync watermark
 - qualify every record ref with vendor and org, so ids cannot collide
@@ -79,4 +82,4 @@ The injection phrase check is a crude backstop, not a defence on its own. The re
 - refuse a write whose concurrency token drifted
 - report `not_found` rather than throwing
 
-Today only the mock adapter runs this suite. The Salesforce adapter is read-only and has not been validated against it yet. HubSpot is the planned second live adapter, chosen because its object model genuinely differs.
+Today only the mock adapter runs this suite. The Salesforce adapter is read-only; `test/salesforce.unit.test.ts` checks its queries, mapping and error handling against an in-memory fake of the Salesforce API, but it has not been run through this suite against a live org yet. HubSpot is the planned second live adapter, chosen because its object model genuinely differs.
