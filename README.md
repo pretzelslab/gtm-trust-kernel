@@ -48,6 +48,8 @@ npx gtm-trust-kernel scan --demo
 
 This runs on a built-in sample CRM. No login, no account, and the scan makes no network calls.
 
+To run the report against your own Salesforce org instead, see [Salesforce setup](packages/readiness/docs/salesforce-setup.md).
+
 The report is written to `./out/` in your current directory. Open `out/latest.html` in your browser.
 
 | Option | What it does |

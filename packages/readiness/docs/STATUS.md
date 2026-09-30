@@ -893,7 +893,8 @@ run from adapter source with a CI guard; two-tier sampling with
 **Next, in order:**
 1. Smoke run on the Developer Edition org (the user runs it:
    `npm run report -- --live --json` from `packages/readiness`; no build
-   step needed any more).
+   step needed any more). Setup, seeding checklist and expected output:
+   [salesforce-setup.md](salesforce-setup.md).
 2. Phase 3b: batch detailed-check queries by id (logged above), Salesforce
    contract tests, `--fail-on` (opt-in, default off), CI.
 3. Phase 4: calibrate `closed_deal_count_12m` (provisional 40/20) and the
