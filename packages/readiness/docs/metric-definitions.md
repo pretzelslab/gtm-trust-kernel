@@ -289,6 +289,13 @@ gate"), not `not_applicable`. Every capability gated on a D5 metric is
 reported Blocked with remediation "connect a second source to enable this
 capability" when that metric is `not_instrumented`.*
 
+*Blocked vs Not measured here (decided 2026-09-30): with **no second
+source connected**, the cross-system data is missing, so each gated
+capability is **Blocked** (the metric row still shows `not_instrumented`).
+**Not measured** applies only when a second source **is** connected but
+can't supply the data type a metric needs (e.g. `hasActivities: false`).
+`buildReport.ts` records this per row as `MetricRow.notMeasured`.*
+
 ### contact_identity_resolution_rate
 **Definition:** share of sampled CRM contacts that match a contact in the
 second source by normalized email address.
@@ -622,10 +629,12 @@ trusts `closedOpportunities`' existing trailing-12-month window from
   - **Blocked: the data is missing.** The CRM doesn't hold what the metric
     needs (e.g. no sampled notes, no open opportunities). Status
     `not_applicable`. This is a verdict about the org's data.
-  - **Not measured: the tool can't see it.** The adapter lacks the
-    capability (`not_instrumented`, e.g. `activitySync` off or no second
-    source connected), or the metric is `deferred`/`not_implemented`. This
-    says nothing about the org's data either way.
+  - **Not measured: the tool can't see it.** The adapter, or a connected
+    second source, lacks the capability (`not_instrumented`, e.g.
+    `activitySync` off), or the metric is `deferred`/`not_implemented`.
+    This says nothing about the org's data either way. Exception: a D5
+    metric with **no** second source connected is missing data, so
+    Blocked (see D5).
 
   A capability takes its worst gate in the order **blocked > not measured >
   degraded > viable**. The report still lists every non-viable gate under

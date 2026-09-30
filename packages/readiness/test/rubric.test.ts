@@ -119,6 +119,19 @@ describe('capability grading', () => {
     expect(result.blockers.length).toBe(spec.gates.length);
   });
 
+  it('fail-safe: a gate with no reading and no stated reason grades blocked', () => {
+    // Independent of the empty-map test above: every other gate is viable,
+    // exactly one reading is absent, and no unmeasured set is passed at all.
+    const spec = CAPABILITIES.find((c) => c.id === 'grounded_account_brief')!;
+    const readings = viableReadingsFor(spec.gates);
+    const absent = spec.gates[1]!;
+    readings.delete(absent);
+    const result = gradeCapability(spec, readings);
+    expect(result.verdict).toBe('blocked');
+    expect(result.blockers.map((b) => [b.metric, b.verdict])).toEqual([[absent, 'blocked']]);
+    expect(gradeAll(readings).find((r) => r.capability === spec.id)!.verdict).toBe('blocked');
+  });
+
   it('grades a gate the tool cannot see as not_measured, never as a pass', () => {
     const spec = CAPABILITIES.find((c) => c.id === 'close_date_realism')!;
     const readings = viableReadingsFor(spec.gates);

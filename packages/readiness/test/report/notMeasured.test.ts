@@ -69,8 +69,43 @@ describe('not measured verdict', () => {
         viableAt: null,
         degradedAt: null,
         gatesCapabilities: [],
+        notMeasured: false,
       }),
     ).toBe('blocked');
+  });
+
+  it('grades D5 gates Blocked when no second source is connected (missing data, not unseen)', async () => {
+    const fixture = MOCK_ORG_FIXTURES.healthy;
+    const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
+    const data = await buildReportData(adapter, undefined, {
+      orgLabel: fixture.label,
+      orgDescription: fixture.description,
+      asOf: fixture.asOf,
+    });
+    const temporal = data.metrics.find((m) => m.metric === 'temporal_anomaly_rate')!;
+    expect(temporal.status).toBe('not_instrumented');
+    expect(temporal.notMeasured).toBe(false);
+    expect(gateVerdictOf(temporal)).toBe('blocked');
+    expect(data.capabilities.find((c) => c.id === 'autonomous_writeback')!.verdict).toBe('blocked');
+  });
+
+  it('grades D5 gates Not measured when a connected second source cannot supply the data', async () => {
+    const fixture = MOCK_ORG_FIXTURES.healthy;
+    const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
+    const secondSource = fixture.secondSource!;
+    const secondSourceAdapter = new MockSecondSourceAdapter(secondSource.data, {
+      ...secondSource.capabilities,
+      hasActivities: false,
+    });
+    const data = await buildReportData(adapter, secondSourceAdapter, {
+      orgLabel: fixture.label,
+      orgDescription: fixture.description,
+      asOf: fixture.asOf,
+    });
+    const temporal = data.metrics.find((m) => m.metric === 'temporal_anomaly_rate')!;
+    expect(temporal.status).toBe('not_instrumented');
+    expect(temporal.notMeasured).toBe(true);
+    expect(gateVerdictOf(temporal)).toBe('not_measured');
   });
 
   it('shows a Not measured pill and lists degraded gates under a not-measured capability', async () => {

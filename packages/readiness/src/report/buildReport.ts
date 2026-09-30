@@ -180,6 +180,14 @@ export interface MetricRow {
   readonly viableAt: number | null;
   readonly degradedAt: number | null;
   readonly gatesCapabilities: readonly CapabilityRef[];
+  /**
+   * True when this scan could not see the data the metric needs (see
+   * docs/metric-definitions.md, "Blocked vs Not measured"): the adapter or a
+   * connected second source lacks the capability, or the metric is deferred
+   * or not implemented. False for everything else, including a D5 metric
+   * with no second source connected, which is missing data.
+   */
+  readonly notMeasured: boolean;
 }
 
 export interface ReportOrgSummary {
@@ -274,7 +282,11 @@ export async function buildReportData(
     if (fn) {
       const result = fn(sample, metricConfig);
       const note = result.note ?? null;
-      if (result.status === 'not_instrumented') unmeasured.add(metric);
+      // D5 with no second source connected is missing data (Blocked), not
+      // an unseen capability: docs/metric-definitions.md, section D5.
+      const notMeasured =
+        result.status === 'not_instrumented' && !(dimension === 'D5' && secondSourceAdapter === undefined);
+      if (notMeasured) unmeasured.add(metric);
 
       let tier: Verdict | null = null;
       let viableAt: number | null = null;
@@ -302,6 +314,7 @@ export async function buildReportData(
         viableAt,
         degradedAt,
         gatesCapabilities,
+        notMeasured,
       });
       continue;
     }
@@ -326,6 +339,7 @@ export async function buildReportData(
       viableAt: null,
       degradedAt: null,
       gatesCapabilities,
+      notMeasured: true,
     });
   }
 
@@ -377,14 +391,13 @@ export async function buildReportData(
 }
 
 /**
- * The verdict a metric row contributes as a gate, derived the same way
- * gradeCapability does: its graded tier when it has a value; 'not_measured'
- * when the tool couldn't see the data (not_instrumented, deferred, not
- * implemented); 'blocked' when the data it needs is missing
- * (not_applicable). Used by the renderers to list a capability's gates.
+ * The verdict a metric row contributes as a gate, the same one
+ * gradeCapability gives it: its graded tier when it has a value;
+ * 'not_measured' when the scan couldn't see the data (row.notMeasured);
+ * 'blocked' otherwise, because the data it needs is missing. Used by the
+ * renderers to list a capability's gates.
  */
 export function gateVerdictOf(row: MetricRow): CapabilityVerdict {
   if (row.status === 'ok' && row.tier) return row.tier;
-  if (row.status === 'not_applicable' || row.status === 'ok') return 'blocked';
-  return 'not_measured';
+  return row.notMeasured ? 'not_measured' : 'blocked';
 }
