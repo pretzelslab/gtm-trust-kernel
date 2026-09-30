@@ -6,20 +6,23 @@ from Salesforce; the adapter has no write path (`writeGranularity: 'none'`).
 
 Anything marked **unverified** is written from Salesforce's documentation
 or from the adapter's code, and has not yet been checked against a live
-org. The Developer Edition smoke run is where it gets checked (see
-`STATUS.md`, "Live-org questions").
+org. Items checked on the 2026-09-30 Developer Edition smoke run are
+marked **confirmed** or **partly confirmed** (see `STATUS.md`, "Developer
+Edition smoke run").
 
 ## 1. Get a Developer Edition org
 
 1. Sign up at <https://developer.salesforce.com/signup>. It is free.
-   **Unverified:** the signup flow, and whether a new org comes with any
-   sample opportunities, change over time. The report reads whatever is
-   there.
+   **Confirmed 2026-09-30:** a new org comes with sample data: 31
+   opportunities (13 open across the default stages, 18 Closed Won), all
+   created at signup, with their `OpportunityHistory` rows. The report
+   reads it along with anything you add. The signup flow itself changes
+   over time.
 2. Note your org's My Domain URL (Setup, then My Domain), for example
    `https://yourname-dev-ed.develop.my.salesforce.com`. This is
    `SF_INSTANCE_URL`. The token request goes to this URL
    (`{SF_INSTANCE_URL}/services/oauth2/token`), so use the My Domain URL,
-   not `login.salesforce.com`. **Unverified** on a live org.
+   not `login.salesforce.com`. **Confirmed 2026-09-30.**
 
 A fresh Developer Edition org is single-currency, and the adapter doesn't
 query `CurrencyIsoCode` for that reason.
@@ -50,12 +53,12 @@ The report queries these objects, read-only:
 
 | Object | Why |
 |---|---|
-| `Opportunity` | The population count (`SELECT COUNT()`) and the scan |
+| `Opportunity` | The population count (`SELECT COUNT()`, **confirmed** on a live org) and the scan |
 | `OpportunityContactRole` | Contact roles on each scanned deal (`contact_linkage_rate`) |
 | `Account` | Account names and domains for sampled deals (`duplicate_account_rate`, `account_resolution_rate`) |
 | `Note` | Legacy notes on sampled deals |
-| `ContentDocumentLink`, `ContentNote` | Enhanced Notes linked to sampled deals, including the full text of long notes |
-| `Task`, `Event` | Activities on sampled deals (read even when activity capture is off) |
+| `ContentDocumentLink`, `ContentNote` | Enhanced Notes linked to sampled deals, including the full text of long notes. **Partly confirmed:** a live org accepts the `FileType = 'SNOTE'` link filter, but no Enhanced Notes existed to check what it returns |
+| `Task`, `Event` | Activities on sampled deals (read even when activity capture is off). **Partly confirmed:** a live org accepts the Event query ordered by `ActivityDateTime`, but no Events existed to check the order |
 | `OpportunityHistory` | Stage history (`stage_history_months`, `win_rate_dispersion`) |
 
 `Contact` is only read when a second source is connected, which the
@@ -122,8 +125,12 @@ Salesforce doesn't say whether Tasks and Events are written automatically
 - `auto`: your org syncs email and calendar activity. Activity metrics
   (`activity_capture_rate`, `stage_activity_contradiction_rate`) are scored.
 - `manual`, or unset: a deal with no activity may just mean nobody logged
-  it, so those metrics show as **Not measured**, and the plain-English
-  report suggests `SF_ACTIVITY_CAPTURE=auto` if that fits.
+  it, so those metrics show as **Not measured**. The plain-English report
+  suggests `SF_ACTIVITY_CAPTURE=auto` only for a use case it lists under
+  "Can't tell yet". When another gate blocks the use case, it is listed
+  under "Not ready yet" with that gate's reason and no suggestion. On a
+  new org the short stage history does this for pipeline risk alerts
+  (section 7).
 
 For a hand-seeded Developer Edition org, leave it unset (activity is
 manual). Set `auto` to see the scored path.
@@ -194,7 +201,8 @@ the report will still call the sample small (below).
       one opportunity to it. Run once without a stage map (expect the stage-map
       notice), then again with it mapped (expect no notice).
 - [ ] Change one opportunity's stage at least once, so `OpportunityHistory`
-      has rows.
+      has rows. They are dated when you make the change: history can't be
+      backdated (section 7).
 
 ## 6. Run it
 
@@ -224,12 +232,15 @@ What a run does:
 - The report states both sizes and the seed. If eligible deals went
   unread (the 5,000 budget, or `--quick`), it says so.
 
-Estimated API calls at 5,000 eligible deals (**unverified** on a live
-org): about 52 for the scan, and about 565 for the detailed checks at 20
-per stage, plus up to 200 note full-text fetches. A Developer Edition org's
-daily API limit is assumed at 15,000 (**unverified**; the adapter doesn't
-read the org's real limits). On a five-deal seeded org, expect a few dozen
-calls.
+Estimated API calls at 5,000 eligible deals: about 52 for the scan, and
+about 565 for the detailed checks at 20 per stage, plus up to 200 note
+full-text fetches and 4 fixed calls. The plan printed before each run
+states this worst case for the whole run. **Measured 2026-09-30:** 118
+calls on a 31-deal org (4 for the scan, 114 for the detailed checks, about
+4 per sampled deal), in line with the estimate; on a five-deal seeded org,
+expect a few dozen. A Developer Edition org's daily API limit is 15,000
+(**confirmed** from `/limits`; the adapter doesn't read it). `/limits`'s
+remaining count lags by minutes, so it can't measure a single run.
 
 ## 7. What to expect
 
@@ -271,3 +282,14 @@ what you seeded, not that the org is ready:
   it is mapped.
 - With `SF_ACTIVITY_CAPTURE=auto`, activity metrics get values from your
   Task and Event.
+
+### Stage history on a new org
+
+`OpportunityHistory` starts when the org is created, and its dates can't
+be backdated. So `stage_history_months` is 0 on a new org and stays below
+its 6-month degraded threshold for 6 months, and pipeline risk alerts
+stay **Blocked** for that long, whatever you seed. That is expected. The
+2026-09-30 smoke run's plain report showed exactly this: "Right now, not
+enough history has been recorded." Checking these gates on live data
+needs an older org; until then (Phase 4) they are covered by
+fixture-based tests.

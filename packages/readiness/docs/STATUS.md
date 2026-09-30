@@ -14,6 +14,50 @@ repeated here.
 
 ---
 
+## Status as of 2026-09-30, Developer Edition smoke run
+
+Run against the org in `.env`, which held only the sample data Salesforce
+creates at signup (31 opportunities, 13 open and 18 Closed Won, all
+created at the same moment on 2026-09-18, with 62 `OpportunityHistory`
+rows). The hand seeding from `salesforce-setup.md` section 5 was not in
+this org, so the child-record paths ran against empty objects. Two runs,
+`SF_ACTIVITY_CAPTURE` unset then `auto`; both exit 0, no errors.
+
+| Commit | What |
+|---|---|
+| `8a861cb` | The printed plan counts every call (`AdapterCapabilities.apiCallEstimate`); it said 26 calls, 0.2%, for a run that made 118 |
+| `7ed9a9f` | Plain report: a blocked use case names the dimensions whose gates are blocked, not a fixed cause |
+| `53d142a` | `CrmAdapter.probe()`, ContentNote describe once per run; unreadable Enhanced Notes make the six note metrics not measured with a hint, never a failed run |
+
+**Live-org questions, answered:**
+
+| Question | Result | Evidence |
+|---|---|---|
+| Token URL on My Domain | Confirmed | Client credentials token request to `{My Domain}/services/oauth2/token` succeeds |
+| `COUNT()` responses | Confirmed | 13 open + 18 closed in window = 31 eligible; an independent `SELECT COUNT() FROM Opportunity` gives 31; `closed_deal_count_12m` 18 |
+| Daily API limit 15,000 | Confirmed | `/limits` `DailyApiRequests.Max` 15000 |
+| Sample data at signup | Confirmed | 31 opportunities as above |
+| SNOTE link filter | Partly | The query is accepted (HTTP 200); no Enhanced Notes existed, so the filtering itself is untested |
+| Event `ActivityDateTime` ordering | Partly | 31 Event queries accepted; no Events existed, so the order is untested |
+| 255 preview cap, full-text endpoint | Untested | `ContentNote` not queryable for the Run As user (describe 404 `NOT_FOUND`, SOQL `INVALID_TYPE`), still after Notes were enabled and with a fresh token; profile access to Notes is the next thing to check |
+| Stage-map notice | Untested | No custom stage in the org; the notice correctly didn't show (31 mapped, 0 unmapped) |
+| API calls per run | Measured | 118, counted per request: 4 scan (2 counts, 1 page, 1 contact-role batch) and 114 detailed checks (31 each of legacy Note, Task, Event; 19 `OpportunityHistory`; 1 each of account, `ContentDocumentLink`, contact role). About 4 per sampled deal, in line with the estimate. `/limits` `Remaining` lags by minutes and can't measure a single run |
+
+No record names, websites or Salesforce stage labels in any output. The
+instance hostname appears once per report, in `orgDescription`, as
+documented (narrative-design.md decision 11 keeps it out of the prompt).
+
+**Stage history on a new org.** `OpportunityHistory` starts at signup and
+can't be backdated, so `stage_history_months` is 0 on a new org and stays
+below its 6-month degraded threshold for 6 months, keeping pipeline risk
+alerts Blocked (it gates only that capability; `win_rate_dispersion` also
+needs history). Expected, not a defect. Phase 4 needs fixture-based
+history tests or an older org to exercise these gates on live data.
+
+**Next:** seed the org with `scripts/seed-dev-org.mjs` (to be run only on
+the user's yes), fix ContentNote access, then re-run the smoke test for
+the untested rows above.
+
 ## Status as of 2026-09-30, later (pending decisions resolved)
 
 All pushed; `npm run ci` green after each commit.
@@ -892,7 +936,9 @@ run from adapter source with a CI guard; two-tier sampling with
 - real API calls per run against the estimate above (about 52 + 565)
 
 **Next, in order:**
-1. Smoke run on the Developer Edition org (the user runs it:
+1. Done 2026-09-30 on the unseeded org, see "Developer Edition smoke
+   run" at the top; the seeded re-run is still to do. Was: smoke run on
+   the Developer Edition org (the user runs it:
    `npm run report -- --live --json` from `packages/readiness`; no build
    step needed any more). Setup, seeding checklist and expected output:
    [salesforce-setup.md](salesforce-setup.md).
