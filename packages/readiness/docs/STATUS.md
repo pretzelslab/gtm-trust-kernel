@@ -962,3 +962,58 @@ run from adapter source with a CI guard; two-tier sampling with
 3. Phase 4: calibrate `closed_deal_count_12m` (provisional 40/20) and the
    other thresholds against real orgs.
 4. Adapters 0.2.0 release (public interface changed; the user publishes).
+
+## Handoff 2026-09-30
+
+**Last green commit:** `05d346f` (pushed; GitHub CI green, run
+36784677029). The seed script is `7619ac2`; the smoke-run fixes are
+`8a861cb`, `7ed9a9f` and `53d142a`.
+
+**Seeded records** (Developer Edition org, `scripts/seed-dev-org.mjs
+--apply --allow-no-enhanced`; `--cleanup --apply` removes them):
+
+| Object | Id | Record |
+|---|---|---|
+| Account | `<account-id-1>` | SEED-Northwind Seed Co |
+| Contact | `<contact-id-1>` | SEED-Contact (Dana) |
+| Opportunity | `<deal-id-1>` | SEED-Prospecting deal |
+| Opportunity | `<pagination-deal-id>` | SEED-Qualification deal (Prospecting, then Qualification) |
+| Opportunity | `<deal-id-2>` | SEED-Proposal deal |
+| Opportunity | `<deal-id-3>` | SEED-Closed Lost deal |
+| OpportunityContactRole | `<contact-role-id-1>` | SEED-Contact on SEED-Prospecting deal |
+| Note | `<note-id-1>` | SEED-Legacy note |
+| Task | `<task-id-2>` | SEED-Call about pricing |
+| Event | `<event-id-2>` | SEED-Discovery meeting |
+
+Not created: SEED-Custom stage deal (`SEED_CUSTOM_STAGE` unset) and the
+Enhanced Note and its link (`ContentNote` not queryable).
+
+**Confirmed live:** the My Domain token URL; `COUNT()` responses; the
+15,000 daily limit; sample data at signup; contact roles; legacy Notes
+inserted through the API; Tasks; Events, timed by `ActivityDateTime`;
+stage history rows from a stage change (prospecting then discovery);
+eligible and scanned counts (35 = 16 open + 19 closed); the D2 blocked
+reason ("not enough history has been recorded"); no record text in any
+output; 132 API calls per run, in line with about 4 per sampled deal.
+
+**Still untested:** the TextPreview 255 cap; the `ContentNote` Content
+endpoint; the SNOTE filter with data; the stage-map notice; Event
+ordering across several Events.
+
+**Open design question:** `untrusted_text_ratio` treats every Task and
+Event as externally sourced, because stock Salesforce has no reliable
+inbound/outbound signal (`inferTier` with `activityDirection: 'unknown'`,
+`salesforce.ts`). On the seeded org a hand-logged call and meeting made
+the ratio 2 of 3. Decide whether logged calls and meetings (for example
+by `TaskSubtype`, or Events with no email source) can count as
+user-authored, or whether the conservative rule stays.
+
+**Next:**
+1. The user: tick and save Setup, Notes Settings, Enable Notes; add a
+   custom Stage value and set `SEED_CUSTOM_STAGE`.
+2. Extend the seed script with an earlier Event and a call Task (for
+   multi-Event ordering and the Task kind), then run
+   `scripts/seed-dev-org.mjs --top-up` (plan) and, on the user's yes,
+   `--top-up --apply`.
+3. Smoke re-run, both `SF_ACTIVITY_CAPTURE` settings, counting API calls
+   with the scratchpad fetch counter, for the untested items above.
