@@ -566,6 +566,18 @@ export class SalesforceAdapter implements CrmAdapter {
       // not measured rather than scored.
       activitySync: this.config.activityCapture === 'auto',
       ...(this.config.activityCapture === 'auto' ? {} : { settingHints: { activitySync: ACTIVITY_CAPTURE_HINT } }),
+      // Per run: 2 population counts and the org-wide stage-history read.
+      // Per listing page: its contact-role batch. Per sampled deal: legacy
+      // Notes, Tasks, Events and OpportunityHistory (one query each, see
+      // getNotesByOpportunity). Per batch of deals: ContentDocumentLink and
+      // ContentNote. Fetch cap: Enhanced Note full-text fetches.
+      apiCallEstimate: {
+        perRun: 3,
+        perScanPage: 1,
+        perSampledOpportunity: 4,
+        perChildRecordBatch: 2,
+        perRunFetchCap: this.config.noteFullTextFetchLimit ?? DEFAULT_NOTE_FULLTEXT_FETCH_LIMIT,
+      },
       incrementalSync: true,
       // No Bulk API 2.0 here — REST/SOQL only.
       bulkRead: false,

@@ -28,10 +28,11 @@
  * strict reservoir uniformity over the whole population (which would require
  * scanning to the budget or to exhaustion) for cost: a stratum that fills
  * early is a uniform sample of the records seen up to that point, not of the
- * full population. planSample() computes a worst-case API call count from
- * maxRecordsToScan and the adapter's declared bulkRead capability before any
- * adapter call is made, and runSample() prints and requires confirmation of
- * that plan before scanning starts.
+ * full population. planSample() computes a worst-case API call count for the
+ * whole run from maxRecordsToScan, the adapter's declared bulkRead
+ * capability and its apiCallEstimate before any adapter call is made, and
+ * runSample() prints and requires confirmation of that plan before scanning
+ * starts.
  */
 
 import type { AdapterCapabilities, CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
@@ -139,6 +140,20 @@ export interface SamplePlan {
    * estimate of the typical case, same "worst case" framing as plannedApiCalls.
    */
   readonly plannedAccountApiCalls: number;
+  /** plannedApiCalls * apiCallEstimate.perScanPage: reads the adapter makes alongside each listing page. 0 with no estimate. */
+  readonly plannedScanExtraApiCalls: number;
+  /**
+   * Detailed checks over strata.length * perStratumSampleSize sampled deals:
+   * apiCallEstimate.perSampledOpportunity per deal, plus perChildRecordBatch
+   * per childRecordBatchLimit deals. 0 with no estimate.
+   */
+  readonly plannedDetailApiCalls: number;
+  /** apiCallEstimate.perRun + perRunFetchCap. 0 with no estimate. */
+  readonly plannedFixedApiCalls: number;
+  /** Every group above; the quota line is based on this. */
+  readonly plannedTotalApiCalls: number;
+  /** The adapter's declared estimate, or null (then detailed and fixed calls aren't counted). */
+  readonly apiCallEstimate: AdapterCapabilities['apiCallEstimate'] | null;
   readonly rateLimit: AdapterCapabilities['rateLimit'];
 }
 
@@ -149,6 +164,13 @@ export function planSample(adapter: CrmAdapter, config: SampleConfig): SamplePla
   const plannedApiCalls = Math.ceil(config.maxRecordsToScan / effectivePageSize);
   const worstCaseAccountRefs = SAMPLE_STRATA.length * config.perStratumSampleSize;
   const plannedAccountApiCalls = Math.ceil(worstCaseAccountRefs / caps.accountBatchLimit);
+  const estimate = caps.apiCallEstimate;
+  const plannedScanExtraApiCalls = estimate ? plannedApiCalls * estimate.perScanPage : 0;
+  const plannedDetailApiCalls = estimate
+    ? worstCaseAccountRefs * estimate.perSampledOpportunity +
+      Math.ceil(worstCaseAccountRefs / caps.childRecordBatchLimit) * estimate.perChildRecordBatch
+    : 0;
+  const plannedFixedApiCalls = estimate ? estimate.perRun + estimate.perRunFetchCap : 0;
 
   return {
     seed: config.seed,
@@ -158,11 +180,17 @@ export function planSample(adapter: CrmAdapter, config: SampleConfig): SamplePla
     effectivePageSize,
     plannedApiCalls,
     plannedAccountApiCalls,
+    plannedScanExtraApiCalls,
+    plannedDetailApiCalls,
+    plannedFixedApiCalls,
+    plannedTotalApiCalls:
+      plannedApiCalls + plannedScanExtraApiCalls + plannedAccountApiCalls + plannedDetailApiCalls + plannedFixedApiCalls,
+    apiCallEstimate: estimate ?? null,
     rateLimit: caps.rateLimit,
   };
 }
 
-/** Quota impact of the full run, opportunity scan plus account hydration — understating it would defeat the point of the quota-discipline display. */
+/** Quota impact of the full run (plannedTotalApiCalls) — understating it would defeat the point of the quota-discipline display. */
 function formatRateLimit(rateLimit: AdapterCapabilities['rateLimit'], totalPlannedApiCalls: number): string {
   if (rateLimit.kind === 'none' || rateLimit.value <= 0) {
     return 'Quota: adapter reports no rate limit';
@@ -177,16 +205,28 @@ function formatRateLimit(rateLimit: AdapterCapabilities['rateLimit'], totalPlann
 
 /** Pure. Renders the plan for the confirmation prompt. */
 export function formatSamplePlan(plan: SamplePlan): string {
-  const totalPlannedApiCalls = plan.plannedApiCalls + plan.plannedAccountApiCalls;
+  const estimate = plan.apiCallEstimate;
+  const sampledDeals = plan.strata.length * plan.perStratumSampleSize;
+  const estimateLines = estimate
+    ? [
+        `  Planned scan API calls: up to ${plan.plannedApiCalls + plan.plannedScanExtraApiCalls} (${plan.plannedApiCalls} pages of ${plan.effectivePageSize}, plus ${plan.plannedScanExtraApiCalls} per-page reads; stops earlier when the population runs out)`,
+        `  Planned detailed-check API calls: up to ${plan.plannedDetailApiCalls} (${estimate.perSampledOpportunity} per sampled deal across up to ${sampledDeals} deals, plus ${plan.plannedDetailApiCalls - sampledDeals * estimate.perSampledOpportunity} batched reads)`,
+        `  Planned fixed API calls: up to ${plan.plannedFixedApiCalls} (${estimate.perRun} per run, plus up to ${estimate.perRunFetchCap} per-record fetches)`,
+      ]
+    : [
+        `  Planned API calls: up to ${plan.plannedApiCalls} (worst case; stops earlier when the population runs out)`,
+        '  Detailed-check and fixed API calls: not estimated (the adapter declares no call estimate)',
+      ];
   return [
     `Stratified sample plan (seed: ${plan.seed})`,
     `  Strata (${plan.strata.length}): ${plan.strata.join(', ')}`,
     `  Target per stratum: ${plan.perStratumSampleSize}`,
     `  Max records to scan: ${plan.maxRecordsToScan}`,
     `  Page size: ${plan.effectivePageSize}`,
-    `  Planned API calls: up to ${plan.plannedApiCalls} (worst case; stops earlier when the population runs out)`,
+    ...estimateLines,
     `  Planned account hydration API calls: up to ${plan.plannedAccountApiCalls} (worst case: every sampled opportunity has a distinct account)`,
-    `  ${formatRateLimit(plan.rateLimit, totalPlannedApiCalls)}`,
+    `  Planned API calls in total: up to ${plan.plannedTotalApiCalls} (worst case)`,
+    `  ${formatRateLimit(plan.rateLimit, plan.plannedTotalApiCalls)}`,
   ].join('\n');
 }
 

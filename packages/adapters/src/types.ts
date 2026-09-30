@@ -72,6 +72,24 @@ export interface AdapterCapabilities {
    * never a stage label or other org data.
    */
   readonly stageMapHint?: string;
+  /**
+   * Optional: the API calls this adapter makes for a readiness report run,
+   * beyond the listing pages and account batches every adapter shares, so
+   * the printed plan can state the whole run's worst case. Omit when the
+   * adapter's calls don't count against a quota.
+   */
+  readonly apiCallEstimate?: {
+    /** Fixed calls per run, whatever the org's size (e.g. population counts). */
+    readonly perRun: number;
+    /** Extra calls per listing page (e.g. a batch of child records loaded with each page). */
+    readonly perScanPage: number;
+    /** Unbatched calls per sampled opportunity during the detailed checks. */
+    readonly perSampledOpportunity: number;
+    /** Batched calls per childRecordBatchLimit sampled opportunities during the detailed checks. */
+    readonly perChildRecordBatch: number;
+    /** Most per-record fetches a run may make on top of the above (a cap, not an estimate). */
+    readonly perRunFetchCap: number;
+  };
   /** Supports change-data-capture or a modified-since watermark for deltas. */
   readonly incrementalSync: boolean;
   /** Supports bulk read for backfill. */

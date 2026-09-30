@@ -153,6 +153,52 @@ describe('planSample account hydration budget', () => {
   });
 });
 
+describe('planSample full-run estimate', () => {
+  // Salesforce-shaped declaration: 2 counts + 1 org-wide history read per
+  // run, a contact-role batch per listing page, 4 unbatched reads per
+  // sampled deal, 2 batched Enhanced Note reads per 200 deals, and up to
+  // 200 note full-text fetches.
+  const estimate = { perRun: 3, perScanPage: 1, perSampledOpportunity: 4, perChildRecordBatch: 2, perRunFetchCap: 200 };
+
+  function salesforceShapedPlan() {
+    const adapter = new MockAdapter(ORG, buildOrgData(0), {
+      bulkRead: false,
+      rateLimit: { kind: 'daily_quota', value: 15_000 },
+      apiCallEstimate: estimate,
+    });
+    return planSample(adapter, { ...baseConfig, perStratumSampleSize: 20, maxRecordsToScan: 5_000, seed: 'budget-seed' });
+  }
+
+  it('counts every call the adapter declares, not just the listing pages', () => {
+    const plan = salesforceShapedPlan();
+    // 25 pages of 200, plus a per-page read each.
+    expect(plan.plannedApiCalls).toBe(25);
+    expect(plan.plannedScanExtraApiCalls).toBe(25);
+    // 7 strata * 20 = 140 sampled deals: 140 * 4 per-deal reads + ceil(140 / 200) * 2 batched reads.
+    expect(plan.plannedDetailApiCalls).toBe(562);
+    // 3 per run + up to 200 fetches.
+    expect(plan.plannedFixedApiCalls).toBe(203);
+    // 50 scan + 1 account batch + 562 detailed + 203 fixed.
+    expect(plan.plannedTotalApiCalls).toBe(816);
+  });
+
+  it('prints each group and bases the quota on the total', () => {
+    const text = formatSamplePlan(salesforceShapedPlan());
+    expect(text).toContain('Planned scan API calls: up to 50 (25 pages of 200, plus 25 per-page reads; stops earlier when the population runs out)');
+    expect(text).toContain('Planned detailed-check API calls: up to 562 (4 per sampled deal across up to 140 deals, plus 2 batched reads)');
+    expect(text).toContain('Planned fixed API calls: up to 203 (3 per run, plus up to 200 per-record fetches)');
+    expect(text).toContain('Planned API calls in total: up to 816 (worst case)');
+    expect(text).toContain('Quota: up to 5.4% of the daily quota of 15000');
+  });
+
+  it('says so when the adapter declares no estimate, and counts only what it can', () => {
+    const adapter = new MockAdapter(ORG, buildOrgData(0), { accountBatchLimit: 5 });
+    const plan = planSample(adapter, { ...baseConfig, seed: 'budget-seed' });
+    expect(plan.plannedTotalApiCalls).toBe(6);
+    expect(formatSamplePlan(plan)).toContain('Detailed-check and fixed API calls: not estimated (the adapter declares no call estimate)');
+  });
+});
+
 describe('classifyStratum', () => {
   it('excludes a closed deal just outside the 12-month window and includes one just inside it', () => {
     const cutoff = new Date(ASOF);

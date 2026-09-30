@@ -174,6 +174,20 @@ describe('SalesforceAdapter (fake API)', () => {
     await expect(sf.adapter().listOpportunities({ limit: 200 })).rejects.toThrow(/no handler for SOQL/);
   });
 
+  describe('apiCallEstimate', () => {
+    it('declares the calls a report run makes, with the note full-text fetch limit as the fetch cap', () => {
+      const sf = installFakeSalesforce();
+      expect(sf.adapter().capabilities().apiCallEstimate).toEqual({
+        perRun: 3,
+        perScanPage: 1,
+        perSampledOpportunity: 4,
+        perChildRecordBatch: 2,
+        perRunFetchCap: 200,
+      });
+      expect(sf.adapter({ noteFullTextFetchLimit: 0 }).capabilities().apiCallEstimate?.perRunFetchCap).toBe(0);
+    });
+  });
+
   describe('SF_ACTIVITY_CAPTURE', () => {
     const base = { SF_CLIENT_ID: 'id', SF_CLIENT_SECRET: 'secret', SF_INSTANCE_URL: 'https://example.my.salesforce.com' };
 

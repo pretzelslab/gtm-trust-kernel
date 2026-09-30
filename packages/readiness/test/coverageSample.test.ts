@@ -103,6 +103,11 @@ function fakePlan(): SamplePlan {
     effectivePageSize: 200,
     plannedApiCalls: 5,
     plannedAccountApiCalls: 1,
+    plannedScanExtraApiCalls: 0,
+    plannedDetailApiCalls: 0,
+    plannedFixedApiCalls: 0,
+    plannedTotalApiCalls: 6,
+    apiCallEstimate: null,
     rateLimit: { kind: 'none', value: 0 },
   };
 }
