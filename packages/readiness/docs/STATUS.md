@@ -14,6 +14,47 @@ repeated here.
 
 ---
 
+## Status as of 2026-09-30, top-up smoke run
+
+`npm run ci` green after each commit; not pushed yet.
+
+| Commit | What |
+|---|---|
+| `bd70608` | Seed script: SEED-Earlier meeting (Event, 5 days ago, created after the 2-days-ago Event) and SEED-Logged call (Task, `TaskSubtype` Call, 4 days ago) |
+| `643dbd3` | D6 fix: the Task query reads `TaskSubtype`; Call maps to `call`, Email to `email`, anything else to `other`. Every Task was `other` before. No metric reads `Activity.kind` |
+
+`--top-up --apply --allow-no-enhanced` created the two records (Event
+`<event-id-1>`, Task `<task-id-1>`). Both runs
+(`SF_ACTIVITY_CAPTURE` unset, then `auto`) exit 0 with 132 API calls each,
+counted per request: 1 `ContentNote` describe (404), 4 scan (2 counts, 1
+page, 1 contact-role batch), 127 detailed checks (35 each of legacy Note,
+Task, Event; 19 per-deal `OpportunityHistory`; 1 each of account,
+`ContentDocumentLink`, batched `OpportunityHistory`).
+Eligible 35, all scanned. No record text in any output.
+
+**Confirmed:** Event ordering across 2 Events (the Event query returns
+them by `ActivityDateTime`, not creation order, and the adapter merges
+them with Tasks in date order); `TaskSubtype` is queryable on a live org
+and the logged call is read as `call`, the older Task as `other`.
+
+**Deferred**, with the reason:
+
+- TextPreview 255 cap, `ContentNote` Content endpoint, SNOTE filter with
+  data: `ContentNote` isn't available to the Run As user (System
+  Administrator). The describe is still 404 after Notes Settings was
+  saved, and `ContentNote` is missing from `GET /sobjects` at v62.0 while
+  `ContentDocument`, `ContentDocumentLink` and `Note` are listed, which
+  points away from a path or API version bug. The `sf sobject describe`
+  cross-check wasn't run (the Salesforce CLI isn't installed here).
+- Stage-map notice: no custom Stage value in the org yet
+  (`SEED_CUSTOM_STAGE` unset).
+
+**Open design question:** `untrusted_text_ratio` treats all Tasks and
+Events as external, so it may over-block on activity-heavy orgs; revisit
+in Phase 4. On this run it was 0.8 (4 of 5 text items: the legacy note is
+user-authored, the 2 Tasks and 2 Events count as external). `TaskSubtype`
+(now read, `643dbd3`) is one possible signal for logged calls.
+
 ## Status as of 2026-09-30, Developer Edition smoke run
 
 Run against the org in `.env`, which held only the sample data Salesforce

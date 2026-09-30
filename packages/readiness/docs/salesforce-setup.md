@@ -57,8 +57,8 @@ The report queries these objects, read-only:
 | `OpportunityContactRole` | Contact roles on each scanned deal (`contact_linkage_rate`). **Confirmed 2026-09-30:** a seeded contact role is read (1 of 16 open deals) |
 | `Account` | Account names and domains for sampled deals (`duplicate_account_rate`, `account_resolution_rate`) |
 | `Note` | Legacy notes on sampled deals |
-| `ContentDocumentLink`, `ContentNote` | Enhanced Notes linked to sampled deals, including the full text of long notes. **Partly confirmed:** a live org accepts the `FileType = 'SNOTE'` link filter, but no Enhanced Notes could be created to check what it returns (`ContentNote` not queryable) |
-| `Task`, `Event` | Activities on sampled deals (read even when activity capture is off). **Confirmed 2026-09-30:** a seeded Task and Event are read, and the Event's time is its `ActivityDateTime`. **Partly confirmed:** the Event ordering, since only one Event existed |
+| `ContentDocumentLink`, `ContentNote` | Enhanced Notes linked to sampled deals, including the full text of long notes. **Partly confirmed:** a live org accepts the `FileType = 'SNOTE'` link filter. **Deferred:** the filter with data, the 255-character preview cap and the full-text endpoint, because `ContentNote` isn't available to the Run As user on the test org (see "Enhanced Notes" below) |
+| `Task`, `Event` | Activities on sampled deals (read even when activity capture is off). **Confirmed 2026-09-30:** seeded Tasks and Events are read; an Event's time is its `ActivityDateTime`; two Events on one deal come back in date order, not creation order; a Task's kind comes from `TaskSubtype` (a logged call is read as a call) |
 | `OpportunityHistory` | Stage history (`stage_history_months`, `win_rate_dispersion`) |
 
 `Contact` is only read when a second source is connected, which the
@@ -91,6 +91,13 @@ which can see every object, and `ContentNote` was still not queryable
 (the describe answered 404 `NOT_FOUND`). So the likely cause was Notes
 not being enabled, or the setting not saved, rather than access. The
 seed script (section 5) prints whether `ContentNote` is queryable.
+
+A later probe on the same org, after Notes Settings was saved, still gave
+404 on the describe. `ContentNote` was also missing from the org's object
+list (`GET /sobjects`, same API version), while `ContentDocument`,
+`ContentDocumentLink` and `Note` were there. So the object isn't exposed
+to that user at all, which points away from a wrong path or API version.
+The Enhanced Note checks are deferred until the cause is found.
 
 If Enhanced Notes are linked to sampled deals but `ContentNote` can't be
 read, the note metrics show as **Not measured**, with a hint naming these
@@ -197,6 +204,8 @@ The custom stage value stays a manual step.
 - [ ] **1 Enhanced Note** on an opportunity (the Notes related list in
       Lightning). Make one longer than 255 characters to exercise the
       full-text fetch (**unverified:** the 255-character preview cap).
+      **Deferred 2026-09-30:** `ContentNote` isn't available on the
+      test org (section 3, "Enhanced Notes"), so no Enhanced Note was seeded.
 - [ ] **1 legacy Note** on an opportunity. Lightning may only offer
       Enhanced Notes; if so, create it in Salesforce Classic or insert a
       `Note` record through the API. **Confirmed 2026-09-30:** a `Note`
@@ -204,12 +213,17 @@ The custom stage value stays a manual step.
 - [ ] **1 Task** related to an opportunity (Log a Call, or New Task with
       Related To set to the opportunity).
 - [ ] **1 Event** related to an opportunity (New Event on its Activity tab).
+      Add a second, dated earlier but created later, to check the order.
+      **Confirmed 2026-09-30:** read in date order.
 - [ ] **1 unmapped custom stage**: add a Stage picklist value (Setup,
       Object Manager, Opportunity, Fields & Relationships, Stage), for
       example `Technical Win`. Make sure the opportunity's Sales Process
       offers it (**unverified** for a fresh Developer Edition org), then move
       one opportunity to it. Run once without a stage map (expect the stage-map
       notice), then again with it mapped (expect no notice).
+      **Deferred 2026-09-30:** no custom Stage value has been added to the
+      test org yet (`SEED_CUSTOM_STAGE` unset), so the notice is untested
+      on live data; with no unmapped stage it correctly doesn't show.
 - [ ] Change one opportunity's stage at least once, so `OpportunityHistory`
       has rows. They are dated when you make the change: history can't be
       backdated (section 7). **Confirmed 2026-09-30:** creating a deal at
