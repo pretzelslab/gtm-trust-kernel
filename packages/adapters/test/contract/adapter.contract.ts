@@ -66,6 +66,20 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
   });
 
   describe('read semantics', () => {
+    it('lists opportunities with the same contact links getOpportunity returns', async () => {
+      const { adapter, knownOpportunityId } = await make();
+      let listed: Awaited<ReturnType<typeof adapter.listOpportunities>>['items'][number] | undefined;
+      let cursor: string | undefined;
+      do {
+        const page = await adapter.listOpportunities({ limit: 200, cursor });
+        listed = page.items.find((o) => o.ref.id === knownOpportunityId) ?? listed;
+        cursor = page.nextCursor;
+      } while (cursor && !listed);
+      expect(listed).toBeDefined();
+      const fetched = await adapter.getOpportunity(listed!.ref);
+      expect(listed!.contactLinks.map((l) => l.contactRef.id)).toEqual(fetched!.contactLinks.map((l) => l.contactRef.id));
+    });
+
     it('paginates deterministically', async () => {
       const { adapter } = await make();
       const first = await adapter.listOpportunities({ limit: 2 });

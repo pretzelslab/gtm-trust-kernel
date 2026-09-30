@@ -293,6 +293,7 @@ interface RawOpportunityHistory {
 }
 
 interface RawOpportunityContactRole {
+  OpportunityId: string;
   ContactId: string;
   Role: string | null;
   IsPrimary: boolean;
@@ -642,15 +643,21 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   async listOpportunities(w: SyncWindow): Promise<SyncPage<Opportunity>> {
-    return this.listViaSoql<RawOpportunity, Opportunity>({
+    const page = await this.listViaSoql<RawOpportunity, Opportunity>({
       objectName: 'Opportunity',
       fields: OPPORTUNITY_FIELDS,
       w,
-      // Bulk listing does not hydrate contactLinks (would need one
-      // OpportunityContactRole query per opportunity) — only
-      // getOpportunity() does. See STATUS.md known gaps.
       map: (raw) => this.mapOpportunity(raw),
     });
+    // Contact roles for the whole page, one OpportunityContactRole query
+    // per childRecordBatchLimit ids, so contactLinks is populated the same
+    // as getOpportunity() and the mock (contact_linkage_rate reads it).
+    const { linksByOpportunity, apiCallsConsumed } = await this.fetchContactLinksFor(page.items.map((o) => o.ref.id));
+    return {
+      ...page,
+      items: page.items.map((o) => ({ ...o, contactLinks: linksByOpportunity.get(o.ref.id) ?? [] })),
+      apiCallsConsumed: page.apiCallsConsumed + apiCallsConsumed,
+    };
   }
 
   async listContacts(w: SyncWindow): Promise<SyncPage<Contact>> {
@@ -700,14 +707,38 @@ export class SalesforceAdapter implements CrmAdapter {
     return { items, apiCallsConsumed: 1 };
   }
 
-  private async fetchContactLinks(opportunityId: string): Promise<OpportunityContactLink[]> {
-    const soql = `SELECT ContactId, Role, IsPrimary FROM OpportunityContactRole WHERE OpportunityId = '${opportunityId}'`;
-    const page = await this.soqlQuery<RawOpportunityContactRole>(soql);
-    return page.records.map((r) => ({
-      contactRef: this.ref('contact', r.ContactId),
-      role: r.Role ?? undefined,
-      isPrimary: r.IsPrimary,
-    }));
+  /**
+   * Contact roles for many opportunities, batched at childRecordBatchLimit
+   * ids per query (an IN list, so the URL stays well under Salesforce's
+   * length limit). Follows nextRecordsUrl, since one batch can return more
+   * than one page of roles. Order within an opportunity is the query order.
+   */
+  private async fetchContactLinksFor(
+    opportunityIds: readonly string[],
+  ): Promise<{ linksByOpportunity: Map<string, OpportunityContactLink[]>; apiCallsConsumed: number }> {
+    const linksByOpportunity = new Map<string, OpportunityContactLink[]>();
+    let apiCallsConsumed = 0;
+    const ids = [...new Set(opportunityIds)];
+    const batch = this.capabilities().childRecordBatchLimit;
+    for (let i = 0; i < ids.length; i += batch) {
+      const chunk = ids.slice(i, i + batch);
+      const soql =
+        `SELECT OpportunityId, ContactId, Role, IsPrimary FROM OpportunityContactRole ` +
+        `WHERE OpportunityId IN (${soqlIdList(chunk)}) ORDER BY OpportunityId, Id`;
+      let page = await this.soqlQuery<RawOpportunityContactRole>(soql);
+      apiCallsConsumed += 1;
+      for (;;) {
+        for (const r of page.records) {
+          const links = linksByOpportunity.get(r.OpportunityId) ?? [];
+          links.push({ contactRef: this.ref('contact', r.ContactId), role: r.Role ?? undefined, isPrimary: r.IsPrimary });
+          linksByOpportunity.set(r.OpportunityId, links);
+        }
+        if (page.done || !page.nextRecordsUrl) break;
+        page = await this.soqlQueryMore<RawOpportunityContactRole>(page.nextRecordsUrl);
+        apiCallsConsumed += 1;
+      }
+    }
+    return { linksByOpportunity, apiCallsConsumed };
   }
 
   /**
@@ -829,8 +860,8 @@ export class SalesforceAdapter implements CrmAdapter {
     const page = await this.soqlQuery<RawOpportunity>(soql);
     const raw = page.records[0];
     if (!raw) return null;
-    const contactLinks = await this.fetchContactLinks(ref.id);
-    return this.mapOpportunity(raw, contactLinks);
+    const { linksByOpportunity } = await this.fetchContactLinksFor([ref.id]);
+    return this.mapOpportunity(raw, linksByOpportunity.get(ref.id) ?? []);
   }
 
   // -- CrmAdapter: writes (disabled) --------------------------------------
