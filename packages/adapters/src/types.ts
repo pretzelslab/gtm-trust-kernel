@@ -55,6 +55,16 @@ export interface AdapterCapabilities {
    * Gates activity_capture_rate: without it, silence isn't a reliable signal.
    */
   readonly activitySync: boolean;
+  /**
+   * Optional, per capability: one plain-English sentence telling the user
+   * how to turn that capability on for this adapter (a setting, not a CRM
+   * change), shown in the readiness report when the capability is off.
+   * Adapter-authored static text only, never org data. Omit when no user
+   * setting can turn the capability on.
+   */
+  readonly settingHints?: {
+    readonly activitySync?: string;
+  };
   /** Supports change-data-capture or a modified-since watermark for deltas. */
   readonly incrementalSync: boolean;
   /** Supports bulk read for backfill. */

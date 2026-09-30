@@ -125,6 +125,7 @@ function generateLegacy(): MockOrgFixture {
       ownerHistory: false,
       nextStepHistory: false,
       activitySync: false,
+      settingHints: { activitySync: 'Turn on email and calendar sync in your CRM if your team uses it.' },
       incrementalSync: false,
       bulkRead: false,
       accountBatchLimit: 50,

@@ -60,6 +60,15 @@ activity-sync capability for this org, this metric returns `not_instrumented`
 rather than a score. `rubric.ts`'s 0.80/0.50 thresholds assume auto-capture
 (email/calendar sync) is on; report this assumption in the metric's output
 alongside the number.
+**Salesforce (decided 2026-09-30):** the capability is **declared by the
+user**, not detected: `SF_ACTIVITY_CAPTURE=auto` turns it on; `manual` or
+unset leaves it off, so the metric is `not_instrumented` and its gated
+capabilities read **Not measured** (with the hint "Set
+SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.").
+There is no reliable SOQL check: Einstein Activity Capture, for one, does
+not by default store captured email and events as Task/Event records.
+**Unverified** against a live org with activity capture on (a Developer
+Edition org doesn't have it).
 **Threshold:** `activity_capture_rate`.
 
 ### contact_linkage_rate

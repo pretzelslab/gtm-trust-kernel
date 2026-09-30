@@ -9,7 +9,7 @@
  * everything past sampling is deterministic given the adapter's data.
  */
 
-import type { CrmAdapter, SecondSourceAdapter } from '@gtm-trust-kernel/adapters/types.js';
+import type { AdapterCapabilities, CrmAdapter, SecondSourceAdapter } from '@gtm-trust-kernel/adapters/types.js';
 import {
   buildCoverageSample,
   hydrateAccounts,
@@ -188,6 +188,13 @@ export interface MetricRow {
    * with no second source connected, which is missing data.
    */
   readonly notMeasured: boolean;
+  /**
+   * The adapter's own one-sentence hint for turning on the capability this
+   * metric was not measured for (AdapterCapabilities.settingHints). Set
+   * only on a not-measured row whose adapter supplied one; null otherwise.
+   * Adapter-authored static text, never org data.
+   */
+  readonly fixHint: string | null;
 }
 
 export interface ReportOrgSummary {
@@ -227,6 +234,12 @@ export interface BuildReportOptions {
   readonly perStratumSampleSize?: number;
   readonly maxRecordsToScan?: number;
 }
+
+/** Which adapter capability each capability-gated metric needs, for looking up its setting hint. */
+const SETTING_HINT_KEY: Partial<Record<MetricId, keyof NonNullable<AdapterCapabilities['settingHints']>>> = {
+  activity_capture_rate: 'activitySync',
+  stage_activity_contradiction_rate: 'activitySync',
+};
 
 function capabilitiesGating(metric: MetricId): readonly CapabilityRef[] {
   return CAPABILITIES.filter((c) => c.gates.includes(metric)).map((c) => ({ id: c.id, label: c.label }));
@@ -269,6 +282,11 @@ export async function buildReportData(
   }
 
   const metricConfig: MetricConfig = { asOf: options.asOf, secondSourceResolution };
+  const settingHints = adapter.capabilities().settingHints;
+  const settingHintFor = (metric: MetricId): string | null => {
+    const key = SETTING_HINT_KEY[metric];
+    return (key && settingHints?.[key]) || null;
+  };
   const readings = new Map<MetricId, MetricReading>();
   const unmeasured = new Set<MetricId>();
   const rows: MetricRow[] = [];
@@ -315,6 +333,7 @@ export async function buildReportData(
         degradedAt,
         gatesCapabilities,
         notMeasured,
+        fixHint: notMeasured ? settingHintFor(metric) : null,
       });
       continue;
     }
@@ -340,6 +359,7 @@ export async function buildReportData(
       degradedAt: null,
       gatesCapabilities,
       notMeasured: true,
+      fixHint: null,
     });
   }
 

@@ -6,6 +6,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVITY_CAPTURE_HINT, loadSalesforceConfigFromEnv } from '../src/salesforce.js';
 import { AdapterError } from '../src/types.js';
 import { installFakeSalesforce, sfId, sfRef } from './support/fakeSalesforce.js';
 
@@ -160,5 +161,33 @@ describe('SalesforceAdapter (fake API)', () => {
   it('fails loudly on a query the fake has no handler for', async () => {
     const sf = installFakeSalesforce();
     await expect(sf.adapter().listOpportunities({ limit: 200 })).rejects.toThrow(/no handler for SOQL/);
+  });
+
+  describe('SF_ACTIVITY_CAPTURE', () => {
+    const base = { SF_CLIENT_ID: 'id', SF_CLIENT_SECRET: 'secret', SF_INSTANCE_URL: 'https://example.my.salesforce.com' };
+
+    it('declares activitySync only for auto, with no hint', () => {
+      const sf = installFakeSalesforce();
+      const config = loadSalesforceConfigFromEnv({ ...base, SF_ACTIVITY_CAPTURE: 'Auto ' });
+      expect(config.activityCapture).toBe('auto');
+      const caps = sf.adapter({ activityCapture: config.activityCapture }).capabilities();
+      expect(caps.activitySync).toBe(true);
+      expect(caps.settingHints).toBeUndefined();
+    });
+
+    it.each([['manual'], [undefined]])('reports no activitySync, with the setting hint, for %s', (value) => {
+      const sf = installFakeSalesforce();
+      const config = loadSalesforceConfigFromEnv({ ...base, ...(value ? { SF_ACTIVITY_CAPTURE: value } : {}) });
+      const caps = sf.adapter({ activityCapture: config.activityCapture }).capabilities();
+      expect(caps.activitySync).toBe(false);
+      expect(caps.settingHints?.activitySync).toBe(ACTIVITY_CAPTURE_HINT);
+      expect(ACTIVITY_CAPTURE_HINT).toBe('Set SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.');
+    });
+
+    it('rejects an unknown value with a clear error', () => {
+      expect(() => loadSalesforceConfigFromEnv({ ...base, SF_ACTIVITY_CAPTURE: 'yes' })).toThrow(
+        /Invalid SF_ACTIVITY_CAPTURE value "yes"\. Use one of: auto, manual/,
+      );
+    });
   });
 });

@@ -63,12 +63,29 @@ const DEFAULT_API_VERSION = 'v62.0';
 const THIS_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TOKEN_CACHE_PATH = path.join(THIS_FILE_DIR, '..', '.cache', 'salesforce-token.json');
 
+/**
+ * How this org captures activity, as declared by the user
+ * (SF_ACTIVITY_CAPTURE). 'auto' means email/calendar sync writes Task and
+ * Event records without reps logging them; 'manual' means reps log by hand.
+ * Declared rather than detected: there is no reliable SOQL check for it
+ * (Einstein Activity Capture, for one, does not by default store what it
+ * captures as Task/Event records). Unverified against a live org with
+ * activity capture on.
+ */
+export type SalesforceActivityCapture = 'auto' | 'manual';
+
+const ACTIVITY_CAPTURE_VALUES: readonly SalesforceActivityCapture[] = ['auto', 'manual'];
+
+export const ACTIVITY_CAPTURE_HINT = 'Set SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.';
+
 export interface SalesforceConfig {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly instanceUrl: string;
   readonly apiVersion: string;
   readonly tokenCachePath: string;
+  /** Undefined when not declared: treated like 'manual' (activity capture not assumed). */
+  readonly activityCapture?: SalesforceActivityCapture;
 }
 
 /** Throws a clear, actionable error listing exactly which env vars are missing. */
@@ -80,12 +97,20 @@ export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env
         'Set them in .env (see .env.example) or your shell environment.',
     );
   }
+  const activityCaptureRaw = env.SF_ACTIVITY_CAPTURE?.trim().toLowerCase();
+  if (activityCaptureRaw && !(ACTIVITY_CAPTURE_VALUES as readonly string[]).includes(activityCaptureRaw)) {
+    throw new Error(
+      `Invalid SF_ACTIVITY_CAPTURE value ${JSON.stringify(env.SF_ACTIVITY_CAPTURE)}. ` +
+        `Use one of: ${ACTIVITY_CAPTURE_VALUES.join(', ')}, or leave it unset.`,
+    );
+  }
   return {
     clientId: env.SF_CLIENT_ID!,
     clientSecret: env.SF_CLIENT_SECRET!,
     instanceUrl: env.SF_INSTANCE_URL!.replace(/\/+$/, ''),
     apiVersion: env.SF_API_VERSION || DEFAULT_API_VERSION,
     tokenCachePath: env.SF_TOKEN_CACHE_PATH || DEFAULT_TOKEN_CACHE_PATH,
+    ...(activityCaptureRaw ? { activityCapture: activityCaptureRaw as SalesforceActivityCapture } : {}),
   };
 }
 
@@ -369,9 +394,12 @@ export class SalesforceAdapter implements CrmAdapter {
       // genuinely has no always-on tracking path and needs Field History
       // Tracking, same as ownerHistory. Declaring false for the same reason.
       nextStepHistory: false,
-      // Einstein Activity Capture is a separate paid feature, not present
-      // by default on a Developer Edition org.
-      activitySync: false,
+      // Declared by the user (SF_ACTIVITY_CAPTURE), not detected: see
+      // SalesforceActivityCapture. Unset or 'manual' means silence on a
+      // deal isn't a reliable signal, so activity_capture_rate reads as
+      // not measured rather than scored.
+      activitySync: this.config.activityCapture === 'auto',
+      ...(this.config.activityCapture === 'auto' ? {} : { settingHints: { activitySync: ACTIVITY_CAPTURE_HINT } }),
       incrementalSync: true,
       // No Bulk API 2.0 here — REST/SOQL only.
       bulkRead: false,

@@ -280,12 +280,30 @@ function hasDegradedGate(data: ReportData, capabilityId: CapabilityId): boolean 
   );
 }
 
+/**
+ * The adapter's setting hints for a not-measured capability, when a user
+ * setting would make every not-measured gate measurable (so the setting
+ * really unlocks the use case). Empty otherwise, including when any
+ * not-measured gate has no hint.
+ */
+function fixHintsFor(data: ReportData, capabilityId: CapabilityId): string[] {
+  const unseen = data.metrics.filter(
+    (m) => m.gatesCapabilities.some((g) => g.id === capabilityId) && gateVerdictOf(m) === 'not_measured',
+  );
+  if (unseen.length === 0 || unseen.some((m) => m.fixHint === null)) return [];
+  return [...new Set(unseen.map((m) => m.fixHint!))];
+}
+
 function outcomeFor(data: ReportData, c: ReportCapabilityRow, bucket: Bucket): CapabilityOutcome {
   const base = PLAIN_OUTCOME[c.id][c.verdict];
   let outcome: string;
   if (bucket === 'ready') outcome = base;
-  else if (bucket === 'notMeasured') outcome = hasDegradedGate(data, c.id) ? `${base} ${NOT_MEASURED_THIN_CLAUSE}` : base;
-  else outcome = `${base} Right now, ${notReadyReason(data, c.id)}.`;
+  else if (bucket === 'notMeasured') {
+    const parts = [base];
+    if (hasDegradedGate(data, c.id)) parts.push(NOT_MEASURED_THIN_CLAUSE);
+    parts.push(...fixHintsFor(data, c.id));
+    outcome = parts.join(' ');
+  } else outcome = `${base} Right now, ${notReadyReason(data, c.id)}.`;
   return { label: capitalize(PLAIN_CAPABILITY[c.id]), outcome };
 }
 

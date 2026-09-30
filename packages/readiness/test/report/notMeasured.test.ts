@@ -70,6 +70,7 @@ describe('not measured verdict', () => {
         degradedAt: null,
         gatesCapabilities: [],
         notMeasured: false,
+        fixHint: null,
       }),
     ).toBe('blocked');
   });
@@ -148,6 +149,31 @@ describe('not measured verdict', () => {
     };
     const risk = buildFullNarrative(data).notReady.find((c) => c.label === 'Pipeline risk alerts')!;
     expect(risk.outcome).toContain('Right now, the data on hand is out of date.');
+  });
+
+  it("appends the adapter's setting hint when a setting would unlock the use case", async () => {
+    const fixture = MOCK_ORG_FIXTURES.healthy;
+    const hint = 'Set SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.';
+    const adapter = new MockAdapter(fixture.orgId, fixture.data, {
+      ...fixture.capabilities,
+      activitySync: false,
+      settingHints: { activitySync: hint },
+    });
+    const secondSourceAdapter = new MockSecondSourceAdapter(fixture.secondSource!.data, fixture.secondSource!.capabilities);
+    const data = await buildReportData(adapter, secondSourceAdapter, {
+      orgLabel: fixture.label,
+      orgDescription: fixture.description,
+      asOf: fixture.asOf,
+    });
+    expect(data.metrics.find((m) => m.metric === 'activity_capture_rate')!.fixHint).toBe(hint);
+    const risk = buildFullNarrative(data).notMeasured.find((c) => c.label === 'Pipeline risk alerts')!;
+    expect(risk.outcome.endsWith(hint)).toBe(true);
+  });
+
+  it('adds no hint when the adapter supplies none', async () => {
+    const data = await buildHealthyWithoutActivitySync();
+    expect(data.metrics.find((m) => m.metric === 'activity_capture_rate')!.fixHint).toBeNull();
+    for (const c of buildFullNarrative(data).notMeasured) expect(c.outcome).not.toMatch(/Set |Turn on/);
   });
 
   it('keeps a not-measured autonomous write-back in the not-ready list (fail-safe)', async () => {

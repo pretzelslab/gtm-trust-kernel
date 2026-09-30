@@ -62,6 +62,9 @@ const EXPECTED_STRING_PATHS: readonly string[] = [
   'metrics[].dimensionLabel',
   'metrics[].status',
   'metrics[].note',
+  // Reviewed 2026-09-30: adapter-authored setting hint (AdapterCapabilities.settingHints),
+  // static text, never org data; set only on not-measured rows.
+  'metrics[].fixHint',
   'metrics[].tier',
   'metrics[].unit',
   'metrics[].gatesCapabilities[].id',
