@@ -5,7 +5,7 @@
  */
 
 import type { MetricRow, MetricRowStatus, ReportCapabilityRow, ReportData } from './buildReport.js';
-import type { Unit, Verdict } from '../rubric.js';
+import { THRESHOLDS, type Unit, type Verdict } from '../rubric.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildExecutiveSummary } from './plainSummary.js';
 import type { NarrativeResult } from './narrative.js';
@@ -98,9 +98,10 @@ function renderMetricsTable(rows: readonly MetricRow[]): string {
       const gates = row.gatesCapabilities.length
         ? row.gatesCapabilities.map((g) => escapeHtml(g.label)).join(', ')
         : '—';
+      const cmp = THRESHOLDS[row.metric].direction === 'lower_is_better' ? '≤' : '≥';
       const thresh =
         row.viableAt !== null && row.degradedAt !== null
-          ? `viable ≥ ${row.viableAt}, degraded ≥ ${row.degradedAt}`
+          ? `viable ${cmp} ${row.viableAt}, degraded ${cmp} ${row.degradedAt}`
           : '';
       const lowConf = row.lowConfidence ? `<div class="lowconf">low confidence (n=${row.sampleSize})</div>` : '';
       const floorBadge = row.floor
