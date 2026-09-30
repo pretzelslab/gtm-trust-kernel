@@ -24,7 +24,7 @@ and truncation reporting.
 
 1. **Separate `SecondSourceAdapter` interface, not an extension of
    `CrmAdapter`.** Own `SecondSourceCapabilities` type, own object model.
-   Reasoning: the scope doc (`claude/gtm-readiness-scope.md`) treats the
+   Reasoning: the scope doc (the internal scope notes (not published)) treats the
    second source as a genuinely distinct system — a different object
    model (no `Opportunity`/`Stage`), a connection lifecycle where it may
    not be configured at all, and D5's gate-off case (`not_instrumented`,
@@ -52,7 +52,7 @@ and truncation reporting.
    (`metric-definitions.md`: "the sum of both sources' sampled records...
    a record from either source can independently trip the numerator").
    Recorded as a **known gap** against the original scope doc's D5
-   "temporal alignment" bullet (`claude/gtm-readiness-scope.md:94`) — a
+   "temporal alignment" bullet (in the internal scope notes (not published)) — a
    possible future metric, not scoped into D5 v0.1 and not implied by
    anything already committed.
 
@@ -67,7 +67,7 @@ and truncation reporting.
    implementation:** a test asserting no raw email or domain value
    appears anywhere in `ReportData` or `--json` output — this closes the
    loop on "raw emails are never materialized in this tool"
-   (`gtm-readiness-scope.md:96`/`:260`) with an actual assertion, not
+   (the internal scope notes (not published)) with an actual assertion, not
    just doc language. To be written as part of D5 part 1 or whichever
    phase first produces real `ReportData` from second-source input.
 

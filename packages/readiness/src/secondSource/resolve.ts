@@ -11,8 +11,8 @@
  * Never constructs a merged record: contactMatches/accountMatches map a
  * CRM ref.id to the SecondSourceRefs that matched it, never to a combined
  * CRM+second-source object. See metric-definitions.md's D5 intro and
- * gtm-readiness-scope.md:96/:260 ("Sources are sampled independently and
- * never merged").
+ * the internal scope notes (not published): "Sources are sampled
+ * independently and never merged".
  */
 
 import type { SecondSourceAdapter, SecondSourceCapabilities, SecondSourceRef } from '@gtm-trust-kernel/adapters/types.js';

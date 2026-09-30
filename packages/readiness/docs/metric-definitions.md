@@ -1,8 +1,8 @@
 # Metric definitions — gtm-readiness v0.1.0
 
 Feeds Phase C (`packages/readiness/src/metrics/*.ts`). Each entry is what a
-Claude CLI session pastes as input, per `claude/RUNBOOK.md`'s Step 7 prompt
-template.
+build step takes as input, per the one-metric-per-step prompt template in the
+internal build runbook (not published).
 If an implementation session hits a case not covered here, that's a gap in
 this doc, not a judgment call for the session to make — stop and add it here.
 
@@ -296,8 +296,8 @@ second source by normalized email address.
 SHA-256 salted with a random value generated once per D5 run. The salt and
 every hashed key live in memory only for the duration of that run and are
 discarded when it completes — never persisted, never logged (raw emails
-from the second source are never materialized in this tool — see
-`claude/gtm-readiness-scope.md:96` and `:260`).
+from the second source are never materialized in this tool, per
+the internal scope notes (not published)).
 **Matching count:** a CRM contact counts as resolved if its hashed email
 matches at least one second-source contact — no dedup beyond that. If
 several second-source records share a hashed email (e.g. duplicate

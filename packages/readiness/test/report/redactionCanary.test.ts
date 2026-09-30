@@ -1,6 +1,6 @@
 /**
- * Redaction canary test (Phase E closeout — see docs/redaction-review.md and
- * claude/gtm-readiness-scope.md's decision log). This is not a metrics test:
+ * Redaction canary test (Phase E closeout — see docs/redaction-review.md).
+ * This is not a metrics test:
  * it seeds a fake-PII/injection "canary" fragment into every text-bearing
  * field of every CRM and second-source record (cloned from the `healthy`
  * fixture, never mutating it), runs the real production pipeline, and

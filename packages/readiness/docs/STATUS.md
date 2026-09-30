@@ -1,15 +1,11 @@
-# Phase C ("readiness") — status and handoff state
+# Readiness: development log
 
-Not the build runbook. That's `claude/RUNBOOK.md` (repo root) — the
-step-by-step build process, including the Phase C "one metric per session"
-loop `metric-definitions.md` cross-references. This file is a point-in-time
-state snapshot for resuming `packages/readiness` cold; it doesn't replace
-either `claude/RUNBOOK.md` or `claude/gtm-readiness-scope.md` (the original
-scope doc — see its section 3 for the seven-dimension metric list this
-whole package implements against).
-
-Working state for continuing `packages/readiness` across sessions. Read this
-before `metric-definitions.md` when picking the work back up cold.
+A dated record of how `packages/readiness` was built: what shipped, the
+decisions behind it, and the known gaps. It is a working log, so earlier
+entries describe earlier states of the code. The step-by-step build
+process and the original scope (including the seven-dimension metric list
+this package implements) lived in internal notes that are not published;
+where this log cites them, it says so.
 
 Governing rules: `CLAUDE.md` at the repo root (protected `rubric.ts`, no
 threshold guessing, plan-before-multi-file-change, pure deterministic
@@ -468,13 +464,13 @@ metric's own computed value there.
   (and the second-source adapter's pre-hash output), not just the input
   fixture. Findings from the one cold adversarial review that has been run
   (commit `9c99ef9`) are now written up, ranked by severity, in
-  `docs/redaction-review.md`, per `claude/RUNBOOK.md` Step 10's format.
+  `docs/redaction-review.md`, per the review format in the internal build runbook (not published).
   **Decision: `redact.ts`/`redact.test.ts` (per the original scope-doc
   architecture) will not be built** — redaction is by construction (no
   metric function or render surface ever carries raw record text), enforced
   by the canary test rather than a scrub step. See
-  `claude/gtm-readiness-scope.md`'s decision log for the scope this
-  guarantee covers and the rule for extending it.
+  `docs/redaction-review.md` for the scope this guarantee covers and the
+  rule for extending it.
 
 - **npx packaging — resolved, 2026-09-28.** This gap (no `bin`, no compiled
   output, `adapters` unpublished, no `files` allowlist) is closed: both
@@ -545,9 +541,9 @@ metric's own computed value there.
 
 (The `metric-definitions.md` "runbook" reference and the
 `stage_fill_rate`/`owner_id_fill_rate` question that used to live here are
-both resolved — the runbook reference now points at `claude/RUNBOOK.md`,
-added to the repo and confirmed to match: its Step 7 is exactly the
-"one metric per session" prompt loop the doc describes.)
+both resolved — the runbook reference now points at the internal build runbook (not published),
+confirmed to match: it defines the "one metric per session" prompt loop
+the doc describes.)
 
 ---
 

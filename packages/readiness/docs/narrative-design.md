@@ -47,7 +47,7 @@ byte-identical to pre-commit-4 output (confirmed no
 `<div class="narrative-fallback-notice">` appears and the "Plain-English
 summary" paragraph is unchanged).
 
-Motivated by Phase E (`claude/gtm-readiness-scope.md`; `docs/STATUS.md`'s
+Motivated by Phase E (the internal scope notes (not published); `docs/STATUS.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
 still not built"). **Draft plan** — the decisions below are locked as in
 "agreed, to be built this way," but nothing is implemented: no code, no
@@ -699,5 +699,5 @@ recur. Still open.
    "locked, implemented" once all four commits land and `npm run ci` is
    green.
 
-Expected to span multiple sessions (`claude/RUNBOOK.md` session hygiene —
-one phase per session), not one sitting.
+Expected to span several commits (the internal build runbook (not published):
+one phase at a time), not one sitting.
