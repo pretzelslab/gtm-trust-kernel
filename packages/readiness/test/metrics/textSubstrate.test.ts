@@ -46,6 +46,25 @@ describe('substantiveNoteRate', () => {
 });
 
 describe('medianNoteLengthChars', () => {
+  it('marks the value a floor when any sampled note body is only a preview', () => {
+    const base = medianNoteLengthCharsFixture();
+    let flagged = false;
+    const notesByOpportunity = new Map(
+      [...base.notesByOpportunity].map(([oppId, notes]) => [
+        oppId,
+        notes.map((n) => {
+          if (flagged) return n;
+          flagged = true;
+          return { ...n, bodyTruncated: true };
+        }),
+      ]),
+    );
+    const result = medianNoteLengthChars({ ...base, notesByOpportunity }, { asOf: MEDIAN_NOTE_LENGTH_CHARS_ASOF });
+    expect(result.value).toBe(MEDIAN_NOTE_LENGTH_CHARS_EXPECTED.value);
+    expect(result.floor).toBe(true);
+    expect(result.note).toBe(`1 of ${MEDIAN_NOTE_LENGTH_CHARS_EXPECTED.sampleSize} sampled notes are previews, not full text; value is a floor`);
+  });
+
   it('matches the golden fixture: median of [10, 20, 30, 40, 50] trimmed lengths is 30', () => {
     const result = medianNoteLengthChars(medianNoteLengthCharsFixture(), { asOf: MEDIAN_NOTE_LENGTH_CHARS_ASOF });
     expect(result).toEqual({

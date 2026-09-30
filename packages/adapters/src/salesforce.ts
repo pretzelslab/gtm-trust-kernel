@@ -86,7 +86,23 @@ export interface SalesforceConfig {
   readonly tokenCachePath: string;
   /** Undefined when not declared: treated like 'manual' (activity capture not assumed). */
   readonly activityCapture?: SalesforceActivityCapture;
+  /**
+   * Most Enhanced Note bodies to fetch in full per adapter instance (one
+   * run), for notes whose TextPreview hits ENHANCED_NOTE_PREVIEW_CAP. Past
+   * the budget, a note keeps its preview and is marked bodyTruncated.
+   * SF_NOTE_FULLTEXT_FETCH_LIMIT; defaults to 200. 0 never fetches.
+   */
+  readonly noteFullTextFetchLimit?: number;
 }
+
+export const DEFAULT_NOTE_FULLTEXT_FETCH_LIMIT = 200;
+
+/**
+ * ContentNote.TextPreview's length cap. A preview this long (or longer) may
+ * be cut off, so its full text is fetched within the run's budget.
+ * Unverified against a live org; confirm on the Developer Edition smoke run.
+ */
+export const ENHANCED_NOTE_PREVIEW_CAP = 255;
 
 /** Throws a clear, actionable error listing exactly which env vars are missing. */
 export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env): SalesforceConfig {
@@ -104,6 +120,12 @@ export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env
         `Use one of: ${ACTIVITY_CAPTURE_VALUES.join(', ')}, or leave it unset.`,
     );
   }
+  const fetchLimitRaw = env.SF_NOTE_FULLTEXT_FETCH_LIMIT?.trim();
+  if (fetchLimitRaw && !/^\d+$/.test(fetchLimitRaw)) {
+    throw new Error(
+      `Invalid SF_NOTE_FULLTEXT_FETCH_LIMIT value ${JSON.stringify(env.SF_NOTE_FULLTEXT_FETCH_LIMIT)}. Use a whole number (0 or more), or leave it unset.`,
+    );
+  }
   return {
     clientId: env.SF_CLIENT_ID!,
     clientSecret: env.SF_CLIENT_SECRET!,
@@ -111,6 +133,7 @@ export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env
     apiVersion: env.SF_API_VERSION || DEFAULT_API_VERSION,
     tokenCachePath: env.SF_TOKEN_CACHE_PATH || DEFAULT_TOKEN_CACHE_PATH,
     ...(activityCaptureRaw ? { activityCapture: activityCaptureRaw as SalesforceActivityCapture } : {}),
+    ...(fetchLimitRaw ? { noteFullTextFetchLimit: Number(fetchLimitRaw) } : {}),
   };
 }
 
@@ -240,6 +263,32 @@ function dedupeIds(refs: readonly RecordRef[]): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+
+/** Comparator: newest first by an ISO date or datetime; ties keep input order. */
+function newestFirst<T>(at: (x: T) => string): (a: T, b: T) => number {
+  return (a, b) => Date.parse(at(b)) - Date.parse(at(a));
+}
+
+/** An Enhanced Note body is stored as simple HTML; reduce it to plain text. */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n')
+    .trim();
+}
+
+// ---------------------------------------------------------------------------
 // Raw Salesforce record shapes (only the fields this adapter queries)
 // ---------------------------------------------------------------------------
 
@@ -308,6 +357,31 @@ interface RawNote {
   SystemModstamp: string;
 }
 
+interface RawEvent {
+  Id: string;
+  WhoId: string | null;
+  WhatId: string | null;
+  Subject: string | null;
+  Description: string | null;
+  ActivityDate: string | null;
+  ActivityDateTime: string | null;
+  CreatedDate: string;
+  SystemModstamp: string;
+}
+
+interface RawContentDocumentLink {
+  ContentDocumentId: string;
+  LinkedEntityId: string;
+}
+
+interface RawContentNote {
+  Id: string;
+  Title: string | null;
+  TextPreview: string | null;
+  OwnerId: string | null;
+  CreatedDate: string;
+}
+
 interface RawOpportunityHistory {
   Id: string;
   OpportunityId: string;
@@ -348,8 +422,11 @@ const CONTACT_FIELDS = ['Id', 'AccountId', 'Name', 'Title', 'Email', 'CreatedDat
 // Task only — Event (calendar meetings) is out of scope for this adapter;
 // see STATUS.md known gaps.
 const TASK_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'CreatedDate', 'SystemModstamp'];
-// Legacy Note object only — Salesforce's Enhanced Notes (ContentNote) is a
-// different object and is out of scope for this adapter; see STATUS.md.
+// Event (meetings) is read by getActivitiesByOpportunity only; listActivities
+// stays Task-only (no metric reads it).
+const EVENT_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'ActivityDateTime', 'CreatedDate', 'SystemModstamp'];
+// Legacy Note. Enhanced Notes (ContentNote, linked through
+// ContentDocumentLink) are read separately by getNotesByOpportunity.
 const NOTE_FIELDS = ['Id', 'ParentId', 'Title', 'Body', 'OwnerId', 'CreatedDate', 'SystemModstamp'];
 const OPPORTUNITY_HISTORY_FIELDS = ['Id', 'OpportunityId', 'StageName', 'CloseDate', 'CreatedById', 'CreatedDate'];
 
@@ -362,6 +439,8 @@ export class SalesforceAdapter implements CrmAdapter {
   readonly orgId: string;
 
   private cachedToken: CachedToken | null = null;
+  /** Enhanced Note full-text fetches used so far by this instance (one run). */
+  private noteFullTextFetchesUsed = 0;
   /** opportunityId -> last-seen toStage, for deriving fromStage across listStageHistory pages/calls on this instance. */
   private readonly lastKnownStage = new Map<string, CanonicalStage>();
 
@@ -445,10 +524,15 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   private async request<T>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
-    return this.requestWithRetry<T>(pathOrUrl, init, false);
+    return this.requestWithRetry<T>(pathOrUrl, init, false, 'json');
   }
 
-  private async requestWithRetry<T>(pathOrUrl: string, init: RequestInit, hasRetried: boolean): Promise<T> {
+  /** Same auth, retry and error mapping as request(), for an endpoint that returns a raw body. */
+  private async requestText(pathOrUrl: string): Promise<string> {
+    return this.requestWithRetry<string>(pathOrUrl, {}, false, 'text');
+  }
+
+  private async requestWithRetry<T>(pathOrUrl: string, init: RequestInit, hasRetried: boolean, as: 'json' | 'text'): Promise<T> {
     const token = await this.getToken(hasRetried);
     const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${token.instanceUrl}${pathOrUrl}`;
 
@@ -463,7 +547,7 @@ export class SalesforceAdapter implements CrmAdapter {
     }
 
     if (res.status === 401 && !hasRetried) {
-      return this.requestWithRetry<T>(pathOrUrl, init, true);
+      return this.requestWithRetry<T>(pathOrUrl, init, true, as);
     }
     if (res.status === 429) {
       const retryAfterHeader = Number(res.headers.get('Retry-After'));
@@ -486,6 +570,7 @@ export class SalesforceAdapter implements CrmAdapter {
       const detail = await safeReadBody(res);
       throw new AdapterError(`Salesforce API error (${res.status}): ${detail}`, 'unknown', res.status >= 500);
     }
+    if (as === 'text') return (await safeReadBody(res)) as T;
     try {
       return (await res.json()) as T;
     } catch (err) {
@@ -637,6 +722,29 @@ export class SalesforceAdapter implements CrmAdapter {
     };
   };
 
+  /** Same trust handling as mapTask; an Event is always a meeting. */
+  private mapEvent = (raw: RawEvent): Activity => {
+    const relatedTo: RecordRef[] = [];
+    if (raw.WhatId) relatedTo.push(this.ref('opportunity', raw.WhatId));
+    if (raw.WhoId) relatedTo.push(this.ref('contact', raw.WhoId));
+    const occurredAt = raw.ActivityDateTime ?? raw.ActivityDate ?? raw.CreatedDate;
+    const tier = inferTier({ objectType: 'activity', field: 'body', authorIsInternalUser: true, activityDirection: 'unknown' });
+    return {
+      ref: this.ref('activity', raw.Id),
+      relatedTo,
+      kind: 'meeting',
+      direction: 'unknown',
+      occurredAt,
+      subject: raw.Subject
+        ? tag(tier, raw.Subject, { recordId: `activity:${raw.Id}`, field: 'subject', capturedAt: raw.SystemModstamp })
+        : undefined,
+      body: raw.Description
+        ? tag(tier, raw.Description, { recordId: `activity:${raw.Id}`, field: 'body', capturedAt: raw.SystemModstamp })
+        : undefined,
+      participantIds: [raw.WhoId, raw.WhatId].filter((x): x is string => Boolean(x)),
+    };
+  };
+
   private mapNote = (raw: RawNote): Note => ({
     ref: this.ref('note', raw.Id),
     relatedTo: [this.ref('opportunity', raw.ParentId)],
@@ -770,34 +878,138 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   /**
-   * Per-opportunity SOQL, one call per distinct oppRef — SOQL has no
-   * per-group LIMIT, so a single clever query can't enforce
-   * notesPerOpportunityLimit across many opportunities at once. Costs more
-   * API calls than the mock's flat 1, but is honestly reported via
-   * apiCallsConsumed. Truncation is newest-first-kept per the contract
-   * (see AdapterCapabilities.notesPerOpportunityLimit's docblock).
+   * Legacy Notes (per-opportunity SOQL, one call per distinct oppRef — SOQL
+   * has no per-group LIMIT) merged with Enhanced Notes (ContentNote, found
+   * through ContentDocumentLink in batched IN-list queries). The combined
+   * list per opportunity is cut to notesPerOpportunityLimit, newest kept,
+   * and the opportunity is marked truncated if either source had more.
+   * Every call is counted in apiCallsConsumed.
    */
   async getNotesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Note>> {
     if (oppRefs.length === 0) return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
     const limit = this.capabilities().notesPerOpportunityLimit;
     const ids = dedupeIds(oppRefs);
-    const items: Note[] = [];
+    ids.forEach(assertValidSalesforceId);
     const truncatedOpportunityIds = new Set<string>();
+    let apiCallsConsumed = 0;
+
+    const byOpp = new Map<string, Note[]>();
     for (const oppId of ids) {
-      assertValidSalesforceId(oppId);
       const soql =
         `SELECT ${NOTE_FIELDS.join(', ')} FROM Note WHERE ParentId = '${oppId}' ` +
         `ORDER BY CreatedDate DESC NULLS LAST LIMIT ${limit + 1}`;
       const page = await this.soqlQuery<RawNote>(soql);
-      const desc = [...page.records];
-      if (desc.length > limit) truncatedOpportunityIds.add(oppId);
-      const kept = desc.slice(0, limit).reverse(); // back to ascending, newest-kept
-      items.push(...kept.map(this.mapNote));
+      apiCallsConsumed += 1;
+      byOpp.set(oppId, page.records.map(this.mapNote));
     }
-    return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length };
+
+    const enhanced = await this.fetchEnhancedNotes(ids);
+    apiCallsConsumed += enhanced.apiCallsConsumed;
+    for (const [oppId, notes] of enhanced.notesByOpportunity) {
+      byOpp.set(oppId, [...(byOpp.get(oppId) ?? []), ...notes]);
+    }
+
+    const items: Note[] = [];
+    for (const oppId of ids) {
+      const desc = (byOpp.get(oppId) ?? []).slice().sort(newestFirst((n) => n.createdAt));
+      if (desc.length > limit) truncatedOpportunityIds.add(oppId);
+      items.push(...desc.slice(0, limit).reverse()); // back to ascending, newest-kept
+    }
+    return { items, truncatedOpportunityIds, apiCallsConsumed };
   }
 
-  /** Same shape/reasoning as getNotesByOpportunity, ordered by ActivityDate (occurredAt), not CreatedDate. */
+  /**
+   * Enhanced Notes for the given opportunities: ContentDocumentLink ->
+   * ContentNote (TextPreview), in batches of childRecordBatchLimit ids.
+   * A preview at ENHANCED_NOTE_PREVIEW_CAP may be cut off, so its full text
+   * is fetched, one call per note, while this instance's
+   * noteFullTextFetchLimit lasts; past it, the note keeps its preview and
+   * is marked bodyTruncated. A note linked to several of the opportunities
+   * is returned once per opportunity, like a legacy Note would be.
+   */
+  private async fetchEnhancedNotes(
+    opportunityIds: readonly string[],
+  ): Promise<{ notesByOpportunity: Map<string, Note[]>; apiCallsConsumed: number }> {
+    const notesByOpportunity = new Map<string, Note[]>();
+    let apiCallsConsumed = 0;
+    const batch = this.capabilities().childRecordBatchLimit;
+    const fetchLimit = this.config.noteFullTextFetchLimit ?? DEFAULT_NOTE_FULLTEXT_FETCH_LIMIT;
+
+    for (let i = 0; i < opportunityIds.length; i += batch) {
+      const chunk = opportunityIds.slice(i, i + batch);
+      const links: RawContentDocumentLink[] = [];
+      let page = await this.soqlQuery<RawContentDocumentLink>(
+        `SELECT ContentDocumentId, LinkedEntityId FROM ContentDocumentLink ` +
+          `WHERE LinkedEntityId IN (${soqlIdList(chunk)}) AND ContentDocument.FileType = 'SNOTE'`,
+      );
+      apiCallsConsumed += 1;
+      for (;;) {
+        links.push(...page.records);
+        if (page.done || !page.nextRecordsUrl) break;
+        page = await this.soqlQueryMore<RawContentDocumentLink>(page.nextRecordsUrl);
+        apiCallsConsumed += 1;
+      }
+      if (links.length === 0) continue;
+
+      const docIds = [...new Set(links.map((l) => l.ContentDocumentId))];
+      const notesById = new Map<string, Note>();
+      for (let j = 0; j < docIds.length; j += batch) {
+        const docChunk = docIds.slice(j, j + batch);
+        let notePage = await this.soqlQuery<RawContentNote>(
+          `SELECT Id, Title, TextPreview, OwnerId, CreatedDate FROM ContentNote WHERE Id IN (${soqlIdList(docChunk)})`,
+        );
+        apiCallsConsumed += 1;
+        for (;;) {
+          for (const raw of notePage.records) {
+            const preview = raw.TextPreview ?? '';
+            let text = preview;
+            let bodyTruncated = false;
+            if (preview.length >= ENHANCED_NOTE_PREVIEW_CAP) {
+              if (this.noteFullTextFetchesUsed < fetchLimit) {
+                assertValidSalesforceId(raw.Id);
+                this.noteFullTextFetchesUsed += 1;
+                apiCallsConsumed += 1;
+                text = htmlToText(await this.requestText(`/services/data/${this.config.apiVersion}/sobjects/ContentNote/${raw.Id}/Content`));
+              } else {
+                bodyTruncated = true;
+              }
+            }
+            notesById.set(raw.Id, this.mapContentNote(raw, text, bodyTruncated));
+          }
+          if (notePage.done || !notePage.nextRecordsUrl) break;
+          notePage = await this.soqlQueryMore<RawContentNote>(notePage.nextRecordsUrl);
+          apiCallsConsumed += 1;
+        }
+      }
+
+      for (const link of links) {
+        const note = notesById.get(link.ContentDocumentId);
+        if (!note) continue;
+        const list = notesByOpportunity.get(link.LinkedEntityId) ?? [];
+        list.push({ ...note, relatedTo: [this.ref('opportunity', link.LinkedEntityId)] });
+        notesByOpportunity.set(link.LinkedEntityId, list);
+      }
+    }
+    return { notesByOpportunity, apiCallsConsumed };
+  }
+
+  private mapContentNote(raw: RawContentNote, text: string, bodyTruncated: boolean): Note {
+    return {
+      ref: this.ref('note', raw.Id),
+      relatedTo: [],
+      authorId: raw.OwnerId ?? undefined,
+      createdAt: raw.CreatedDate,
+      body: tag(TrustTier.UserAuthored, text, { recordId: `note:${raw.Id}`, field: 'body', capturedAt: raw.CreatedDate }),
+      ...(bodyTruncated ? { bodyTruncated: true } : {}),
+    };
+  }
+
+  /**
+   * Tasks and Events (meetings) per opportunity, each queried newest-first
+   * with LIMIT limit+1, merged by occurredAt and cut to
+   * activitiesPerOpportunityLimit, newest kept. Truncated if the merged
+   * list had more than the limit.
+   */
   async getActivitiesByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<Activity>> {
     if (oppRefs.length === 0) return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
     const limit = this.capabilities().activitiesPerOpportunityLimit;
@@ -806,16 +1018,21 @@ export class SalesforceAdapter implements CrmAdapter {
     const truncatedOpportunityIds = new Set<string>();
     for (const oppId of ids) {
       assertValidSalesforceId(oppId);
-      const soql =
+      const tasks = await this.soqlQuery<RawTask>(
         `SELECT ${TASK_FIELDS.join(', ')} FROM Task WHERE WhatId = '${oppId}' ` +
-        `ORDER BY ActivityDate DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`;
-      const page = await this.soqlQuery<RawTask>(soql);
-      const desc = [...page.records];
+          `ORDER BY ActivityDate DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`,
+      );
+      const events = await this.soqlQuery<RawEvent>(
+        `SELECT ${EVENT_FIELDS.join(', ')} FROM Event WHERE WhatId = '${oppId}' ` +
+          `ORDER BY ActivityDateTime DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`,
+      );
+      const desc = [...tasks.records.map(this.mapTask), ...events.records.map(this.mapEvent)].sort(
+        newestFirst((a) => a.occurredAt),
+      );
       if (desc.length > limit) truncatedOpportunityIds.add(oppId);
-      const kept = desc.slice(0, limit).reverse();
-      items.push(...kept.map(this.mapTask));
+      items.push(...desc.slice(0, limit).reverse());
     }
-    return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length };
+    return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length * 2 };
   }
 
   /**

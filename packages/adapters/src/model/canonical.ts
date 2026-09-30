@@ -149,6 +149,13 @@ export interface Note {
   readonly authorId?: string;
   readonly createdAt: string;
   readonly body: TrustedText;
+  /**
+   * True when `body` is only the start of the note: the adapter could read
+   * a preview but not the full text (e.g. a per-run fetch budget ran out).
+   * Length-based metrics treat their value as a floor. Absent means the
+   * body is complete.
+   */
+  readonly bodyTruncated?: boolean;
 }
 
 export interface StageHistoryEntry {

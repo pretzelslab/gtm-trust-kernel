@@ -9,6 +9,8 @@
  *    a full SoqlResponse for paging, or an HTTP status to simulate errors.
  *  - GET  a nextRecordsUrl the harness handed out: the queued next page.
  *  - GET  /services/data/<v>/limits/: an empty object (health()).
+ *  - GET  /services/data/<v>/sobjects/ContentNote/<id>/Content: the body
+ *    registered with noteContent(id, body).
  *
  * Every SOQL string the adapter sends is recorded in `queries`, in order,
  * so tests can assert what was asked as well as what was mapped. A query
@@ -36,6 +38,8 @@ export type QueryHandler = (soql: string) => QueryResult;
 export interface FakeSalesforce {
   /** Answer any SOQL matching `pattern` (tested against the whole decoded query). */
   on(pattern: RegExp, result: QueryResult | QueryHandler): void;
+  /** Register an Enhanced Note's full body, served from its Content endpoint. */
+  noteContent(id: string, body: string): void;
   /** Every SOQL string sent, in order. */
   readonly queries: string[];
   /** Every URL fetched (token, query, queryMore, limits), in order. */
@@ -52,6 +56,7 @@ export function installFakeSalesforce(): FakeSalesforce {
   const handlers: { pattern: RegExp; result: QueryResult | QueryHandler }[] = [];
   const queries: string[] = [];
   const urls: string[] = [];
+  const contents = new Map<string, string>();
   const pendingPages = new Map<string, { rest: readonly (readonly Record<string, unknown>[])[] }>();
   let locatorSeq = 0;
 
@@ -81,6 +86,12 @@ export function installFakeSalesforce(): FakeSalesforce {
       return json({ access_token: 'FAKE_TOKEN', instance_url: INSTANCE_URL });
     }
     if (url.pathname === `/services/data/${API_VERSION}/limits/`) return json({});
+    const content = new RegExp(`^/services/data/${API_VERSION}/sobjects/ContentNote/([A-Za-z0-9]+)/Content$`).exec(url.pathname);
+    if (content) {
+      const body = contents.get(content[1]!);
+      if (body === undefined) throw new Error(`fakeSalesforce: no content registered for ContentNote ${content[1]}`);
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/html' } });
+    }
 
     const queued = pendingPages.get(url.pathname);
     if (queued) {
@@ -106,6 +117,9 @@ export function installFakeSalesforce(): FakeSalesforce {
   return {
     on(pattern, result) {
       handlers.push({ pattern, result });
+    },
+    noteContent(id, body) {
+      contents.set(id, body);
     },
     queries,
     urls,

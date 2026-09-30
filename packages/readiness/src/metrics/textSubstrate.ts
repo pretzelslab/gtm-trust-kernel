@@ -84,6 +84,9 @@ export function medianNoteLengthChars(sample: CoverageSample, _config: MetricCon
   }
 
   const lengths = notes.map((n) => n.body.value.trim().length);
+  // A note whose body is only a preview (Note.bodyTruncated) is at least as
+  // long as shown, so the median is a lower bound.
+  const truncated = notes.filter((n) => n.bodyTruncated).length;
 
   return {
     metric: 'median_note_length_chars',
@@ -91,6 +94,9 @@ export function medianNoteLengthChars(sample: CoverageSample, _config: MetricCon
     value: median(lengths),
     sampleSize: notes.length,
     lowConfidence: notes.length < LOW_CONFIDENCE_SAMPLE_SIZE,
+    ...(truncated > 0
+      ? { floor: true, note: `${truncated} of ${notes.length} sampled notes are previews, not full text; value is a floor` }
+      : {}),
   };
 }
 

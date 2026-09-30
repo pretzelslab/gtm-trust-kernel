@@ -50,6 +50,11 @@ as unfilled. Use `str.trim().length > 1`.
 qualifying Activity (Task or Event) dated in the trailing 30 days, linked
 either directly to the opportunity or to a Contact who has an opportunity
 role on it.
+**Salesforce sources (2026-09-30):** `Task` and `Event` (meetings) with
+`WhatId` = the opportunity, merged per opportunity under the same
+`activitiesPerOpportunityLimit`. Activities logged only against a contact
+with a role on the opportunity are not yet read (deferred; see README
+Known gaps).
 **Qualifying activity:** has a real timestamp; is not a system-generated
 task from a workflow rule; is not a mass-email send record; is not a
 field-history entry.
@@ -82,6 +87,11 @@ contact).
 or logged call-note record, of any length.
 **Distinction from `substantive_note_rate`:** this metric doesn't judge
 content quality, only presence. A one-word note counts here.
+**Salesforce sources (2026-09-30):** legacy `Note` records plus Enhanced
+Notes (`ContentNote`, linked to the opportunity through
+`ContentDocumentLink`), merged per opportunity under the same
+`notesPerOpportunityLimit`. The same merged notes feed every D6 metric and
+`outcome_evidence_retention_rate`.
 **Threshold:** `note_coverage_rate`.
 
 ### owner_id_fill_rate
@@ -422,6 +432,14 @@ opportunity regardless of stage), so no new hydration is needed.
 — computed over the same set as `substantive_note_rate`'s denominator: all
 sampled notes from open + closed opportunities, not just the substantive
 ones.
+**Floor (2026-09-30):** a note whose body is only a preview
+(`Note.bodyTruncated`) is at least as long as shown, so when any sampled
+note is one, the value is reported as a floor. On Salesforce this happens
+to an Enhanced Note whose `TextPreview` hits the preview cap after the
+run's full-text fetch budget (`SF_NOTE_FULLTEXT_FETCH_LIMIT`, default 200)
+is spent. Other D6 metrics read the same preview text; a preview at the cap
+is well past the 40-character substantive bar, but `pii_density` could
+miss a pattern that sits past the preview.
 **Threshold:** `median_note_length_chars`.
 
 ### pii_density

@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ACTIVITY_CAPTURE_HINT, loadSalesforceConfigFromEnv } from '../src/salesforce.js';
+import { ACTIVITY_CAPTURE_HINT, ENHANCED_NOTE_PREVIEW_CAP, htmlToText, loadSalesforceConfigFromEnv } from '../src/salesforce.js';
 import { AdapterError } from '../src/types.js';
 import { installFakeSalesforce, sfId, sfRef } from './support/fakeSalesforce.js';
 
@@ -133,6 +133,7 @@ describe('SalesforceAdapter (fake API)', () => {
         { Id: sfId('002', 1), ParentId: parent, Title: 't', Body: 'Discussed pricing with the buyer.', OwnerId: sfId('005', 1), CreatedDate: '2026-09-01T00:00:00.000+0000', SystemModstamp: '2026-09-01T00:00:00.000+0000' },
       ];
     });
+    sf.on(/FROM ContentDocumentLink/, []);
     const adapter = sf.adapter();
     const result = await adapter.getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
     expect(result.items).toHaveLength(1);
@@ -188,6 +189,139 @@ describe('SalesforceAdapter (fake API)', () => {
       expect(() => loadSalesforceConfigFromEnv({ ...base, SF_ACTIVITY_CAPTURE: 'yes' })).toThrow(
         /Invalid SF_ACTIVITY_CAPTURE value "yes"\. Use one of: auto, manual/,
       );
+    });
+  });
+
+  describe('Enhanced Notes (ContentNote)', () => {
+    const at = (day: number) => `2026-09-${String(day).padStart(2, '0')}T00:00:00.000+0000`;
+    const legacyNote = (n: number, day: number) => ({
+      Id: sfId('002', n), ParentId: OPP_1, Title: 't', Body: `legacy ${n}`, OwnerId: null, CreatedDate: at(day), SystemModstamp: at(day),
+    });
+    const contentNote = (n: number, day: number, preview: string) => ({
+      Id: sfId('069', n), Title: 't', TextPreview: preview, OwnerId: sfId('005', 1), CreatedDate: at(day),
+    });
+
+    it('merges legacy and Enhanced Notes per opportunity, newest kept, as user-authored text', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Note WHERE ParentId/, [legacyNote(1, 3), legacyNote(2, 1)]);
+      sf.on(/FROM ContentDocumentLink/, [{ ContentDocumentId: sfId('069', 1), LinkedEntityId: OPP_1 }]);
+      sf.on(/FROM ContentNote WHERE Id IN/, [contentNote(1, 2, 'enhanced short note')]);
+      const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
+
+      expect(result.items.map((n) => n.body.value)).toEqual(['legacy 2', 'enhanced short note', 'legacy 1']);
+      const enhanced = result.items[1]!;
+      expect(enhanced.relatedTo.map((r) => r.id)).toEqual([OPP_1]);
+      expect(enhanced.body.tier).toBe(result.items[0]!.body.tier);
+      expect(enhanced.bodyTruncated).toBeUndefined();
+      expect(sf.queries.find((q) => q.includes('FROM ContentDocumentLink'))).toMatch(
+        /WHERE LinkedEntityId IN \(.*\) AND ContentDocument\.FileType = 'SNOTE'/,
+      );
+      expect(result.apiCallsConsumed).toBe(3); // legacy + link + ContentNote
+    });
+
+    it('applies the per-opportunity limit to legacy and Enhanced Notes combined', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Note WHERE ParentId/, Array.from({ length: 150 }, (_, i) => legacyNote(i + 1, 1)));
+      sf.on(/FROM ContentDocumentLink/, Array.from({ length: 60 }, (_, i) => ({ ContentDocumentId: sfId('069', i + 1), LinkedEntityId: OPP_1 })));
+      sf.on(/FROM ContentNote WHERE Id IN/, Array.from({ length: 60 }, (_, i) => contentNote(i + 1, 2, 'short')));
+      const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
+      expect(result.items).toHaveLength(200);
+      expect(result.truncatedOpportunityIds.has(OPP_1)).toBe(true);
+      // The 60 newer Enhanced Notes are all kept; 10 of the older legacy notes are cut.
+      expect(result.items.filter((n) => n.body.value === 'short')).toHaveLength(60);
+    });
+
+    it('fetches the full text only for a preview at the cap, as plain text', async () => {
+      const sf = installFakeSalesforce();
+      const capped = 'x'.repeat(ENHANCED_NOTE_PREVIEW_CAP);
+      sf.on(/FROM Note WHERE ParentId/, []);
+      sf.on(/FROM ContentDocumentLink/, [
+        { ContentDocumentId: sfId('069', 1), LinkedEntityId: OPP_1 },
+        { ContentDocumentId: sfId('069', 2), LinkedEntityId: OPP_1 },
+      ]);
+      sf.on(/FROM ContentNote WHERE Id IN/, [contentNote(1, 1, capped), contentNote(2, 2, 'short')]);
+      sf.noteContent(sfId('069', 1), '<p>Full &amp; complete</p><p>second line</p>');
+      const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
+
+      expect(result.items.map((n) => n.body.value)).toEqual(['Full & complete\nsecond line', 'short']);
+      expect(sf.urls.filter((u) => u.includes('/sobjects/ContentNote/'))).toEqual([
+        `/services/data/v62.0/sobjects/ContentNote/${sfId('069', 1)}/Content`,
+      ]);
+      expect(result.apiCallsConsumed).toBe(4);
+    });
+
+    it('stops fetching full text at the per-run budget and marks the rest bodyTruncated', async () => {
+      const sf = installFakeSalesforce();
+      const capped = 'y'.repeat(ENHANCED_NOTE_PREVIEW_CAP);
+      sf.on(/FROM Note WHERE ParentId/, []);
+      sf.on(/FROM ContentDocumentLink/, (soql) => {
+        const opp = /IN \('(\w+)'\)/.exec(soql)![1]!;
+        return [{ ContentDocumentId: opp === OPP_1 ? sfId('069', 1) : sfId('069', 2), LinkedEntityId: opp }];
+      });
+      sf.on(/FROM ContentNote WHERE Id IN/, (soql) => [contentNote(soql.includes(sfId('069', 1)) ? 1 : 2, 1, capped)]);
+      sf.noteContent(sfId('069', 1), 'full one');
+      sf.noteContent(sfId('069', 2), 'full two');
+      const adapter = sf.adapter({ noteFullTextFetchLimit: 1 });
+
+      const first = await adapter.getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
+      expect(first.items[0]!.body.value).toBe('full one');
+      // The budget is per adapter instance (one run), so a later call has none left.
+      const second = await adapter.getNotesByOpportunity([sfRef('opportunity', OPP_2)]);
+      expect(second.items[0]!.body.value).toBe(capped);
+      expect(second.items[0]!.bodyTruncated).toBe(true);
+    });
+
+    it('reads SF_NOTE_FULLTEXT_FETCH_LIMIT, and rejects a non-number', () => {
+      const base = { SF_CLIENT_ID: 'id', SF_CLIENT_SECRET: 'secret', SF_INSTANCE_URL: 'https://example.my.salesforce.com' };
+      expect(loadSalesforceConfigFromEnv(base).noteFullTextFetchLimit).toBeUndefined();
+      expect(loadSalesforceConfigFromEnv({ ...base, SF_NOTE_FULLTEXT_FETCH_LIMIT: '0' }).noteFullTextFetchLimit).toBe(0);
+      expect(() => loadSalesforceConfigFromEnv({ ...base, SF_NOTE_FULLTEXT_FETCH_LIMIT: 'lots' })).toThrow(
+        /Invalid SF_NOTE_FULLTEXT_FETCH_LIMIT/,
+      );
+    });
+
+    it('reduces note HTML to plain text', () => {
+      expect(htmlToText('<p>A&nbsp;&lt;b&gt;</p><br/>B &quot;c&quot; &#39;d&#39;')).toBe('A <b>\nB "c" \'d\'');
+    });
+  });
+
+  describe('Events (meetings)', () => {
+    const task = (n: number, date: string) => ({
+      Id: sfId('00T', n), WhoId: null, WhatId: OPP_1, Subject: `task ${n}`, Description: null, ActivityDate: date,
+      CreatedDate: '2026-01-01T00:00:00.000+0000', SystemModstamp: '2026-01-01T00:00:00.000+0000',
+    });
+    const event = (n: number, dateTime: string | null, date: string | null = null) => ({
+      Id: sfId('00U', n), WhoId: sfId('003', 1), WhatId: OPP_1, Subject: `meeting ${n}`, Description: 'agenda', ActivityDate: date,
+      ActivityDateTime: dateTime, CreatedDate: '2026-01-02T00:00:00.000+0000', SystemModstamp: '2026-01-02T00:00:00.000+0000',
+    });
+
+    it('merges Events with Tasks by date, as meetings with the same trust tier', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Task WHERE WhatId/, [task(1, '2026-09-10'), task(2, '2026-09-01')]);
+      sf.on(/FROM Event WHERE WhatId/, [event(1, '2026-09-05T15:00:00.000+0000'), event(2, null, '2026-08-20')]);
+      const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1)]);
+
+      expect(result.items.map((a) => [a.subject?.value, a.kind])).toEqual([
+        ['meeting 2', 'meeting'],
+        ['task 2', 'other'],
+        ['meeting 1', 'meeting'],
+        ['task 1', 'other'],
+      ]);
+      const meeting = result.items[2]!;
+      expect(meeting.occurredAt).toBe('2026-09-05T15:00:00.000+0000');
+      expect(meeting.relatedTo.map((r) => r.objectType)).toEqual(['opportunity', 'contact']);
+      expect(meeting.body!.tier).toBe(result.items[1]!.subject!.tier);
+      expect(result.apiCallsConsumed).toBe(2);
+    });
+
+    it('applies the per-opportunity limit to Tasks and Events combined', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Task WHERE WhatId/, Array.from({ length: 150 }, (_, i) => task(i + 1, '2026-08-01')));
+      sf.on(/FROM Event WHERE WhatId/, Array.from({ length: 60 }, (_, i) => event(i + 1, '2026-09-01T00:00:00.000+0000')));
+      const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1)]);
+      expect(result.items).toHaveLength(200);
+      expect(result.truncatedOpportunityIds.has(OPP_1)).toBe(true);
+      expect(result.items.filter((a) => a.kind === 'meeting')).toHaveLength(60);
     });
   });
 });
