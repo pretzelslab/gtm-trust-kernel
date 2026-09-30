@@ -871,10 +871,11 @@ the doc describes.)
 
 ## Handoff, 2026-09-30 (end of session)
 
-**HEAD:** the two-tier sampling commit on master, pushed with
-`fd5d9e5` and `c7e0dc3`; nothing is local only. **CI:** `npm run ci` green
-locally after every commit; GitHub CI green through `c7e0dc3` (run
-36757065795), and on the sampling commit per the session report.
+**HEAD:** the README and comment fix commit on master, after `b2c197f`
+(Salesforce setup guide) and `2f41e5d` (two-tier sampling); everything is
+pushed, nothing is local only. **CI:** `npm run ci` green locally after
+every commit; GitHub CI green on `c7e0dc3` (run 36757065795), `2f41e5d`
+(run 36758920560) and `b2c197f` (run 36760523849).
 
 **Done today:** Phase 3a (see its entry above) and the three pending
 decisions: stage-map hint only when a stage is unmapped; report scripts

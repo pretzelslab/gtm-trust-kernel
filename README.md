@@ -63,7 +63,7 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 - Each metric is rated **viable**, **degraded** or **blocked** against a threshold. For some metrics lower is better (for example, days since a deal was last touched), and the threshold shows `≤`.
 - Each AI use case gets a verdict based on the metrics it needs: **viable**, **degraded**, **not measured** or **blocked**. **Blocked** means the data it needs is missing or poor. **Not measured** means the scan can't see that data (for example, your CRM connection doesn't report how activity is captured), so it says nothing either way; where a setting would fix that, the plain-English report says which. The report lists every metric holding a use case back.
 - A **FLOOR** badge means the sample hit a limit, so the true value is at least what is shown.
-- The scan reads the newest deals first. If it stops before reaching every open deal, the report says how many older open deals were left out.
+- Sampling has two tiers. The scan reads every eligible deal (all open deals, plus deals closed in the last 12 months), up to 5,000, newest first; checks that need only basic deal fields run over all of it. Checks that need notes, activities or history run on a random sample drawn from the whole scan, up to 20 deals per stage by default, with a fixed seed so the same data gives the same sample. The report states both sizes and the seed, and says so if any eligible deals were left unread.
 - `latest-plain.html` is a short plain-English summary of the verdicts.
 
 ## Privacy

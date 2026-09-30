@@ -504,8 +504,7 @@ const OPPORTUNITY_FIELDS = [
   'SystemModstamp',
 ];
 const CONTACT_FIELDS = ['Id', 'AccountId', 'Name', 'Title', 'Email', 'CreatedDate', 'SystemModstamp'];
-// Task only — Event (calendar meetings) is out of scope for this adapter;
-// see STATUS.md known gaps.
+// Tasks. Events (meetings) are read too, with EVENT_FIELDS below.
 const TASK_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'CreatedDate', 'SystemModstamp'];
 // Event (meetings) is read by getActivitiesByOpportunity only; listActivities
 // stays Task-only (no metric reads it).
