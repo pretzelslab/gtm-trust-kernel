@@ -11,7 +11,11 @@
  *       copied or edited proposal is rejected. Non-rep creators cannot approve
  *       their own proposals; a rep may self-approve (the rep allowlist is only
  *       nextStep/closeDate). The approver's role is not checked.
- *   I3  Every apply carries the concurrency token read at proposal time.
+ *   I3  The first write to each record carries the concurrency token read at
+ *       proposal time. A later change to the same record that was read at that
+ *       same token chains from the token the previous write returned; a change
+ *       read at any other token is sent as-is. An outside edit in between
+ *       still conflicts. Rollback writes always chain.
  *   I4  Every applied write stores an inverse patch, so rollback is first class.
  *   I5  Every transition is appended to a hash-chained ledger.
  *   I6  A proposal older than its TTL expires rather than applying to drifted state.
@@ -110,6 +114,46 @@ export interface KillSwitch {
 
 const PARTIAL_ROLLBACK_NOTE =
   '; partial writes were not fully rolled back, so this proposal cannot be retried: create a new one';
+
+/**
+ * I3 token chaining within one apply() or rollback run. Writes are one field
+ * at a time, so the second write to a record must expect the token the first
+ * write produced, not the proposal-time token. Only tokens returned by this
+ * run's own successful writes are chained; an outside edit still conflicts.
+ */
+class TokenChain {
+  /** Per record: the expected token of this run's first write, and the latest token it produced. */
+  private readonly records = new Map<string, { readonly first: string; latest: string }>();
+
+  private static key(ref: RecordRef): string {
+    return `${ref.crm}:${ref.orgId}:${ref.objectType}:${ref.id}`;
+  }
+
+  /**
+   * apply(): chain only if this change was read at the same token as the
+   * run's first write to the record. A change read at any other token (for
+   * example a stale one) is sent as-is, so it conflicts.
+   */
+  chainIfSameRead(w: FieldWrite): FieldWrite {
+    const r = this.records.get(TokenChain.key(w.ref));
+    return r && r.first === w.expectedConcurrencyToken ? { ...w, expectedConcurrencyToken: r.latest } : w;
+  }
+
+  /** Rollback: undo tokens come from this kernel's own writes, so always chain. */
+  chain(w: FieldWrite): FieldWrite {
+    const r = this.records.get(TokenChain.key(w.ref));
+    return r ? { ...w, expectedConcurrencyToken: r.latest } : w;
+  }
+
+  /** Records a write's outcome. `sent` is the write as sent to the adapter. */
+  record(sent: FieldWrite, outcome: WriteOutcome): void {
+    if (outcome.status !== 'applied') return;
+    const k = TokenChain.key(sent.ref);
+    const r = this.records.get(k);
+    if (r) r.latest = outcome.newConcurrencyToken;
+    else this.records.set(k, { first: sent.expectedConcurrencyToken, latest: outcome.newConcurrencyToken });
+  }
+}
 
 /** Recursively freezes a plain-data value in place and returns it. */
 function deepFreeze<T>(value: T): T {
@@ -292,15 +336,16 @@ export class ProposalKernel {
 
     const applied: FieldWrite[] = [];
     const inverse: FieldWrite[] = [];
+    const tokens = new TokenChain();
 
     for (const c of p.changes) {
-      const write: FieldWrite = {
+      const write: FieldWrite = tokens.chainIfSameRead({
         ref: c.ref,
         field: c.field,
         newValue: c.newValue,
         previousValue: c.previousValue,
         expectedConcurrencyToken: c.expectedConcurrencyToken,
-      };
+      });
       let outcome: WriteOutcome;
       try {
         outcome = await this.adapter.applyFieldWrite(write);
@@ -342,6 +387,7 @@ export class ProposalKernel {
         };
       }
 
+      tokens.record(write, outcome);
       applied.push(write);
       inverse.unshift({
         ref: c.ref,
@@ -368,8 +414,11 @@ export class ProposalKernel {
     if (p.status !== 'applied' || !p.inversePatch) {
       throw new KernelError(`nothing to roll back from '${p.status}'`, 'BAD_TRANSITION');
     }
-    for (const w of p.inversePatch) {
+    const tokens = new TokenChain();
+    for (const stored of p.inversePatch) {
+      const w = tokens.chain(stored);
       const outcome = await this.adapter.applyFieldWrite(w);
+      tokens.record(w, outcome);
       if (outcome.status !== 'applied') {
         this.ledger.append({
           kind: 'rollback_failed',
@@ -386,20 +435,32 @@ export class ProposalKernel {
     return { ...p, status: 'rolled_back' };
   }
 
-  /** True only if every inverse write was applied (trivially true when none were needed). */
+  /**
+   * True only if every inverse write was applied (trivially true when none
+   * were needed). Each field that could not be restored, whether the adapter
+   * threw or returned a non-applied outcome, gets a partial_rollback_failed
+   * ledger entry naming it.
+   */
   private async rollbackPartial(p: Proposal, inverse: readonly FieldWrite[]): Promise<boolean> {
     let restored = true;
-    for (const w of inverse) {
+    const tokens = new TokenChain();
+    for (const stored of inverse) {
+      const w = tokens.chain(stored);
+      let failure: Record<string, unknown> | undefined;
       try {
         const outcome = await this.adapter.applyFieldWrite(w);
-        if (outcome.status !== 'applied') restored = false;
-      } catch {
+        tokens.record(w, outcome);
+        if (outcome.status !== 'applied') failure = { outcome: outcome.status };
+      } catch (e) {
+        failure = { error: String(e) };
+      }
+      if (failure) {
         restored = false;
         this.ledger.append({
           kind: 'partial_rollback_failed',
           proposalId: p.id,
           at: this.now().toISOString(),
-          detail: { field: w.field },
+          detail: { field: w.field, recordId: w.ref.id, ...failure },
         });
       }
     }

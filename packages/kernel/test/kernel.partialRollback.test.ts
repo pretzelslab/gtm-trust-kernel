@@ -104,6 +104,20 @@ describe('apply() after a partial write', () => {
     await expect(k.apply(approved, 'org-test')).rejects.toMatchObject({ code: 'NOT_KERNEL_APPROVED' });
   });
 
+  it('logs which field could not be restored when an undo write fails without throwing', async () => {
+    const { k, ledger, approved } = setup((_w, call) => {
+      if (call === 1) return 'pass';
+      if (call === 2) return 'throw';
+      return { status: 'conflict', currentValue: 'someone else', currentToken: 'tok-other' };
+    });
+    await k.apply(approved, 'org-test');
+
+    const failed = ledger.entries().filter((e) => e.kind === 'partial_rollback_failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.detail).toMatchObject({ field: 'nextStep', recordId: 'opp-1', outcome: 'conflict' });
+    expect(ledger.verify()).toEqual({ ok: true });
+  });
+
   it('spends the proposal when field 2 returns a non-applied outcome and the rollback conflicts', async () => {
     const { k, approved } = setup((_w, call) => {
       if (call === 1) return 'pass';
@@ -139,10 +153,9 @@ describe('apply() after a partial write', () => {
     expect(result.status).toBe('failed');
     expect(result.failureReason).not.toMatch(/not fully rolled back/);
 
-    // The retry is accepted by the kernel (not rejected as unapproved) and
-    // reaches the adapter again. Its own outcome is out of scope here.
-    await expect(k.apply(approved, 'org-test')).resolves.toBeDefined();
-    expect(ledger.entries().filter((e) => e.kind === 'apply_failed').length).toBeGreaterThanOrEqual(1);
-    expect(ledger.entries().filter((e) => e.kind === 'apply_failed' || e.kind === 'applied')).toHaveLength(2);
+    // With I3 token chaining, the retry writes both fields on the same record.
+    const retry = await k.apply(approved, 'org-test');
+    expect(retry.status).toBe('applied');
+    expect(ledger.entries().filter((e) => e.kind === 'applied')).toHaveLength(1);
   });
 });
