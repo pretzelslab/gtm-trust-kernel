@@ -360,6 +360,13 @@ function samplePopulationWhere(p: SamplePopulation): string {
   return `(IsClosed = false OR (CloseDate >= ${from} AND CloseDate <= ${to}))`;
 }
 
+/** A Task's kind from its TaskSubtype: Call and Email map across, anything else is other. */
+function taskKind(subtype: string | null): Activity['kind'] {
+  if (subtype === 'Call') return 'call';
+  if (subtype === 'Email') return 'email';
+  return 'other';
+}
+
 /** An Enhanced Note body is stored as simple HTML; reduce it to plain text. */
 export function htmlToText(html: string): string {
   return html
@@ -432,6 +439,8 @@ interface RawTask {
   Subject: string | null;
   Description: string | null;
   ActivityDate: string | null;
+  /** Call, Email, Task, ListEmail, Cadence or LinkedIn; null on older records. */
+  TaskSubtype: string | null;
   CreatedDate: string;
   SystemModstamp: string;
 }
@@ -509,7 +518,7 @@ const OPPORTUNITY_FIELDS = [
 ];
 const CONTACT_FIELDS = ['Id', 'AccountId', 'Name', 'Title', 'Email', 'CreatedDate', 'SystemModstamp'];
 // Tasks. Events (meetings) are read too, with EVENT_FIELDS below.
-const TASK_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'CreatedDate', 'SystemModstamp'];
+const TASK_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'TaskSubtype', 'CreatedDate', 'SystemModstamp'];
 // Event (meetings) is read by getActivitiesByOpportunity only; listActivities
 // stays Task-only (no metric reads it).
 const EVENT_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'ActivityDate', 'ActivityDateTime', 'CreatedDate', 'SystemModstamp'];
@@ -844,10 +853,9 @@ export class SalesforceAdapter implements CrmAdapter {
     return {
       ref: this.ref('activity', raw.Id),
       relatedTo,
-      // Type isn't queried (dropped: not present on every org, and not
-      // read by any metric or report — see STATUS.md), so there's no
-      // signal to distinguish call/email/other here.
-      kind: 'other',
+      // From TaskSubtype, a standard field (Type isn't: it was dropped as
+      // not present on every org, see STATUS.md).
+      kind: taskKind(raw.TaskSubtype),
       direction: 'unknown',
       occurredAt,
       subject: raw.Subject

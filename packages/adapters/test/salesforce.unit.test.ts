@@ -423,6 +423,26 @@ describe('SalesforceAdapter (fake API)', () => {
       expect(result.apiCallsConsumed).toBe(2);
     });
 
+    it('reads TaskSubtype: Call is a call, Email an email, anything else other', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Task WHERE WhatId/, [
+        { ...task(1, '2026-09-04'), TaskSubtype: 'Call' },
+        { ...task(2, '2026-09-03'), TaskSubtype: 'Email' },
+        { ...task(3, '2026-09-02'), TaskSubtype: 'Task' },
+        { ...task(4, '2026-09-01'), TaskSubtype: null },
+      ]);
+      sf.on(/FROM Event WHERE WhatId/, []);
+      const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1)]);
+
+      expect(sf.queries.find((q) => /FROM Task WHERE WhatId/.test(q))).toMatch(/\bTaskSubtype\b/);
+      expect(result.items.map((a) => [a.subject?.value, a.kind])).toEqual([
+        ['task 4', 'other'],
+        ['task 3', 'other'],
+        ['task 2', 'email'],
+        ['task 1', 'call'],
+      ]);
+    });
+
     it('applies the per-opportunity limit to Tasks and Events combined', async () => {
       const sf = installFakeSalesforce();
       sf.on(/FROM Task WHERE WhatId/, Array.from({ length: 150 }, (_, i) => task(i + 1, '2026-08-01')));
