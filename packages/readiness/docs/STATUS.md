@@ -826,3 +826,44 @@ the doc describes.)
   `truncatedOpportunityIds` consumption (`applyTruncationFloor`) and the
   mock's truncation-selection order are both resolved now — see decisions
   above.
+
+---
+
+## Handoff, 2026-09-30 (end of session)
+
+**HEAD:** `664a999` on master. **Pushed:** up to `6cc3d0b` (origin/master).
+**Local only, not pushed:** 10 commits, `7111b08..664a999`. **CI:** `npm run
+ci` green locally at 579 tests after every commit; GitHub CI has not run
+on the local commits.
+
+**Phase 3a summary (all local):** "Not measured" verdict (tool can't see
+the data) vs Blocked (data missing), with D5 blocked when no second source
+is connected and bool gates below target blocked; plain-English blocked
+reason ignores not-measured gates; in-memory Salesforce API fake and unit
+tests; contact roles loaded in listings; `SF_ACTIVITY_CAPTURE` declared
+setting with adapter-supplied fix hints; Enhanced Notes (preview, full
+text up to `SF_NOTE_FULLTEXT_FETCH_LIMIT`, floor past it) and Events read;
+eligible population sampled newest created first and counted, with an
+older-open-deals-excluded notice; custom stage map (`SF_STAGE_MAP_PATH`)
+with unmapped history rows skipped; docs. Details in the 2026-09-30 entry
+above.
+
+**Pending decisions (verbatim):**
+- full-population sampling up to 5,000 with 20-per-stratum as a floor (early exit removed or behind --quick, off by default)
+- stage-map hint only when unmapped count > 0, never print names
+- prereport build step so report never runs stale dist, plus a CI guard
+
+**Live-org questions for the Developer Edition smoke run:**
+- Enhanced Notes link filter (`ContentDocumentLink ... ContentDocument.FileType = 'SNOTE'`)
+- 255 preview cap (`ContentNote.TextPreview`, `ENHANCED_NOTE_PREVIEW_CAP`)
+- full-text endpoint (`sobjects/ContentNote/{id}/Content` and its HTML)
+- `COUNT()` responses
+- meeting order (Event `ActivityDateTime` ordering)
+
+**Next, in order:**
+1. Three commits, one per pending decision above.
+2. Push (only on the user's word).
+3. Smoke run on the Developer Edition org (the user runs it; until the
+   prereport build step lands, run `npm run build -w
+   @gtm-trust-kernel/adapters` first).
+4. Phase 3b: Salesforce contract tests, `--fail-on` (opt-in, default off), CI.
