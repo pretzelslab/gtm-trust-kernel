@@ -228,6 +228,10 @@ const PLAN = [
   { key: 'enhancedNoteLink', sobject: 'ContentDocumentLink', label: 'Link: SEED-Enhanced note to SEED-Prospecting deal', optional: true, needs: 'enhancedNote', fields: (ids) => ({ ContentDocumentId: ids.enhancedNote, LinkedEntityId: ids.oppProspecting, ShareType: 'V' }) },
   { key: 'task', sobject: 'Task', label: `${PREFIX}Call about pricing (Task, completed 3 days ago, on SEED-Prospecting deal)`, fields: (ids) => ({ Subject: `${PREFIX}Call about pricing`, WhatId: ids.oppProspecting, WhoId: ids.contact, Status: 'Completed', ActivityDate: isoDate(-3) }) },
   { key: 'event', sobject: 'Event', label: `${PREFIX}Discovery meeting (Event, 2 days ago, on SEED-Prospecting deal)`, fields: (ids) => ({ Subject: `${PREFIX}Discovery meeting`, WhatId: ids.oppProspecting, WhoId: ids.contact, StartDateTime: isoDateTime(-2, 15), EndDateTime: isoDateTime(-2, 16) }) },
+  // Created after SEED-Discovery meeting but dated before it, so ordering by
+  // ActivityDateTime differs from creation order.
+  { key: 'earlierEvent', sobject: 'Event', label: `${PREFIX}Earlier meeting (Event, 5 days ago, on SEED-Prospecting deal)`, fields: (ids) => ({ Subject: `${PREFIX}Earlier meeting`, WhatId: ids.oppProspecting, WhoId: ids.contact, StartDateTime: isoDateTime(-5, 15), EndDateTime: isoDateTime(-5, 16) }) },
+  { key: 'callTask', sobject: 'Task', label: `${PREFIX}Logged call (Task, TaskSubtype Call, completed 4 days ago, on SEED-Prospecting deal)`, fields: (ids) => ({ Subject: `${PREFIX}Logged call`, WhatId: ids.oppProspecting, WhoId: ids.contact, TaskSubtype: 'Call', Status: 'Completed', ActivityDate: isoDate(-4) }) },
 ];
 
 /** After creating: the stage change, so OpportunityHistory gains a row. */
