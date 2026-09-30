@@ -23,7 +23,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "report": "tsx src/report/cli.ts",
-    "narrative:smoke": "tsx scripts/narrativeSmoke.ts"
+    "report": "tsx --conditions=source src/report/cli.ts",
+    "narrative:smoke": "tsx --conditions=source scripts/narrativeSmoke.ts"
   }
 }

@@ -51,10 +51,13 @@ stratum is full (`sample.ts`, `all_strata_full`), so with newest-first
 order the sample is drawn from the newest deals even on small orgs, and
 the exclusion notice will usually show on a real org.
 
-**Running the report from source:** `npm run report` runs under tsx, which
-resolves `@gtm-trust-kernel/adapters` to its built `dist/`, so build the
-adapters package first (`npm run build -w @gtm-trust-kernel/adapters`) or
-the report runs against stale adapter code. Tests resolve source directly.
+**Running the report from source:** `npm run report` (and
+`narrative:smoke`) run `tsx --conditions=source`, so
+`@gtm-trust-kernel/adapters` resolves to its `src/`, never a stale
+`dist/`; no build step first. The published `gtm-trust-kernel` bin still
+runs `dist/cli.js` under plain node and resolves adapters to `dist/`.
+`test/scriptResolution.test.ts` checks both, and CI runs the report with
+no build, so a fallback to `dist/` fails there.
 
 ## Status as of 2026-09-26
 
