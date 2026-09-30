@@ -324,7 +324,9 @@ export interface HydrateNotesResult {
  * capabilities().childRecordBatchLimit (advisory; chunking is this
  * function's job, same as hydrateAccounts' accountBatchLimit chunking).
  * Not gated on any capability — notes are always readable regardless of
- * activitySync (see CrmAdapter.getNotesByOpportunity's docblock).
+ * activitySync (see CrmAdapter.getNotesByOpportunity's docblock). Re-reads
+ * capabilities().notesComplete afterwards: the adapter only knows whether
+ * it found notes it couldn't read once it has looked.
  */
 export async function hydrateNotes(sample: CoverageSample, adapter: CrmAdapter): Promise<HydrateNotesResult> {
   const sortedRefs = sortedOpportunityRefs(sample);
@@ -347,7 +349,12 @@ export async function hydrateNotes(sample: CoverageSample, adapter: CrmAdapter):
   const notesByOpportunity: ReadonlyMap<string, readonly Note[]> = groupByOpportunity(allNotes, oppIds);
 
   return {
-    sample: { ...sample, notesByOpportunity, notesTruncatedOpportunityIds },
+    sample: {
+      ...sample,
+      capabilities: { ...sample.capabilities, notesComplete: adapter.capabilities().notesComplete },
+      notesByOpportunity,
+      notesTruncatedOpportunityIds,
+    },
     apiCallsConsumed,
   };
 }

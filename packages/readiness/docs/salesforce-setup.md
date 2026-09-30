@@ -73,6 +73,23 @@ Minimum, **unverified** on a live org:
   admin user in a throwaway Developer Edition org. With narrower
   sharing the report describes only that user's slice.
 
+### Enhanced Notes
+
+Enhanced Notes (the Notes related list in Lightning) are read through the
+`ContentNote` object. Before any reads, the report checks once whether the
+Run As user can query it.
+
+1. Setup, then Notes Settings, then **Enable Notes**.
+2. Check that the Run As user's profile or a permission set gives read
+   access to Notes. On the 2026-09-30 smoke run, `ContentNote` was still
+   not queryable after Notes were enabled (the describe answered 404
+   `NOT_FOUND`), so check this even when Notes are on.
+
+If Enhanced Notes are linked to sampled deals but `ContentNote` can't be
+read, the note metrics show as **Not measured**, with a hint naming these
+two steps; the run doesn't fail. With no Enhanced Notes linked, nothing is
+missing and the note metrics are scored as usual.
+
 ## 4. Settings (`.env`)
 
 Copy `.env.example` at the repo root to `.env` and fill it in. The report

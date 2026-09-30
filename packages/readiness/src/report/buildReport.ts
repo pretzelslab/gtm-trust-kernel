@@ -287,6 +287,12 @@ const DEFAULT_SEED = 'report';
 const SETTING_HINT_KEY: Partial<Record<MetricId, keyof NonNullable<AdapterCapabilities['settingHints']>>> = {
   activity_capture_rate: 'activitySync',
   stage_activity_contradiction_rate: 'activitySync',
+  note_coverage_rate: 'notesComplete',
+  substantive_note_rate: 'notesComplete',
+  median_note_length_chars: 'notesComplete',
+  outcome_evidence_retention_rate: 'notesComplete',
+  pii_density: 'notesComplete',
+  untrusted_text_ratio: 'notesComplete',
 };
 
 function capabilitiesGating(metric: MetricId): readonly CapabilityRef[] {
@@ -308,6 +314,9 @@ export async function buildReportData(
     asOf: options.asOf,
   };
 
+  // Before any read: the adapter's one-off checks (e.g. whether Salesforce
+  // Enhanced Notes are readable) shape what later calls do.
+  await adapter.probe?.();
   const sampleResult = await runSample(adapter, sampleConfig, () => true);
   if ('cancelled' in sampleResult) {
     throw new Error('unreachable: report always auto-confirms sampling');

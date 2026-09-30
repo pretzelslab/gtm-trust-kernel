@@ -3,7 +3,7 @@
  */
 
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
-import { DAY_MS, applyTruncationFloor, hasQualifyingActivity, rateOverOpportunities } from './shared.js';
+import { DAY_MS, applyTruncationFloor, hasQualifyingActivity, notesIncompleteResult, rateOverOpportunities } from './shared.js';
 
 export function closeDateFillRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
   return rateOverOpportunities('close_date_fill_rate', sample.openOpportunities, (o) => o.closeDate != null);
@@ -45,6 +45,8 @@ export function nextStepFillRate(sample: CoverageSample, _config: MetricConfig):
  * relying on this run's data completeness.
  */
 export function noteCoverageRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  const incomplete = notesIncompleteResult('note_coverage_rate', sample);
+  if (incomplete) return incomplete;
   const result = rateOverOpportunities(
     'note_coverage_rate',
     sample.openOpportunities,

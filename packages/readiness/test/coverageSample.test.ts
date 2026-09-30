@@ -430,6 +430,31 @@ describe('hydrateNotes', () => {
     expect(hydrated.notesByOpportunity.has('open-2')).toBe(false);
   });
 
+  it("picks up the adapter's notesComplete as it stands after the notes are read", async () => {
+    // The Salesforce adapter only knows notes are incomplete once it has
+    // found Enhanced Notes it can't read, so the snapshot taken before
+    // hydration can't be trusted for this one field.
+    class LearnsDuringRead extends MockAdapter {
+      private read = false;
+      override capabilities(): AdapterCapabilities {
+        return { ...super.capabilities(), notesComplete: !this.read };
+      }
+      override async getNotesByOpportunity(...args: Parameters<MockAdapter['getNotesByOpportunity']>) {
+        this.read = true;
+        return super.getNotesByOpportunity(...args);
+      }
+    }
+    const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
+    const adapter = new LearnsDuringRead(ORG, {
+      accounts: [], opportunities: [], contacts: [], activities: [], notes: [], stageHistory: [], ownerChanges: [], nextStepChanges: [],
+    });
+    const sample = buildCoverageSample(result, adapter.capabilities());
+    expect(sample.capabilities.notesComplete).toBe(true);
+
+    const { sample: hydrated } = await hydrateNotes(sample, adapter);
+    expect(hydrated.capabilities.notesComplete).toBe(false);
+  });
+
   it('leaves an opportunity with no related notes absent from the map (not an error)', async () => {
     const result = makeSampleResult({ discovery: [opp('open-1', 'discovery', 'acc-1')] });
     const adapter = makeAdapter([]);

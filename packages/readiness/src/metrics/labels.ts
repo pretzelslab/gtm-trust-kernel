@@ -7,7 +7,7 @@ import { CANONICAL_STAGE_ORDER, type CanonicalStage } from '@gtm-trust-kernel/ad
 const INTERMEDIATE_STAGES: ReadonlySet<CanonicalStage> = new Set(CANONICAL_STAGE_ORDER);
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
 import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
-import { rateOverOpportunities, standardDeviation } from './shared.js';
+import { notesIncompleteResult, rateOverOpportunities, standardDeviation } from './shared.js';
 
 /** A canonical stage needs at least this many closed opportunities passing through it to contribute a meaningful per-stage win rate. */
 const MIN_CLOSED_OPPORTUNITIES_PER_STAGE = 5;
@@ -58,6 +58,8 @@ export function closedDealCountTwelveMonths(sample: CoverageSample, _config: Met
  * logical necessity, made the other way for this metric.
  */
 export function outcomeEvidenceRetentionRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  const incomplete = notesIncompleteResult('outcome_evidence_retention_rate', sample);
+  if (incomplete) return incomplete;
   return rateOverOpportunities(
     'outcome_evidence_retention_rate',
     sample.closedOpportunities,

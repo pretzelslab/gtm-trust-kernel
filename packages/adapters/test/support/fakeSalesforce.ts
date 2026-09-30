@@ -11,6 +11,9 @@
  *  - GET  /services/data/<v>/limits/: an empty object (health()).
  *  - GET  /services/data/<v>/sobjects/ContentNote/<id>/Content: the body
  *    registered with noteContent(id, body).
+ *  - GET  /services/data/<v>/sobjects/<name>/describe: the result
+ *    registered with sobjectDescribe(name, result); unregistered fails.
+ *    A thrown Error in the result simulates a network failure.
  *
  * Every SOQL string the adapter sends is recorded in `queries`, in order,
  * so tests can assert what was asked as well as what was mapped. A query
@@ -40,6 +43,8 @@ export interface FakeSalesforce {
   on(pattern: RegExp, result: QueryResult | QueryHandler): void;
   /** Register an Enhanced Note's full body, served from its Content endpoint. */
   noteContent(id: string, body: string): void;
+  /** Answer sobjects/<name>/describe with a describe body, an HTTP error, or a network failure. */
+  sobjectDescribe(name: string, result: Record<string, unknown> | { readonly status: number; readonly body?: string } | Error): void;
   /** Every SOQL string sent, in order. */
   readonly queries: string[];
   /** Every URL fetched (token, query, queryMore, limits), in order. */
@@ -57,6 +62,7 @@ export function installFakeSalesforce(): FakeSalesforce {
   const queries: string[] = [];
   const urls: string[] = [];
   const contents = new Map<string, string>();
+  const describes = new Map<string, Record<string, unknown> | { readonly status: number; readonly body?: string } | Error>();
   const pendingPages = new Map<string, { rest: readonly (readonly Record<string, unknown>[])[] }>();
   let locatorSeq = 0;
 
@@ -93,6 +99,15 @@ export function installFakeSalesforce(): FakeSalesforce {
       return new Response(body, { status: 200, headers: { 'Content-Type': 'text/html' } });
     }
 
+    const describe = new RegExp(`^/services/data/${API_VERSION}/sobjects/([A-Za-z]+)/describe$`).exec(url.pathname);
+    if (describe) {
+      const result = describes.get(describe[1]!);
+      if (result === undefined) throw new Error(`fakeSalesforce: no describe registered for ${describe[1]}`);
+      if (result instanceof Error) throw result;
+      if (typeof result.status === 'number') return answer(result as { status: number; body?: string });
+      return json(result);
+    }
+
     const queued = pendingPages.get(url.pathname);
     if (queued) {
       pendingPages.delete(url.pathname);
@@ -120,6 +135,9 @@ export function installFakeSalesforce(): FakeSalesforce {
     },
     noteContent(id, body) {
       contents.set(id, body);
+    },
+    sobjectDescribe(name, result) {
+      describes.set(name, result);
     },
     queries,
     urls,

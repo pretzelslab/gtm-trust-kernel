@@ -6,7 +6,7 @@
 import { getDomain } from 'tldts';
 import type { Activity, Opportunity } from '@gtm-trust-kernel/adapters/model/canonical.js';
 import type { MetricId } from '../rubric.js';
-import type { MetricResult } from './types.js';
+import type { CoverageSample, MetricResult } from './types.js';
 import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
 
 export const DAY_MS = 86_400_000;
@@ -272,5 +272,23 @@ export function applyTruncationFloor(
     ...result,
     floor: true,
     note: result.note ? `${result.note} ${floorNote}` : floorNote,
+  };
+}
+
+/**
+ * The not-measured result for a metric that reads notes, when the adapter
+ * found notes it couldn't read (capabilities.notesComplete false); null
+ * otherwise. Scoring only the notes it could read would undercount or skew
+ * the metric, so it isn't scored.
+ */
+export function notesIncompleteResult(metric: MetricId, sample: CoverageSample): MetricResult | null {
+  if (sample.capabilities.notesComplete !== false) return null;
+  return {
+    metric,
+    status: 'not_instrumented',
+    value: null,
+    sampleSize: 0,
+    lowConfidence: false,
+    note: 'adapter found notes in this org that it could not read',
   };
 }

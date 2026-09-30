@@ -64,7 +64,17 @@ export interface AdapterCapabilities {
    */
   readonly settingHints?: {
     readonly activitySync?: string;
+    readonly notesComplete?: string;
   };
+  /**
+   * Optional: false when the org holds notes this adapter found but could
+   * not read (on Salesforce, Enhanced Notes linked to sampled deals when
+   * ContentNote isn't queryable for the Run As user). Absent means true.
+   * Unlike the other fields, it can change during a run: the adapter only
+   * knows once getNotesByOpportunity has looked, so callers re-read it
+   * after reading notes.
+   */
+  readonly notesComplete?: boolean;
   /**
    * Optional: one plain-English sentence telling the user how to map stages
    * this adapter doesn't recognise, shown in the readiness report only when
@@ -297,6 +307,14 @@ export interface CrmAdapter {
   readonly vendor: CrmVendor;
   readonly orgId: string;
   capabilities(): AdapterCapabilities;
+
+  /**
+   * Optional one-off checks before a run (e.g. whether an object is
+   * queryable), whose results later calls and capabilities() use. May make
+   * a few API calls. Must never throw: a check that fails counts as the
+   * feature being unavailable.
+   */
+  probe?(): Promise<void>;
 
   /** Cheap liveness and auth check. Must not consume meaningful quota. */
   health(): Promise<{ ok: boolean; detail?: string }>;

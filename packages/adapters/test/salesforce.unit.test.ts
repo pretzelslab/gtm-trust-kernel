@@ -15,6 +15,7 @@ import {
   htmlToText,
   loadSalesforceConfigFromEnv,
   loadStageMapFile,
+  NOTES_ACCESS_HINT,
   STAGE_MAP_HINT,
 } from '../src/salesforce.js';
 import { AdapterError } from '../src/types.js';
@@ -174,11 +175,95 @@ describe('SalesforceAdapter (fake API)', () => {
     await expect(sf.adapter().listOpportunities({ limit: 200 })).rejects.toThrow(/no handler for SOQL/);
   });
 
+  describe('ContentNote access (probe)', () => {
+    const OPP = sfRef('opportunity', OPP_1);
+    const link = { ContentDocumentId: sfId('069', 1), LinkedEntityId: OPP_1 };
+    const legacy = {
+      Id: sfId('002', 1), ParentId: OPP_1, Title: 't', Body: 'legacy', OwnerId: null,
+      CreatedDate: '2026-09-01T00:00:00.000+0000', SystemModstamp: '2026-09-01T00:00:00.000+0000',
+    };
+    const NOT_FOUND = { status: 404, body: '[{"errorCode":"NOT_FOUND","message":"The requested resource does not exist"}]' };
+    const INVALID_TYPE = { status: 400, body: `[{"message":"sObject type 'ContentNote' is not supported.","errorCode":"INVALID_TYPE"}]` };
+
+    function withNotes(links: readonly Record<string, unknown>[]) {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Note WHERE ParentId/, [legacy]);
+      sf.on(/FROM ContentDocumentLink/, links);
+      return sf;
+    }
+
+    it('reads Enhanced Notes and reports notes complete when ContentNote is queryable', async () => {
+      const sf = withNotes([link]);
+      sf.sobjectDescribe('ContentNote', { name: 'ContentNote', queryable: true });
+      sf.on(/FROM ContentNote WHERE Id IN/, [
+        { Id: sfId('069', 1), Title: 't', TextPreview: 'enhanced', OwnerId: null, CreatedDate: '2026-09-02T00:00:00.000+0000' },
+      ]);
+      const adapter = sf.adapter();
+      await adapter.probe();
+      const result = await adapter.getNotesByOpportunity([OPP]);
+      expect(result.items.map((n) => n.body.value)).toEqual(['legacy', 'enhanced']);
+      expect(adapter.capabilities().notesComplete).toBe(true);
+      expect(adapter.capabilities().settingHints?.notesComplete).toBeUndefined();
+    });
+
+    it.each([
+      ['404 NOT_FOUND', NOT_FOUND],
+      ['400 INVALID_TYPE', INVALID_TYPE],
+      ['500', { status: 500 }],
+      ['a network failure', new Error('socket hang up')],
+      ['queryable: false', { name: 'ContentNote', queryable: false }],
+    ])('treats a describe answering %s as not queryable, without throwing', async (_label, answer) => {
+      const sf = withNotes([link]);
+      sf.sobjectDescribe('ContentNote', answer);
+      const adapter = sf.adapter();
+      await expect(adapter.probe()).resolves.toBeUndefined();
+      const result = await adapter.getNotesByOpportunity([OPP]);
+      expect(result.items.map((n) => n.body.value)).toEqual(['legacy']);
+      expect(sf.queries.some((q) => q.includes('FROM ContentNote'))).toBe(false);
+      expect(adapter.capabilities().notesComplete).toBe(false);
+      expect(adapter.capabilities().settingHints?.notesComplete).toBe(NOTES_ACCESS_HINT);
+    });
+
+    it('reports notes complete when ContentNote is not queryable but no Enhanced Note is linked', async () => {
+      const sf = withNotes([]);
+      sf.sobjectDescribe('ContentNote', NOT_FOUND);
+      const adapter = sf.adapter();
+      await adapter.probe();
+      await adapter.getNotesByOpportunity([OPP]);
+      expect(adapter.capabilities().notesComplete).toBe(true);
+      expect(adapter.capabilities().settingHints?.notesComplete).toBeUndefined();
+    });
+
+    it('never throws on INVALID_TYPE from the ContentNote query itself, even without a probe', async () => {
+      const sf = withNotes([link]);
+      sf.on(/FROM ContentNote WHERE Id IN/, INVALID_TYPE);
+      const adapter = sf.adapter();
+      const result = await adapter.getNotesByOpportunity([OPP]);
+      expect(result.items.map((n) => n.body.value)).toEqual(['legacy']);
+      expect(adapter.capabilities().notesComplete).toBe(false);
+    });
+
+    it('still throws on other ContentNote query errors', async () => {
+      const sf = withNotes([link]);
+      sf.sobjectDescribe('ContentNote', { name: 'ContentNote', queryable: true });
+      sf.on(/FROM ContentNote WHERE Id IN/, { status: 500 });
+      const adapter = sf.adapter();
+      await adapter.probe();
+      await expect(adapter.getNotesByOpportunity([OPP])).rejects.toThrow(/Salesforce API error \(500\)/);
+    });
+
+    it('the hint names the Notes setting and the Run As user access', () => {
+      expect(NOTES_ACCESS_HINT).toBe(
+        'Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.',
+      );
+    });
+  });
+
   describe('apiCallEstimate', () => {
     it('declares the calls a report run makes, with the note full-text fetch limit as the fetch cap', () => {
       const sf = installFakeSalesforce();
       expect(sf.adapter().capabilities().apiCallEstimate).toEqual({
-        perRun: 3,
+        perRun: 4,
         perScanPage: 1,
         perSampledOpportunity: 4,
         perChildRecordBatch: 2,

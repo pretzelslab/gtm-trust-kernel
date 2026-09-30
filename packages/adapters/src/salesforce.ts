@@ -84,6 +84,10 @@ const ACTIVITY_CAPTURE_VALUES: readonly SalesforceActivityCapture[] = ['auto', '
 
 export const ACTIVITY_CAPTURE_HINT = 'Set SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.';
 
+/** Shown when Enhanced Notes are linked to sampled deals but ContentNote can't be queried. */
+export const NOTES_ACCESS_HINT =
+  'Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.';
+
 /** Shown when the scan finds a stage with no mapping; names the setting, never a stage label. */
 export const STAGE_MAP_HINT = 'Map your custom stages to standard ones in a JSON file and set SF_STAGE_MAP_PATH to its path.';
 
@@ -527,6 +531,10 @@ export class SalesforceAdapter implements CrmAdapter {
   private readonly stageMap: Readonly<Record<string, CanonicalStage>>;
   /** Enhanced Note full-text fetches used so far by this instance (one run). */
   private noteFullTextFetchesUsed = 0;
+  /** From probe(): whether ContentNote is queryable. null until probed (then the query is tried). */
+  private contentNoteQueryable: boolean | null = null;
+  /** Set once Enhanced Notes were found linked to a deal but couldn't be read (capabilities().notesComplete). */
+  private enhancedNotesUnread = false;
   /** opportunityId -> last-seen toStage, for deriving fromStage across listStageHistory pages/calls on this instance. */
   private readonly lastKnownStage = new Map<string, CanonicalStage>();
 
@@ -565,14 +573,19 @@ export class SalesforceAdapter implements CrmAdapter {
       // deal isn't a reliable signal, so activity_capture_rate reads as
       // not measured rather than scored.
       activitySync: this.config.activityCapture === 'auto',
-      ...(this.config.activityCapture === 'auto' ? {} : { settingHints: { activitySync: ACTIVITY_CAPTURE_HINT } }),
-      // Per run: 2 population counts and the org-wide stage-history read.
+      // Complete unless Enhanced Notes were found that ContentNote couldn't
+      // read (see fetchEnhancedNotes); no linked Enhanced Notes means
+      // nothing is missing, queryable or not.
+      notesComplete: !this.enhancedNotesUnread,
+      ...this.settingHints(),
+      // Per run: the ContentNote probe, 2 population counts and the
+      // org-wide stage-history read.
       // Per listing page: its contact-role batch. Per sampled deal: legacy
       // Notes, Tasks, Events and OpportunityHistory (one query each, see
       // getNotesByOpportunity). Per batch of deals: ContentDocumentLink and
       // ContentNote. Fetch cap: Enhanced Note full-text fetches.
       apiCallEstimate: {
-        perRun: 3,
+        perRun: 4,
         perScanPage: 1,
         perSampledOpportunity: 4,
         perChildRecordBatch: 2,
@@ -595,6 +608,31 @@ export class SalesforceAdapter implements CrmAdapter {
       activitiesPerOpportunityLimit: 200,
       historyPerOpportunityLimit: 200,
     };
+  }
+
+  private settingHints(): Pick<AdapterCapabilities, 'settingHints'> {
+    const hints = {
+      ...(this.config.activityCapture === 'auto' ? {} : { activitySync: ACTIVITY_CAPTURE_HINT }),
+      ...(this.enhancedNotesUnread ? { notesComplete: NOTES_ACCESS_HINT } : {}),
+    };
+    return Object.keys(hints).length > 0 ? { settingHints: hints } : {};
+  }
+
+  /**
+   * One describe call: is ContentNote queryable for the Run As user? It
+   * isn't when Notes are off in the org or the user lacks access (the
+   * describe answers 404 NOT_FOUND). Any failure counts as not queryable;
+   * this never throws.
+   */
+  async probe(): Promise<void> {
+    try {
+      const describe = await this.request<{ queryable?: boolean }>(
+        `/services/data/${this.config.apiVersion}/sobjects/ContentNote/describe`,
+      );
+      this.contentNoteQueryable = describe.queryable === true;
+    } catch {
+      this.contentNoteQueryable = false;
+    }
   }
 
   async health(): Promise<{ ok: boolean; detail?: string }> {
@@ -1085,14 +1123,29 @@ export class SalesforceAdapter implements CrmAdapter {
         apiCallsConsumed += 1;
       }
       if (links.length === 0) continue;
+      if (this.contentNoteQueryable === false) {
+        this.enhancedNotesUnread = true;
+        continue;
+      }
 
       const docIds = [...new Set(links.map((l) => l.ContentDocumentId))];
       const notesById = new Map<string, Note>();
       for (let j = 0; j < docIds.length; j += batch) {
         const docChunk = docIds.slice(j, j + batch);
-        let notePage = await this.soqlQuery<RawContentNote>(
-          `SELECT Id, Title, TextPreview, OwnerId, CreatedDate FROM ContentNote WHERE Id IN (${soqlIdList(docChunk)})`,
-        );
+        let notePage: SoqlResponse<RawContentNote>;
+        try {
+          notePage = await this.soqlQuery<RawContentNote>(
+            `SELECT Id, Title, TextPreview, OwnerId, CreatedDate FROM ContentNote WHERE Id IN (${soqlIdList(docChunk)})`,
+          );
+        } catch (err) {
+          apiCallsConsumed += 1;
+          // Not probed, or access changed since: the same outcome as a
+          // failed probe, never a failed run. Other errors still throw.
+          if (!(err instanceof AdapterError && err.message.includes('INVALID_TYPE'))) throw err;
+          this.contentNoteQueryable = false;
+          this.enhancedNotesUnread = true;
+          break;
+        }
         apiCallsConsumed += 1;
         for (;;) {
           for (const raw of notePage.records) {

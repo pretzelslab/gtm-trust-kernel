@@ -6,7 +6,7 @@ import type { Activity, Note } from '@gtm-trust-kernel/adapters/model/canonical.
 import { TrustTier, type TrustedText } from '@gtm-trust-kernel/adapters/model/trust.js';
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
 import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
-import { detectPii, median } from './shared.js';
+import { detectPii, median, notesIncompleteResult } from './shared.js';
 
 /**
  * Every sampled Note, open + closed opportunities pooled together —
@@ -46,6 +46,8 @@ function isSubstantive(body: string): boolean {
 }
 
 export function substantiveNoteRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  const incomplete = notesIncompleteResult('substantive_note_rate', sample);
+  if (incomplete) return incomplete;
   const notes = allSampledNotes(sample);
   if (notes.length === 0) {
     return {
@@ -71,6 +73,8 @@ export function substantiveNoteRate(sample: CoverageSample, _config: MetricConfi
 
 /** Same denominator as substantiveNoteRate — every sampled note, not just the substantive ones. */
 export function medianNoteLengthChars(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  const incomplete = notesIncompleteResult('median_note_length_chars', sample);
+  if (incomplete) return incomplete;
   const notes = allSampledNotes(sample);
   if (notes.length === 0) {
     return {
@@ -122,6 +126,8 @@ function activityPiiCandidates(activity: Activity): readonly string[] {
  * non-match. Flag only — see rubric.ts, no CAPABILITIES gate references it.
  */
 export function piiDensity(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  const incomplete = notesIncompleteResult('pii_density', sample);
+  if (incomplete) return incomplete;
   const notes = allSampledNotes(sample);
   const activities = allSampledActivities(sample);
   const opportunities = [...sample.openOpportunities, ...sample.closedOpportunities];
@@ -164,14 +170,18 @@ export function piiDensity(sample: CoverageSample, _config: MetricConfig): Metri
  * Opportunity.nextStep (a rep-typed field; contrast with pii_density, which
  * does include it) — there is no meaningful "externally sourced next step".
  *
- * Always computable: no capability gate, no not_instrumented path. Every
+ * No trust-tier gate: every
  * TrustedText carries a tier, assigned once at ingestion — there is no
  * canonical state where a hydrated free-text field lacks one (see
  * model/trust.ts and metric-definitions.md D6's resolved ambiguity, which
  * removed an earlier "adapter can't distinguish origin" gate that described
- * a state this model can't actually be in).
+ * a state this model can't actually be in). Like every note-reading metric,
+ * it is not measured when the adapter found notes it couldn't read
+ * (notesIncompleteResult).
  */
 export function untrustedTextRatio(sample: CoverageSample, _config: MetricConfig): MetricResult {
+  const incomplete = notesIncompleteResult('untrusted_text_ratio', sample);
+  if (incomplete) return incomplete;
   const notes = allSampledNotes(sample);
   const activities = allSampledActivities(sample);
 

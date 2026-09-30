@@ -709,6 +709,19 @@ trusts `closedOpportunities`' existing trailing-12-month window from
   A single metric row is never "not measured": its status carries that.
   `buildReport.ts`'s `gateVerdictOf` and `rubric.ts`'s `gradeCapability`
   implement this rule.
+- **Notes the adapter can't read are Not measured (decided 2026-09-30).**
+  When the adapter found notes it couldn't read
+  (`AdapterCapabilities.notesComplete` false), every metric that reads
+  notes is `not_instrumented` with the adapter's setting hint, not scored
+  on the notes it could read: `note_coverage_rate`,
+  `substantive_note_rate`, `median_note_length_chars`,
+  `outcome_evidence_retention_rate`, `pii_density`, `untrusted_text_ratio`
+  (the last three also read activities or deal text, but a partial set of
+  notes would still undercount or skew them). On Salesforce this is
+  Enhanced Notes linked to sampled deals while `ContentNote` isn't
+  queryable for the Run As user. With no Enhanced Notes linked, nothing
+  is missing and the metrics are scored, queryable or not. The adapter
+  learns this while reading notes, so `hydrateNotes` re-reads it.
 - A metric with `unit: 'bool'` has no degraded band (decided 2026-09-30): a
   value below `viableAt` grades **blocked**. A capability either exists or
   it doesn't.
