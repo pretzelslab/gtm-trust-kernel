@@ -68,7 +68,7 @@ describe('render.ts offline safety and structural integrity (not previously cove
  * Adversarial escaping check (cold review finding: no test previously
  * exercised escapeHtml against a hostile orgLabel). orgLabel/orgDescription
  * are BuildReportOptions-supplied, not adapter-sourced free text (see
- * README.md's Design Rules) — but escapeHtml is the only thing standing
+ * docs/ARCHITECTURE.md's Design rules) — but escapeHtml is the only thing standing
  * between any future caller and injected markup, so it earns its own test.
  */
 describe('render.ts escaping under adversarial input', () => {
