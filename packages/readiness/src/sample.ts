@@ -276,6 +276,14 @@ export interface SampleResult {
   readonly stopReason: StopReason;
 }
 
+/** What runSample returns: the sample, plus how much of the population the scan covered. */
+export interface SampleRunResult extends SampleResult {
+  /** Size of the sample population (open, and closed within the window), counted before the scan. */
+  readonly population: { readonly open: number; readonly closedInWindow: number };
+  /** Open opportunities the scan read, sampled or not. population.open minus this is how many older open deals it never reached. */
+  readonly openScanned: number;
+}
+
 /**
  * Confirmation gate, injected so callers choose their own UI (stdin prompt,
  * --yes flag, test double, ...). Called with the plan; must resolve true to
@@ -299,7 +307,7 @@ export async function runSample(
   adapter: CrmAdapter,
   config: SampleConfig,
   confirm: ConfirmFn,
-): Promise<SampleResult | { readonly cancelled: true }> {
+): Promise<SampleRunResult | { readonly cancelled: true }> {
   const plan = planSample(adapter, config);
   console.log(formatSamplePlan(plan));
 
@@ -316,11 +324,19 @@ export async function runSample(
 
   let recordsScanned = 0;
   let apiCallsConsumed = 0;
+  let openScanned = 0;
   let cursor: string | undefined;
   let stopReason: StopReason = 'source_exhausted';
 
+  // The population, newest created first: a scan that stops early (budget
+  // or full strata) has read the most recently created deals, and the
+  // counts let the report say how many older open deals it never reached.
+  const population = { asOf: asOf.toISOString(), closedWithinMonths: CLOSED_WINDOW_MONTHS };
+  const count = await adapter.countOpportunitiesForSample(population);
+  apiCallsConsumed += count.apiCallsConsumed;
+
   while (true) {
-    const page = await adapter.listOpportunities({ limit: plan.effectivePageSize, cursor });
+    const page = await adapter.listOpportunitiesForSample({ ...population, limit: plan.effectivePageSize, cursor });
     apiCallsConsumed += page.apiCallsConsumed;
 
     let budgetHit = false;
@@ -329,6 +345,7 @@ export async function runSample(
       const stratum = classifyStratum(opportunity, asOf);
       if (stratum) {
         reservoirs.get(stratum)!.offer(opportunity);
+        if (OPEN_STAGES.has(stratum)) openScanned += 1;
       }
       if (recordsScanned >= config.maxRecordsToScan) {
         budgetHit = true;
@@ -361,5 +378,13 @@ export async function runSample(
     };
   });
 
-  return { plan, apiCallsConsumed, recordsScanned, strata, stopReason };
+  return {
+    plan,
+    apiCallsConsumed,
+    recordsScanned,
+    population: { open: count.open, closedInWindow: count.closedInWindow },
+    openScanned,
+    strata,
+    stopReason,
+  };
 }

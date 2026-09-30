@@ -448,6 +448,57 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     });
   });
 
+  describe('sample population listing', () => {
+    const population = { asOf: new Date().toISOString(), closedWithinMonths: 12 };
+    const inPopulation = (o: { isClosed: boolean; closeDate?: string }) => {
+      if (!o.isClosed) return true;
+      if (!o.closeDate) return false;
+      const cutoff = new Date(population.asOf);
+      cutoff.setUTCMonth(cutoff.getUTCMonth() - population.closedWithinMonths);
+      const close = Date.parse(o.closeDate);
+      // Whole-day slack at both edges: a superset is allowed there.
+      return close >= cutoff.getTime() - 86_400_000 && close <= Date.parse(population.asOf) + 86_400_000;
+    };
+
+    async function listAll(adapter: CrmAdapter, limit: number) {
+      const items = [];
+      let cursor: string | undefined;
+      do {
+        const page = await adapter.listOpportunitiesForSample({ ...population, limit, cursor });
+        items.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      return items;
+    }
+
+    it('lists newest created first, ties by id descending, without repeats', async () => {
+      const { adapter } = await make();
+      const items = await listAll(adapter, 2);
+      expect(new Set(items.map((o) => o.ref.id)).size).toBe(items.length);
+      for (let i = 1; i < items.length; i++) {
+        const [a, b] = [items[i - 1]!, items[i]!];
+        const cmp = Date.parse(a.createdAt) - Date.parse(b.createdAt);
+        expect(cmp > 0 || (cmp === 0 && a.ref.id > b.ref.id), `${a.ref.id} before ${b.ref.id}`).toBe(true);
+      }
+    });
+
+    it('pages deterministically', async () => {
+      const { adapter } = await make();
+      const first = await listAll(adapter, 2);
+      const again = await listAll(adapter, 2);
+      expect(again.map((o) => o.ref.id)).toEqual(first.map((o) => o.ref.id));
+    });
+
+    it('lists only open opportunities and closed ones in the window, and counts the same', async () => {
+      const { adapter } = await make();
+      const items = await listAll(adapter, 200);
+      expect(items.every(inPopulation)).toBe(true);
+      const count = await adapter.countOpportunitiesForSample(population);
+      expect(count.open).toBe(items.filter((o) => !o.isClosed).length);
+      expect(count.closedInWindow).toBe(items.filter((o) => o.isClosed).length);
+    });
+  });
+
   describe('health', () => {
     it('reports health without consuming meaningful quota', async () => {
       const { adapter } = await make();

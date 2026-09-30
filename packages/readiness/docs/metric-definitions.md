@@ -651,6 +651,17 @@ trusts `closedOpportunities`' existing trailing-12-month window from
   as a `blocked` verdict. A metric should only return one of these statuses
   when it genuinely cannot compute a number, not as a way to signal a bad
   result.
+- **Sample population and order (decided 2026-09-30).** The sampler reads
+  only the opportunities a sample can use (every open one, plus closed ones
+  with a close date in the trailing 12 months), newest created first
+  (`CrmAdapter.listOpportunitiesForSample`), and counts that population up
+  front (`countOpportunitiesForSample`). The scan stops at the record
+  budget or as soon as every stratum is full, so it covers the most
+  recently created deals. When it never reached some eligible open deals,
+  the report says so (`ReportOrgSummary.olderOpenDealsExcluded`): "Scanned
+  the N most recently created of M eligible deals. K older open deals were
+  excluded, so this report describes newer deals." The population counts
+  are not sent to the narrative model.
 - **Blocked vs Not measured (decided 2026-09-30).** A gate with no reading
   is graded by *why* it has none:
   - **Blocked: the data is missing.** The CRM doesn't hold what the metric

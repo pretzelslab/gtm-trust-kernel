@@ -140,6 +140,38 @@ export interface SyncWindow {
   readonly cursor?: string;
 }
 
+/**
+ * The opportunities a readiness sample can use: every open opportunity, and
+ * closed ones whose close date falls within `closedWithinMonths` before
+ * `asOf` (inclusive of both ends). A superset is allowed at the edges (the
+ * caller re-checks each record); a record inside this definition must
+ * never be left out.
+ */
+export interface SamplePopulation {
+  /** ISO timestamp: the sample's reference "now". */
+  readonly asOf: string;
+  readonly closedWithinMonths: number;
+}
+
+export interface SampleWindow extends SamplePopulation {
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export interface SamplePage<T> {
+  readonly items: readonly T[];
+  readonly nextCursor?: string;
+  readonly apiCallsConsumed: number;
+}
+
+export interface SamplePopulationCount {
+  /** Open opportunities in the population. */
+  readonly open: number;
+  /** Closed opportunities in the population's close-date window. */
+  readonly closedInWindow: number;
+  readonly apiCallsConsumed: number;
+}
+
 export interface SyncPage<T> {
   readonly items: readonly T[];
   readonly nextCursor?: string;
@@ -246,6 +278,15 @@ export interface CrmAdapter {
 
   listAccounts(w: SyncWindow): Promise<SyncPage<Account>>;
   listOpportunities(w: SyncWindow): Promise<SyncPage<Opportunity>>;
+  /**
+   * The sample population (see SamplePopulation), newest created first,
+   * ties broken by id descending, so a scan that stops early has read the
+   * most recently created deals. Deterministic paging; contactLinks
+   * populated as in listOpportunities.
+   */
+  listOpportunitiesForSample(w: SampleWindow): Promise<SamplePage<Opportunity>>;
+  /** Sizes of the sample population, so a report can say how much of it a scan covered. */
+  countOpportunitiesForSample(p: SamplePopulation): Promise<SamplePopulationCount>;
   listContacts(w: SyncWindow): Promise<SyncPage<Contact>>;
   listActivities(w: SyncWindow): Promise<SyncPage<Activity>>;
   listNotes(w: SyncWindow): Promise<SyncPage<Note>>;

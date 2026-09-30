@@ -59,6 +59,7 @@ function renderSummaryCards(data: ReportData): string {
     <div class="card"><div class="n">${org.openSampleSize}</div><div class="l">Open sampled</div></div>
     <div class="card"><div class="n">${org.closedSampleSize}</div><div class="l">Closed sampled</div></div>
     <div class="card"><div class="n">${org.recordsScanned}</div><div class="l">Records scanned</div></div>
+    <div class="card"><div class="n">${org.eligibleOpportunities}</div><div class="l">Eligible deals</div></div>
     <div class="card"><div class="n">${cv.viable} / ${cv.degraded} / ${cv.not_measured} / ${cv.blocked}</div><div class="l">Capabilities: viable / degraded / not measured / blocked</div></div>
     <div class="card"><div class="n">${ms.ok}</div><div class="l">Metrics computed</div></div>
     <div class="card"><div class="n">${ms.not_applicable + ms.not_instrumented}</div><div class="l">Not applicable / not instrumented</div></div>
@@ -82,6 +83,25 @@ function renderGatesHoldingBack(c: ReportCapabilityRow, metrics: readonly Metric
   if (held.length === 0) return '';
   const items = held.map((g) => `${escapeHtml(g.metric)} (${STATUS_META[g.verdict].label.toLowerCase()})`).join(', ');
   return `<div class="gates">${items}</div>`;
+}
+
+/**
+ * Shown when the scan never reached some eligible open deals: it reads the
+ * newest created first, so the ones it missed are the oldest.
+ */
+export function coverageNoticeText(data: ReportData): string | null {
+  const { org } = data;
+  if (org.olderOpenDealsExcluded <= 0) return null;
+  const deals = org.olderOpenDealsExcluded === 1 ? 'older open deal was' : 'older open deals were';
+  return (
+    `Scanned the ${org.recordsScanned} most recently created of ${org.eligibleOpportunities} eligible deals. ` +
+    `${org.olderOpenDealsExcluded} ${deals} excluded, so this report describes newer deals.`
+  );
+}
+
+function renderCoverageNotice(data: ReportData): string {
+  const text = coverageNoticeText(data);
+  return text ? `<div class="narrative-fallback-notice">${escapeHtml(text)}</div>` : '';
 }
 
 function renderCapabilitiesTable(caps: readonly ReportCapabilityRow[], metrics: readonly MetricRow[]): string {
@@ -180,6 +200,7 @@ export function renderReportHtml(
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
+  ${renderCoverageNotice(data)}
   <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
   ${renderSummaryCards(data)}
   ${renderCapabilitiesTable(data.capabilities, data.metrics)}

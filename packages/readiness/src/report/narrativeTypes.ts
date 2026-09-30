@@ -65,7 +65,12 @@ export interface NarrativePromptMetricRow {
  */
 export interface NarrativePromptInput {
   readonly generatedAt: string;
-  readonly org: Omit<ReportOrgSummary, 'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts'>;
+  // eligibleOpportunities/olderOpenDealsExcluded are left out too: pipeline
+  // size is business-sensitive and not needed for a per-item claim.
+  readonly org: Omit<
+    ReportOrgSummary,
+    'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts' | 'eligibleOpportunities' | 'olderOpenDealsExcluded'
+  >;
   readonly metrics: readonly NarrativePromptMetricRow[];
   readonly capabilities: ReportData['capabilities'];
 }

@@ -48,6 +48,10 @@ import {
   type GetAccountsResult,
   type GetChildRecordsResult,
   type GetContactsResult,
+  type SamplePage,
+  type SamplePopulation,
+  type SamplePopulationCount,
+  type SampleWindow,
   type SyncPage,
   type SyncWindow,
   type WriteOutcome,
@@ -269,6 +273,22 @@ function dedupeIds(refs: readonly RecordRef[]): string[] {
 /** Comparator: newest first by an ISO date or datetime; ties keep input order. */
 function newestFirst<T>(at: (x: T) => string): (a: T, b: T) => number {
   return (a, b) => Date.parse(at(b)) - Date.parse(at(a));
+}
+
+/**
+ * The closed-deal window as SOQL date literals (UTC days), widened to whole
+ * days so it is a superset of the sampler's own timestamp check.
+ */
+function closedWindowDates(p: SamplePopulation): { from: string; to: string } {
+  const asOf = new Date(p.asOf);
+  const cutoff = new Date(asOf);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - p.closedWithinMonths);
+  return { from: cutoff.toISOString().slice(0, 10), to: asOf.toISOString().slice(0, 10) };
+}
+
+function samplePopulationWhere(p: SamplePopulation): string {
+  const { from, to } = closedWindowDates(p);
+  return `(IsClosed = false OR (CloseDate >= ${from} AND CloseDate <= ${to}))`;
 }
 
 /** An Enhanced Note body is stored as simple HTML; reduce it to plain text. */
@@ -794,6 +814,34 @@ export class SalesforceAdapter implements CrmAdapter {
       items: page.items.map((o) => ({ ...o, contactLinks: linksByOpportunity.get(o.ref.id) ?? [] })),
       apiCallsConsumed: page.apiCallsConsumed + apiCallsConsumed,
     };
+  }
+
+  async listOpportunitiesForSample(w: SampleWindow): Promise<SamplePage<Opportunity>> {
+    let page: SoqlResponse<RawOpportunity>;
+    if (w.cursor) {
+      page = await this.soqlQueryMore<RawOpportunity>(w.cursor);
+    } else {
+      const soql =
+        `SELECT ${OPPORTUNITY_FIELDS.join(', ')} FROM Opportunity WHERE ${samplePopulationWhere(w)} ` +
+        `ORDER BY CreatedDate DESC, Id DESC`;
+      page = await this.soqlQuery<RawOpportunity>(soql, Math.min(2000, Math.max(200, w.limit)));
+    }
+    const items = page.records.map((raw) => this.mapOpportunity(raw));
+    const { linksByOpportunity, apiCallsConsumed } = await this.fetchContactLinksFor(items.map((o) => o.ref.id));
+    return {
+      items: items.map((o) => ({ ...o, contactLinks: linksByOpportunity.get(o.ref.id) ?? [] })),
+      nextCursor: page.done ? undefined : page.nextRecordsUrl,
+      apiCallsConsumed: 1 + apiCallsConsumed,
+    };
+  }
+
+  async countOpportunitiesForSample(p: SamplePopulation): Promise<SamplePopulationCount> {
+    const { from, to } = closedWindowDates(p);
+    const open = await this.soqlQuery<never>('SELECT COUNT() FROM Opportunity WHERE IsClosed = false');
+    const closed = await this.soqlQuery<never>(
+      `SELECT COUNT() FROM Opportunity WHERE IsClosed = true AND CloseDate >= ${from} AND CloseDate <= ${to}`,
+    );
+    return { open: open.totalSize, closedInWindow: closed.totalSize, apiCallsConsumed: 2 };
   }
 
   async listContacts(w: SyncWindow): Promise<SyncPage<Contact>> {

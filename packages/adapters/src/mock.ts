@@ -35,10 +35,30 @@ import type {
   SecondSourceCapabilities,
   SecondSourceContact,
   SecondSourceRef,
+  SamplePage,
+  SamplePopulation,
+  SamplePopulationCount,
+  SampleWindow,
   SyncPage,
   SyncWindow,
   WriteOutcome,
 } from './types.js';
+
+/**
+ * Mirrors SamplePopulation: every open opportunity, and closed ones whose
+ * close date falls within the window before asOf. A record that is closed
+ * by only one of flag or stage is kept (a superset; the sampler re-checks).
+ */
+function inSamplePopulation(o: Opportunity, p: SamplePopulation): boolean {
+  const closed = o.isClosed && (o.stage === 'closed_won' || o.stage === 'closed_lost');
+  if (!closed) return true;
+  if (!o.closeDate) return false;
+  const close = Date.parse(o.closeDate);
+  const asOf = new Date(p.asOf);
+  const cutoff = new Date(asOf);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - p.closedWithinMonths);
+  return close >= cutoff.getTime() && close <= asOf.getTime();
+}
 
 export interface MockOrgData {
   accounts: Account[];
@@ -127,6 +147,28 @@ export class MockAdapter implements CrmAdapter {
 
   async listAccounts(w: SyncWindow) { return this.page(this.data.accounts, w); }
   async listOpportunities(w: SyncWindow) { return this.page(this.data.opportunities, w); }
+
+  async listOpportunitiesForSample(w: SampleWindow): Promise<SamplePage<Opportunity>> {
+    this.listCalls += 1;
+    const f = this.faults.failListOnCall;
+    if (f && f.n === this.listCalls) {
+      const { AdapterError } = require('./types.js') as typeof import('./types.js');
+      throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
+    }
+    const sorted = this.data.opportunities
+      .filter((o) => inSamplePopulation(o, w))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.ref.id.localeCompare(a.ref.id));
+    const start = w.cursor ? Number(w.cursor) : 0;
+    const items = sorted.slice(start, start + w.limit);
+    const next = start + w.limit < sorted.length ? String(start + w.limit) : undefined;
+    return { items, nextCursor: next, apiCallsConsumed: 1 };
+  }
+
+  async countOpportunitiesForSample(p: SamplePopulation): Promise<SamplePopulationCount> {
+    const population = this.data.opportunities.filter((o) => inSamplePopulation(o, p));
+    const open = population.filter((o) => !o.isClosed).length;
+    return { open, closedInWindow: population.length - open, apiCallsConsumed: 1 };
+  }
   async listContacts(w: SyncWindow) { return this.page(this.data.contacts, w); }
   async listActivities(w: SyncWindow) { return this.page(this.data.activities, w); }
   async listNotes(w: SyncWindow) { return this.page(this.data.notes, w); }

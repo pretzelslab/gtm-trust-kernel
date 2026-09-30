@@ -324,4 +324,33 @@ describe('SalesforceAdapter (fake API)', () => {
       expect(result.items.filter((a) => a.kind === 'meeting')).toHaveLength(60);
     });
   });
+
+  describe('sample population', () => {
+    const population = { asOf: '2026-09-30T12:00:00.000Z', closedWithinMonths: 12 };
+
+    it('queries open deals and closed ones in the window, newest created first, with contact roles', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Opportunity WHERE \(IsClosed/, { pages: [[rawOpp(OPP_2)], [rawOpp(OPP_1)]] });
+      sf.on(/FROM OpportunityContactRole/, [{ OpportunityId: OPP_1, ContactId: sfId('003', 1), Role: null, IsPrimary: true }]);
+      const adapter = sf.adapter();
+      const first = await adapter.listOpportunitiesForSample({ ...population, limit: 200 });
+      expect(sf.queries[0]).toBe(
+        `SELECT Id, AccountId, Name, Amount, StageName, CloseDate, OwnerId, IsClosed, IsWon, ForecastCategoryName, NextStep, CreatedDate, SystemModstamp ` +
+          `FROM Opportunity WHERE (IsClosed = false OR (CloseDate >= 2025-09-30 AND CloseDate <= 2026-09-30)) ORDER BY CreatedDate DESC, Id DESC`,
+      );
+      expect(first.items.map((o) => o.ref.id)).toEqual([OPP_2]);
+      expect(first.apiCallsConsumed).toBe(2);
+      const second = await adapter.listOpportunitiesForSample({ ...population, limit: 200, cursor: first.nextCursor });
+      expect(second.items[0]!.contactLinks).toHaveLength(1);
+      expect(second.nextCursor).toBeUndefined();
+    });
+
+    it('counts open and in-window closed deals with two COUNT() queries', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/SELECT COUNT\(\) FROM Opportunity WHERE IsClosed = false$/, { pages: [[]] });
+      sf.on(/SELECT COUNT\(\) FROM Opportunity WHERE IsClosed = true AND CloseDate >= 2025-09-30 AND CloseDate <= 2026-09-30$/, [{}, {}]);
+      const count = await sf.adapter().countOpportunitiesForSample(population);
+      expect([count.open, count.closedInWindow, count.apiCallsConsumed]).toEqual([0, 2, 2]);
+    });
+  });
 });

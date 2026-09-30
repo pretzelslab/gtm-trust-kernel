@@ -204,6 +204,14 @@ export interface ReportOrgSummary {
   readonly openSampleSize: number;
   readonly closedSampleSize: number;
   readonly recordsScanned: number;
+  /** Opportunities the sample could draw from: all open, plus closed in the last 12 months. */
+  readonly eligibleOpportunities: number;
+  /**
+   * Eligible open opportunities the scan never reached. The scan reads the
+   * newest created first and stops early, so these are the oldest open
+   * deals; when above 0 the report says they were excluded.
+   */
+  readonly olderOpenDealsExcluded: number;
   readonly stopReason: StopReason;
   readonly capabilityVerdictCounts: Readonly<Record<CapabilityVerdict, number>>;
   readonly metricStatusCounts: Readonly<Record<MetricRowStatus, number>>;
@@ -401,6 +409,8 @@ export async function buildReportData(
       openSampleSize: sample.openOpportunities.length,
       closedSampleSize: sample.closedOpportunities.length,
       recordsScanned: sampleResult.recordsScanned,
+      eligibleOpportunities: sampleResult.population.open + sampleResult.population.closedInWindow,
+      olderOpenDealsExcluded: Math.max(0, sampleResult.population.open - sampleResult.openScanned),
       stopReason: sampleResult.stopReason,
       capabilityVerdictCounts,
       metricStatusCounts,
