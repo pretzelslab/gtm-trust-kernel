@@ -133,6 +133,23 @@ describe('not measured verdict', () => {
     expect(buildExecutiveSummary(data)).toContain("This scan can't see some of the data behind pipeline risk alerts");
   });
 
+  it("names a blocked capability's reason from the gates it could see, ignoring not-measured ones", async () => {
+    // pipeline_risk_signals: activity_capture_rate (D1) not measured, and
+    // median_days_since_modified (D2) forced blocked. The only failing gate
+    // the scan could see is D2, so the reason is "out of date", not the
+    // neutral fallback a D1+D2 split would give.
+    const base = await buildHealthyWithoutActivitySync();
+    const data: ReportData = {
+      ...base,
+      metrics: base.metrics.map((m) =>
+        m.metric === 'median_days_since_modified' ? { ...m, status: 'ok' as const, tier: 'blocked' as const } : m,
+      ),
+      capabilities: base.capabilities.map((c) => (c.id === 'pipeline_risk_signals' ? { ...c, verdict: 'blocked' as const } : c)),
+    };
+    const risk = buildFullNarrative(data).notReady.find((c) => c.label === 'Pipeline risk alerts')!;
+    expect(risk.outcome).toContain('Right now, the data on hand is out of date.');
+  });
+
   it('keeps a not-measured autonomous write-back in the not-ready list (fail-safe)', async () => {
     const base = await buildHealthyWithoutActivitySync();
     const data: ReportData = {

@@ -142,7 +142,16 @@ function joinPlain(phrases: readonly string[]): string {
  */
 function notReadyReason(data: ReportData, capabilityId: CapabilityId): string {
   const gatingRows = data.metrics.filter((m) => m.gatesCapabilities.some((g) => g.id === capabilityId));
-  const failingDimensions = new Set(gatingRows.filter((m) => m.tier !== 'viable').map((m) => m.dimension));
+  // A not-measured gate says nothing about the data, so it never picks the
+  // data-quality reason: only viable-failing gates the scan could see count.
+  const failingDimensions = new Set(
+    gatingRows
+      .filter((m) => {
+        const verdict = gateVerdictOf(m);
+        return verdict !== 'viable' && verdict !== 'not_measured';
+      })
+      .map((m) => m.dimension),
+  );
   if (failingDimensions.size === 1) {
     const [dimension] = failingDimensions;
     return DIMENSION_REASON[dimension!];
