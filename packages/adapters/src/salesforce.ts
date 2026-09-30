@@ -84,6 +84,9 @@ const ACTIVITY_CAPTURE_VALUES: readonly SalesforceActivityCapture[] = ['auto', '
 
 export const ACTIVITY_CAPTURE_HINT = 'Set SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.';
 
+/** Shown when the scan finds a stage with no mapping; names the setting, never a stage label. */
+export const STAGE_MAP_HINT = 'Map your custom stages to standard ones in a JSON file and set SF_STAGE_MAP_PATH to its path.';
+
 export interface SalesforceConfig {
   readonly clientId: string;
   readonly clientSecret: string;
@@ -573,6 +576,7 @@ export class SalesforceAdapter implements CrmAdapter {
       // /services/data/vXX/limits/. Flagged as a known gap in STATUS.md.
       rateLimit: { kind: 'daily_quota', value: 15000 },
       stageMap: this.stageMap,
+      stageMapHint: STAGE_MAP_HINT,
       accountBatchLimit: 200,
       contactBatchLimit: 200,
       childRecordBatchLimit: 200,

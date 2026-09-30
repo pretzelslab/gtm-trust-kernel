@@ -65,6 +65,13 @@ export interface AdapterCapabilities {
   readonly settingHints?: {
     readonly activitySync?: string;
   };
+  /**
+   * Optional: one plain-English sentence telling the user how to map stages
+   * this adapter doesn't recognise, shown in the readiness report only when
+   * the scan found an unmapped stage. Adapter-authored static text only,
+   * never a stage label or other org data.
+   */
+  readonly stageMapHint?: string;
   /** Supports change-data-capture or a modified-since watermark for deltas. */
   readonly incrementalSync: boolean;
   /** Supports bulk read for backfill. */

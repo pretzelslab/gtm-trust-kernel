@@ -173,7 +173,10 @@ labels with a JSON stage map (`SF_STAGE_MAP_PATH`), merged over the default
 Sales Process map. A mapping that contradicts Salesforce's own
 IsClosed/IsWon flags counts as unmapped (the flags decide the stage), so a
 map error shows up here rather than silently. Stage labels never appear in
-the report.
+the report. When the sample holds an unmapped stage (an opportunity here,
+or a closed deal's stage-history row for `win_rate_dispersion`), the report
+shows one notice with the adapter's stage-map hint (`stageMapHint`, static
+text naming the setting); with no unmapped stage it shows nothing.
 **Threshold:** `stage_mapping_coverage`.
 
 ### duplicate_account_rate

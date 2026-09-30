@@ -104,6 +104,23 @@ function renderCoverageNotice(data: ReportData): string {
   return text ? `<div class="narrative-fallback-notice">${escapeHtml(text)}</div>` : '';
 }
 
+const STAGE_MAP_METRICS: ReadonlySet<string> = new Set(['stage_mapping_coverage', 'win_rate_dispersion']);
+
+/**
+ * Shown once when the sample held a stage with no standard mapping and the
+ * adapter says how to map it. Never names a stage: the hint is the
+ * adapter's static text (MetricRow.fixHint).
+ */
+export function stageMapNoticeText(data: ReportData): string | null {
+  const hint = data.metrics.find((m) => STAGE_MAP_METRICS.has(m.metric) && !m.notMeasured && m.fixHint !== null)?.fixHint;
+  return hint ? `Some deals have a stage this tool doesn't recognise, so stage-based checks skip them. ${hint}` : null;
+}
+
+function renderStageMapNotice(data: ReportData): string {
+  const text = stageMapNoticeText(data);
+  return text ? `<div class="narrative-fallback-notice">${escapeHtml(text)}</div>` : '';
+}
+
 function renderCapabilitiesTable(caps: readonly ReportCapabilityRow[], metrics: readonly MetricRow[]): string {
   const rows = caps
     .map((c) => {
@@ -201,6 +218,7 @@ export function renderReportHtml(
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
   ${renderCoverageNotice(data)}
+  ${renderStageMapNotice(data)}
   <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
   ${renderSummaryCards(data)}
   ${renderCapabilitiesTable(data.capabilities, data.metrics)}

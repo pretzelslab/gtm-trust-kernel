@@ -189,9 +189,11 @@ export interface MetricRow {
    */
   readonly notMeasured: boolean;
   /**
-   * The adapter's own one-sentence hint for turning on the capability this
-   * metric was not measured for (AdapterCapabilities.settingHints). Set
-   * only on a not-measured row whose adapter supplied one; null otherwise.
+   * The adapter's own one-sentence hint: on a not-measured row, for turning
+   * on the capability it was not measured for
+   * (AdapterCapabilities.settingHints); on stage_mapping_coverage or
+   * win_rate_dispersion, for mapping stages when the sample held an
+   * unmapped one (AdapterCapabilities.stageMapHint). Null otherwise.
    * Adapter-authored static text, never org data.
    */
   readonly fixHint: string | null;
@@ -295,6 +297,18 @@ export async function buildReportData(
     const key = SETTING_HINT_KEY[metric];
     return (key && settingHints?.[key]) || null;
   };
+  // The stage-map hint goes only where the sample actually held an unmapped
+  // stage: an opportunity (stage_mapping_coverage) or a closed deal's
+  // stage-history row (win_rate_dispersion).
+  const stageMapHint = adapter.capabilities().stageMapHint ?? null;
+  const unmappedStageIn: Partial<Record<MetricId, boolean>> = {
+    stage_mapping_coverage: [...sample.openOpportunities, ...sample.closedOpportunities].some(
+      (o) => o.stageConfidence === 'unmapped',
+    ),
+    win_rate_dispersion: sample.closedOpportunities.some((o) =>
+      (sample.stageHistoryByOpportunity.get(o.ref.id) ?? []).some((e) => e.toStageConfidence === 'unmapped'),
+    ),
+  };
   const readings = new Map<MetricId, MetricReading>();
   const unmeasured = new Set<MetricId>();
   const rows: MetricRow[] = [];
@@ -341,7 +355,7 @@ export async function buildReportData(
         degradedAt,
         gatesCapabilities,
         notMeasured,
-        fixHint: notMeasured ? settingHintFor(metric) : null,
+        fixHint: notMeasured ? settingHintFor(metric) : unmappedStageIn[metric] ? stageMapHint : null,
       });
       continue;
     }

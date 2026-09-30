@@ -15,6 +15,7 @@ import {
   htmlToText,
   loadSalesforceConfigFromEnv,
   loadStageMapFile,
+  STAGE_MAP_HINT,
 } from '../src/salesforce.js';
 import { AdapterError } from '../src/types.js';
 import { installFakeSalesforce, sfId, sfRef } from './support/fakeSalesforce.js';
@@ -411,6 +412,12 @@ describe('SalesforceAdapter (fake API)', () => {
       ]);
       expect(adapter.capabilities().stageMap['Technical Win']).toBe('evaluation');
       expect(adapter.capabilities().stageMap['Qualification']).toBe('discovery');
+    });
+
+    it('offers a fixed stage-map hint that names the setting and no stage label', () => {
+      const sf = installFakeSalesforce();
+      expect(sf.adapter({ stageMap: { 'Technical Win': 'evaluation' } }).capabilities().stageMapHint).toBe(STAGE_MAP_HINT);
+      expect(STAGE_MAP_HINT).toBe('Map your custom stages to standard ones in a JSON file and set SF_STAGE_MAP_PATH to its path.');
     });
 
     it("counts a mapping that contradicts Salesforce's closed flags as unmapped, trusting the flags", async () => {
