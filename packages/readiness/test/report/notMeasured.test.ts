@@ -151,6 +151,40 @@ describe('not measured verdict', () => {
     expect(risk.outcome).toContain('Right now, the data on hand is out of date.');
   });
 
+  /** pipeline_risk_signals blocked with the given gates forced to the given tiers. */
+  function riskBlockedWith(base: ReportData, tiers: Partial<Record<string, 'degraded' | 'blocked'>>): ReportData {
+    return {
+      ...base,
+      metrics: base.metrics.map((m) => {
+        const tier = tiers[m.metric];
+        return tier ? { ...m, status: 'ok' as const, tier } : m;
+      }),
+      capabilities: base.capabilities.map((c) => (c.id === 'pipeline_risk_signals' ? { ...c, verdict: 'blocked' as const } : c)),
+    };
+  }
+
+  it('says what actually blocked a use case, not a fixed cause (live smoke run shape)', async () => {
+    // As on a new Developer Edition org: activity not measured, freshness
+    // degraded, stage history blocked. Only the stage history blocks it, so
+    // the outcome must not blame activity data.
+    const data = riskBlockedWith(await buildHealthyWithoutActivitySync(), {
+      median_days_since_modified: 'degraded',
+      stage_history_months: 'blocked',
+    });
+    const risk = buildFullNarrative(data).notReady.find((c) => c.label === 'Pipeline risk alerts')!;
+    expect(risk.outcome).toContain('Right now, not enough history has been recorded.');
+    expect(risk.outcome).not.toMatch(/activity/i);
+  });
+
+  it('names every dimension with a blocked gate, in dimension order', async () => {
+    const data = riskBlockedWith(await buildHealthyWithoutActivitySync(), {
+      stage_history_months: 'blocked',
+      median_days_since_modified: 'blocked',
+    });
+    const risk = buildFullNarrative(data).notReady.find((c) => c.label === 'Pipeline risk alerts')!;
+    expect(risk.outcome).toContain('Right now, the data on hand is out of date and not enough history has been recorded.');
+  });
+
   it("appends the adapter's setting hint when a setting would unlock the use case", async () => {
     const fixture = MOCK_ORG_FIXTURES.healthy;
     const hint = 'Set SF_ACTIVITY_CAPTURE=auto if your team logs activity automatically.';

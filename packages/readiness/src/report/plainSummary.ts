@@ -10,12 +10,14 @@
  * capability verdicts and metric dimensions, so it carries no PII-leak risk
  * either.
  *
- * Reason derivation (`notReadyReason`) is a heuristic, not a re-derivation
- * of rubric.ts's grading rules: it looks at which of a capability's gating
- * MetricRows aren't tier 'viable' and, if they all share one dimension,
- * names that dimension's plain-English cause. If they span more than one
- * dimension (or none can be identified), it falls back to neutral wording
- * rather than guessing — see NEUTRAL_REASON.
+ * Reason derivation is a heuristic, not a re-derivation of rubric.ts's
+ * grading rules. Each not-ready capability's own line (`blockedGateReason`)
+ * names every dimension with a blocked gate. The executive summary's
+ * shared reason (`notReadyReason`, via aggregateReason) looks at which
+ * gating MetricRows aren't tier 'viable' and, if they all share one
+ * dimension, names that dimension's plain-English cause; if they span more
+ * than one dimension (or none can be identified), it falls back to neutral
+ * wording rather than guessing — see NEUTRAL_REASON.
  */
 
 import { gateVerdictOf, type MetricDimension, type ReportCapabilityRow, type ReportData } from './buildReport.js';
@@ -45,48 +47,54 @@ const DIMENSION_REASON: Readonly<Record<MetricDimension, string>> = {
 
 const NEUTRAL_REASON = "the data doesn't meet the quality bar";
 
+/**
+ * Blocked lines say only what can't be done: the cause comes after, in
+ * "Right now, ...", from the gates that actually blocked it
+ * (blockedGateReason). A fixed cause here would be wrong whenever a
+ * different gate is the one blocking.
+ */
 const PLAIN_OUTCOME: Readonly<Record<CapabilityId, Readonly<Record<CapabilityVerdict, string>>>> = {
   grounded_account_brief: {
     viable: 'Account summaries can safely cite real notes and deal history.',
     degraded:
       'Account summaries can be generated, but with thinner supporting evidence than ideal — treat them as a starting point, not a finished brief.',
-    blocked: 'There is not yet enough reliable note history to safely generate an account summary.',
+    blocked: "Account summaries aren't safe to generate yet.",
     not_measured: "This scan can't see all the notes or account records an account summary would draw on, so it can't say yet whether one would be safe.",
   },
   pipeline_risk_signals: {
     viable: 'Stalled, silent or slipping deals can be flagged automatically.',
     degraded: 'Deal-risk flags can run, but over a smaller or less certain slice of the pipeline than ideal.',
-    blocked: 'There is not yet enough reliable activity data to flag at-risk deals.',
+    blocked: "At-risk deals can't be flagged reliably yet.",
     not_measured: "This scan can't see how activity is captured in your CRM, so it can't say yet whether a quiet deal really means a stalled one.",
   },
   close_date_realism: {
     viable: 'Deals with unrealistic or already-passed close dates can be flagged automatically.',
     degraded: 'Close-date flags can run, but some will rest on incomplete history.',
-    blocked: 'Close dates are not filled in or tracked reliably enough to flag unrealistic ones.',
+    blocked: "Unrealistic close dates can't be flagged reliably yet.",
     not_measured: "This scan can't see how close dates are tracked over time, so it can't say yet whether slipping dates could be flagged.",
   },
   next_action_recommendation: {
     viable: 'A grounded "what to do next" suggestion can be generated for open deals.',
     degraded: 'Next-step suggestions can run, but with less supporting detail than ideal.',
-    blocked: 'There is not yet enough activity and note detail to safely suggest a next step.',
+    blocked: "A next step on a deal can't be suggested safely yet.",
     not_measured: "This scan can't see all the activity and note detail a next-step suggestion would rely on, so it can't say yet whether one would be safe.",
   },
   enablement_answer_engine: {
     viable: '"How have we handled this before" questions can be answered from real closed-deal history.',
     degraded: 'Past-deal answers can be generated, but from a thinner set of closed history than ideal.',
-    blocked: 'There is not yet enough closed-deal history to answer "how have we handled this before."',
+    blocked: "\"How have we handled this before\" questions can't be answered reliably yet.",
     not_measured: "This scan can't see all the closed-deal history these answers would draw on, so it can't say yet whether they would be reliable.",
   },
   forecast_assistance: {
     viable: 'A human forecast call can be supported with evidence and outlier flags from real pipeline data.',
     degraded: 'Forecast support can run, but on a less complete picture of the pipeline than ideal.',
-    blocked: 'The pipeline data is not yet complete enough to support a forecast call.',
+    blocked: "A forecast call can't be supported reliably yet.",
     not_measured: "This scan can't see all the pipeline data forecast support would need, so it can't say yet whether it would help.",
   },
   bulk_hygiene_automation: {
     viable: 'Batch fixes for stale or missing data can be proposed for a person to approve.',
     degraded: 'Batch fixes can be proposed, but over a smaller or less certain slice of records than ideal.',
-    blocked: 'The data is not yet clean enough to safely propose batch fixes.',
+    blocked: "Batch fixes can't be proposed safely yet.",
     not_measured: "This scan can't see all the records batch fixes would touch, so it can't say yet whether proposing them would be safe.",
   },
   autonomous_writeback: {
@@ -157,6 +165,22 @@ function notReadyReason(data: ReportData, capabilityId: CapabilityId): string {
     return DIMENSION_REASON[dimension!];
   }
   return NEUTRAL_REASON;
+}
+
+/**
+ * A not-ready capability's own reason: every dimension with a gate graded
+ * blocked (or missing data), in dimension order, joined. Degraded and
+ * not-measured gates don't block, so they're left out. With no blocked gate
+ * (e.g. the writeback fail-safe on a degraded verdict), notReadyReason.
+ */
+function blockedGateReason(data: ReportData, capabilityId: CapabilityId): string {
+  const dimensions = new Set(
+    data.metrics
+      .filter((m) => m.gatesCapabilities.some((g) => g.id === capabilityId) && gateVerdictOf(m) === 'blocked')
+      .map((m) => m.dimension),
+  );
+  const ordered = (Object.keys(DIMENSION_REASON) as MetricDimension[]).filter((d) => dimensions.has(d));
+  return ordered.length > 0 ? joinPlain(ordered.map((d) => DIMENSION_REASON[d])) : notReadyReason(data, capabilityId);
 }
 
 /**
@@ -303,7 +327,7 @@ function outcomeFor(data: ReportData, c: ReportCapabilityRow, bucket: Bucket): C
     if (hasDegradedGate(data, c.id)) parts.push(NOT_MEASURED_THIN_CLAUSE);
     parts.push(...fixHintsFor(data, c.id));
     outcome = parts.join(' ');
-  } else outcome = `${base} Right now, ${notReadyReason(data, c.id)}.`;
+  } else outcome = `${base} Right now, ${blockedGateReason(data, c.id)}.`;
   return { label: capitalize(PLAIN_CAPABILITY[c.id]), outcome };
 }
 
