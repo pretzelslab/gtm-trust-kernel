@@ -108,6 +108,9 @@ export interface KillSwitch {
   writesEnabled(scope: { orgId: string; actorId?: string }): boolean;
 }
 
+const PARTIAL_ROLLBACK_NOTE =
+  '; partial writes were not fully rolled back, so this proposal cannot be retried: create a new one';
+
 /** Recursively freezes a plain-data value in place and returns it. */
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -255,7 +258,9 @@ export class ProposalKernel {
     // I2, re-checked here because Proposal is a plain object: only the exact
     // object approve() returned counts, and it is claimed synchronously so a
     // replay (or a concurrent second apply) is rejected. It is handed back
-    // only when the apply fails in a way that can be retried.
+    // only when the apply failed and left the CRM as it was: nothing written,
+    // or every partial write fully rolled back. Otherwise it is spent and a
+    // new proposal is needed.
     if (!this.approved.has(p)) {
       throw new KernelError(
         'apply requires a proposal approved by this kernel and not already applied',
@@ -300,8 +305,8 @@ export class ProposalKernel {
       try {
         outcome = await this.adapter.applyFieldWrite(write);
       } catch (e) {
-        this.approved.add(p);
-        await this.rollbackPartial(p, inverse);
+        const restored = await this.rollbackPartial(p, inverse);
+        if (restored) this.approved.add(p);
         const at = this.now().toISOString();
         this.ledger.append({
           kind: 'apply_failed',
@@ -309,12 +314,16 @@ export class ProposalKernel {
           at,
           detail: { field: c.field, error: String(e) },
         });
-        return { ...p, status: 'failed', failureReason: `adapter error on ${c.field}: ${String(e)}` };
+        return {
+          ...p,
+          status: 'failed',
+          failureReason: `adapter error on ${c.field}: ${String(e)}${restored ? '' : PARTIAL_ROLLBACK_NOTE}`,
+        };
       }
 
       if (outcome.status !== 'applied') {
-        this.approved.add(p);
-        await this.rollbackPartial(p, inverse);
+        const restored = await this.rollbackPartial(p, inverse);
+        if (restored) this.approved.add(p);
         const at = this.now().toISOString();
         this.ledger.append({
           kind: 'apply_failed',
@@ -326,9 +335,10 @@ export class ProposalKernel {
           ...p,
           status: 'failed',
           failureReason:
-            outcome.status === 'conflict'
+            (outcome.status === 'conflict'
               ? `record changed since read on field '${c.field}'`
-              : `write ${outcome.status} on field '${c.field}'`,
+              : `write ${outcome.status} on field '${c.field}'`) +
+            (restored ? '' : PARTIAL_ROLLBACK_NOTE),
         };
       }
 
@@ -376,11 +386,15 @@ export class ProposalKernel {
     return { ...p, status: 'rolled_back' };
   }
 
-  private async rollbackPartial(p: Proposal, inverse: readonly FieldWrite[]) {
+  /** True only if every inverse write was applied (trivially true when none were needed). */
+  private async rollbackPartial(p: Proposal, inverse: readonly FieldWrite[]): Promise<boolean> {
+    let restored = true;
     for (const w of inverse) {
       try {
-        await this.adapter.applyFieldWrite(w);
+        const outcome = await this.adapter.applyFieldWrite(w);
+        if (outcome.status !== 'applied') restored = false;
       } catch {
+        restored = false;
         this.ledger.append({
           kind: 'partial_rollback_failed',
           proposalId: p.id,
@@ -389,5 +403,6 @@ export class ProposalKernel {
         });
       }
     }
+    return restored;
   }
 }
