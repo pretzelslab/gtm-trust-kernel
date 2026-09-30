@@ -54,11 +54,11 @@ The report queries these objects, read-only:
 | Object | Why |
 |---|---|
 | `Opportunity` | The population count (`SELECT COUNT()`, **confirmed** on a live org) and the scan |
-| `OpportunityContactRole` | Contact roles on each scanned deal (`contact_linkage_rate`) |
+| `OpportunityContactRole` | Contact roles on each scanned deal (`contact_linkage_rate`). **Confirmed 2026-09-30:** a seeded contact role is read (1 of 16 open deals) |
 | `Account` | Account names and domains for sampled deals (`duplicate_account_rate`, `account_resolution_rate`) |
 | `Note` | Legacy notes on sampled deals |
-| `ContentDocumentLink`, `ContentNote` | Enhanced Notes linked to sampled deals, including the full text of long notes. **Partly confirmed:** a live org accepts the `FileType = 'SNOTE'` link filter, but no Enhanced Notes existed to check what it returns |
-| `Task`, `Event` | Activities on sampled deals (read even when activity capture is off). **Partly confirmed:** a live org accepts the Event query ordered by `ActivityDateTime`, but no Events existed to check the order |
+| `ContentDocumentLink`, `ContentNote` | Enhanced Notes linked to sampled deals, including the full text of long notes. **Partly confirmed:** a live org accepts the `FileType = 'SNOTE'` link filter, but no Enhanced Notes could be created to check what it returns (`ContentNote` not queryable) |
+| `Task`, `Event` | Activities on sampled deals (read even when activity capture is off). **Confirmed 2026-09-30:** a seeded Task and Event are read, and the Event's time is its `ActivityDateTime`. **Partly confirmed:** the Event ordering, since only one Event existed |
 | `OpportunityHistory` | Stage history (`stage_history_months`, `win_rate_dispersion`) |
 
 `Contact` is only read when a second source is connected, which the
@@ -82,11 +82,15 @@ Enhanced Notes (the Notes related list in Lightning) are read through the
 `ContentNote` object. Before any reads, the report checks once whether the
 Run As user can query it.
 
-1. Setup, then Notes Settings, then **Enable Notes**.
-2. Check that the Run As user's profile or a permission set gives read
-   access to Notes. On the 2026-09-30 smoke run, `ContentNote` was still
-   not queryable after Notes were enabled (the describe answered 404
-   `NOT_FOUND`), so check this even when Notes are on.
+1. Setup, then Notes Settings, then **Enable Notes**, and **Save**.
+2. For a Run As user that isn't a System Administrator, check that its
+   profile or a permission set gives read access to Notes.
+
+On the 2026-09-30 smoke run the Run As user was a System Administrator,
+which can see every object, and `ContentNote` was still not queryable
+(the describe answered 404 `NOT_FOUND`). So the likely cause was Notes
+not being enabled, or the setting not saved, rather than access. The
+seed script (section 5) prints whether `ContentNote` is queryable.
 
 If Enhanced Notes are linked to sampled deals but `ContentNote` can't be
 read, the note metrics show as **Not measured**, with a hint naming these
@@ -178,6 +182,11 @@ the directory you run the command in; an absolute path avoids surprises).
 Enough data to exercise every read path. Five opportunities is plenty;
 the report will still call the sample small (below).
 
+`scripts/seed-dev-org.mjs` at the repo root creates these records (all
+named `SEED-...`) in the maintainer's Developer Edition org, and
+`--cleanup` deletes them; see its header. It is not part of any package.
+The custom stage value stays a manual step.
+
 - [ ] **3 to 5 opportunities across stages**, for example Prospecting,
       Qualification and Proposal/Price Quote, each with an Account, Amount,
       Close Date and Next Step filled in.
@@ -188,9 +197,10 @@ the report will still call the sample small (below).
 - [ ] **1 Enhanced Note** on an opportunity (the Notes related list in
       Lightning). Make one longer than 255 characters to exercise the
       full-text fetch (**unverified:** the 255-character preview cap).
-- [ ] **1 legacy Note** on an opportunity. **Unverified:** Lightning may
-      only offer Enhanced Notes; if so, create it in Salesforce Classic or
-      insert a `Note` record through the API.
+- [ ] **1 legacy Note** on an opportunity. Lightning may only offer
+      Enhanced Notes; if so, create it in Salesforce Classic or insert a
+      `Note` record through the API. **Confirmed 2026-09-30:** a `Note`
+      inserted through the API is read (`note_coverage_rate` 1 of 16).
 - [ ] **1 Task** related to an opportunity (Log a Call, or New Task with
       Related To set to the opportunity).
 - [ ] **1 Event** related to an opportunity (New Event on its Activity tab).
@@ -202,7 +212,9 @@ the report will still call the sample small (below).
       notice), then again with it mapped (expect no notice).
 - [ ] Change one opportunity's stage at least once, so `OpportunityHistory`
       has rows. They are dated when you make the change: history can't be
-      backdated (section 7).
+      backdated (section 7). **Confirmed 2026-09-30:** creating a deal at
+      Prospecting and moving it to Qualification gives two rows, read as
+      prospecting then discovery.
 
 ## 6. Run it
 
@@ -237,8 +249,8 @@ about 565 for the detailed checks at 20 per stage, plus up to 200 note
 full-text fetches and 4 fixed calls. The plan printed before each run
 states this worst case for the whole run. **Measured 2026-09-30:** 118
 calls on a 31-deal org (4 for the scan, 114 for the detailed checks, about
-4 per sampled deal), in line with the estimate; on a five-deal seeded org,
-expect a few dozen. A Developer Edition org's daily API limit is 15,000
+4 per sampled deal), in line with the estimate; 132 on the same org with
+four seeded deals added (35 deals, 1 of them the `ContentNote` check). A Developer Edition org's daily API limit is 15,000
 (**confirmed** from `/limits`; the adapter doesn't read it). `/limits`'s
 remaining count lags by minutes, so it can't measure a single run.
 
@@ -280,8 +292,11 @@ what you seeded, not that the org is ready:
   your contact role and notes.
 - The stage-map notice appears with the unmapped stage and disappears once
   it is mapped.
-- With `SF_ACTIVITY_CAPTURE=auto`, activity metrics get values from your
-  Task and Event.
+- With `SF_ACTIVITY_CAPTURE=auto`, the activity metrics are scored, but
+  `activity_capture_rate` leaves out deals created in the last 7 days
+  (they haven't had time to gather activity), so a Task and Event on a
+  deal you seeded today don't count yet. On 2026-09-30 it scored 0 over
+  the 13 older sample deals.
 
 ### Stage history on a new org
 

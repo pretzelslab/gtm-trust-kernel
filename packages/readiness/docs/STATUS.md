@@ -54,9 +54,24 @@ alerts Blocked (it gates only that capability; `win_rate_dispersion` also
 needs history). Expected, not a defect. Phase 4 needs fixture-based
 history tests or an older org to exercise these gates on live data.
 
-**Next:** seed the org with `scripts/seed-dev-org.mjs` (to be run only on
-the user's yes), fix ContentNote access, then re-run the smoke test for
-the untested rows above.
+**Seeded re-run (same day).** `scripts/seed-dev-org.mjs --apply
+--allow-no-enhanced` added 4 deals (3 open, 1 Closed Lost), a contact,
+a contact role, a legacy Note, a Task and an Event; Enhanced Notes were
+skipped (`ContentNote` still not queryable, with a System Administrator
+Run As user, so Notes are likely not enabled or not saved). Both runs
+exit 0, 132 API calls each. Confirmed: contact role read
+(`contact_linkage_rate` 1/16), legacy Note read (`note_coverage_rate`
+1/16, 51 characters), Task and Event read with the Event's time from
+`ActivityDateTime`, stage history rows for the stage change
+(prospecting then discovery). Eligible 35 = 16 open + 19 closed. No
+seeded or sample record text in any output. Still untested: the
+TextPreview 255 cap, the ContentNote Content endpoint, the SNOTE filter
+with data, Event ordering across several Events, the stage-map notice
+(needs `SEED_CUSTOM_STAGE`).
+
+**Next:** enable and save Notes, add the custom Stage value, run
+`scripts/seed-dev-org.mjs --top-up --apply` with `SEED_CUSTOM_STAGE`
+set, then re-run the smoke test for the rows still untested.
 
 ## Status as of 2026-09-30, later (pending decisions resolved)
 
