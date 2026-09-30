@@ -1,0 +1,110 @@
+/**
+ * SalesforceAdapter unit tests against the in-memory fake API
+ * (test/support/fakeSalesforce.ts). No network, no credentials. These pin
+ * down the adapter's own behaviour (queries sent, mapping, paging, errors);
+ * the live contract run against a real org is separate.
+ */
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AdapterError } from '../src/types.js';
+import { installFakeSalesforce, sfId, sfRef } from './support/fakeSalesforce.js';
+
+const OPP_1 = sfId('006', 1);
+const OPP_2 = sfId('006', 2);
+const ACC_1 = sfId('001', 1);
+
+function rawOpp(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    Id: id,
+    AccountId: ACC_1,
+    Name: `Deal ${id}`,
+    Amount: 50000,
+    StageName: 'Prospecting',
+    CloseDate: '2026-12-01',
+    OwnerId: sfId('005', 1),
+    IsClosed: false,
+    IsWon: false,
+    ForecastCategoryName: 'Pipeline',
+    NextStep: 'Send proposal',
+    CreatedDate: '2026-01-01T00:00:00.000+0000',
+    SystemModstamp: '2026-09-01T00:00:00.000+0000',
+    ...overrides,
+  };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('SalesforceAdapter (fake API)', () => {
+  it('fetches a token once and reuses it across requests', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Opportunity/, [rawOpp(OPP_1)]);
+    const adapter = sf.adapter();
+    await adapter.listOpportunities({ limit: 200 });
+    await adapter.listOpportunities({ limit: 200 });
+    expect(sf.urls.filter((u) => u.startsWith('/services/oauth2/token'))).toHaveLength(1);
+  });
+
+  it('pages opportunities through nextRecordsUrl and maps known and custom stages', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Opportunity/, {
+      pages: [[rawOpp(OPP_1, { StageName: 'Negotiation/Review' })], [rawOpp(OPP_2, { StageName: 'Technical Win' })]],
+    });
+    const adapter = sf.adapter();
+
+    const first = await adapter.listOpportunities({ limit: 200 });
+    expect(first.items.map((o) => [o.stage, o.stageConfidence])).toEqual([['negotiation', 'mapped']]);
+    expect(first.nextCursor).toBeDefined();
+
+    const second = await adapter.listOpportunities({ limit: 200, cursor: first.nextCursor });
+    expect(second.items.map((o) => [o.vendorStageLabel, o.stageConfidence])).toEqual([['Technical Win', 'unmapped']]);
+    expect(second.nextCursor).toBeUndefined();
+    expect(sf.queries).toHaveLength(1); // the second page came from the locator, not a new query
+  });
+
+  it('orders the opportunity listing oldest-modified first (current behaviour)', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Opportunity/, []);
+    await sf.adapter().listOpportunities({ limit: 200 });
+    expect(sf.queries[0]).toMatch(/ORDER BY SystemModstamp ASC$/);
+  });
+
+  it('maps legacy Note records per opportunity and flags truncation past the limit', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Note WHERE ParentId/, (soql) => {
+      const parent = /ParentId = '(\w+)'/.exec(soql)![1]!;
+      return [
+        { Id: sfId('002', 1), ParentId: parent, Title: 't', Body: 'Discussed pricing with the buyer.', OwnerId: sfId('005', 1), CreatedDate: '2026-09-01T00:00:00.000+0000', SystemModstamp: '2026-09-01T00:00:00.000+0000' },
+      ];
+    });
+    const adapter = sf.adapter();
+    const result = await adapter.getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.body.value).toBe('Discussed pricing with the buyer.');
+    expect(result.truncatedOpportunityIds.size).toBe(0);
+  });
+
+  it('turns a 403 into a non-retryable permission AdapterError', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Opportunity/, { status: 403 });
+    const err = await sf.adapter().listOpportunities({ limit: 200 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AdapterError);
+    expect((err as AdapterError).kind).toBe('permission');
+    expect((err as AdapterError).retryable).toBe(false);
+  });
+
+  it('turns a 429 into a retryable rate_limit AdapterError carrying Retry-After', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Opportunity/, { status: 429, headers: { 'Retry-After': '7' } });
+    const err = (await sf.adapter().listOpportunities({ limit: 200 }).catch((e: unknown) => e)) as AdapterError;
+    expect(err.kind).toBe('rate_limit');
+    expect(err.retryable).toBe(true);
+    expect(err.retryAfterMs).toBe(7000);
+  });
+
+  it('fails loudly on a query the fake has no handler for', async () => {
+    const sf = installFakeSalesforce();
+    await expect(sf.adapter().listOpportunities({ limit: 200 })).rejects.toThrow(/no handler for SOQL/);
+  });
+});
