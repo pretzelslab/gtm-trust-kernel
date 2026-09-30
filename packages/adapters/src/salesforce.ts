@@ -21,10 +21,12 @@
  * sees that up front, rather than getting a surprise rejection.
  */
 
+import { readFileSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CANONICAL_STAGE_ORDER } from './model/canonical.js';
 import type {
   Account,
   Activity,
@@ -97,6 +99,51 @@ export interface SalesforceConfig {
    * SF_NOTE_FULLTEXT_FETCH_LIMIT; defaults to 200. 0 never fetches.
    */
   readonly noteFullTextFetchLimit?: number;
+  /**
+   * The org's own stage labels mapped to canonical stages, merged over the
+   * default Sales Process map (SF_STAGE_MAP_PATH; see loadStageMapFile).
+   */
+  readonly stageMap?: Readonly<Record<string, CanonicalStage>>;
+}
+
+const CANONICAL_STAGES: readonly CanonicalStage[] = [...CANONICAL_STAGE_ORDER, 'closed_won', 'closed_lost'];
+
+/**
+ * Reads a stage map file: a JSON object from the org's stage labels
+ * (exactly as Salesforce stores StageName) to canonical stages. Throws an
+ * error naming the file and the first bad entry. The labels themselves are
+ * org configuration and never appear in the report.
+ */
+export function loadStageMapFile(filePath: string): Record<string, CanonicalStage> {
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf8');
+  } catch (err) {
+    throw new Error(`Cannot read stage map ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Stage map ${filePath} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`Stage map ${filePath} must be a JSON object of "Stage label": "canonical stage" entries.`);
+  }
+  const map: Record<string, CanonicalStage> = {};
+  for (const [label, stage] of Object.entries(parsed)) {
+    if (label.trim().length === 0) {
+      throw new Error(`Stage map ${filePath} has an empty stage label.`);
+    }
+    if (typeof stage !== 'string' || !(CANONICAL_STAGES as readonly string[]).includes(stage)) {
+      throw new Error(
+        `Stage map ${filePath}: "${label}" maps to ${JSON.stringify(stage)}, which is not a canonical stage. ` +
+          `Use one of: ${CANONICAL_STAGES.join(', ')}.`,
+      );
+    }
+    map[label] = stage as CanonicalStage;
+  }
+  return map;
 }
 
 export const DEFAULT_NOTE_FULLTEXT_FETCH_LIMIT = 200;
@@ -138,6 +185,7 @@ export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env
     tokenCachePath: env.SF_TOKEN_CACHE_PATH || DEFAULT_TOKEN_CACHE_PATH,
     ...(activityCaptureRaw ? { activityCapture: activityCaptureRaw as SalesforceActivityCapture } : {}),
     ...(fetchLimitRaw ? { noteFullTextFetchLimit: Number(fetchLimitRaw) } : {}),
+    ...(env.SF_STAGE_MAP_PATH?.trim() ? { stageMap: loadStageMapFile(env.SF_STAGE_MAP_PATH.trim()) } : {}),
   };
 }
 
@@ -207,8 +255,10 @@ async function fetchAccessToken(config: SalesforceConfig): Promise<CachedToken> 
 
 // ---------------------------------------------------------------------------
 // Stage mapping — Salesforce's default Sales Process labels. An org with a
-// customised picklist will simply produce 'unmapped' stages, never a guess
-// dressed up as a mapped one (see types.ts's design rule at the top).
+// customised picklist maps its own labels with a stage map file
+// (SalesforceConfig.stageMap); any label still unknown produces an
+// 'unmapped' stage, never a guess dressed up as a mapped one (see types.ts's
+// design rule at the top).
 // ---------------------------------------------------------------------------
 
 const SALESFORCE_STAGE_MAP: Readonly<Record<string, CanonicalStage>> = {
@@ -224,9 +274,21 @@ const SALESFORCE_STAGE_MAP: Readonly<Record<string, CanonicalStage>> = {
   'Closed Lost': 'closed_lost',
 };
 
-function mapStage(vendorLabel: string, isClosed: boolean, isWon: boolean): { stage: CanonicalStage; stageConfidence: StageConfidence } {
-  const mapped = SALESFORCE_STAGE_MAP[vendorLabel];
-  if (mapped) return { stage: mapped, stageConfidence: 'mapped' };
+function mapStage(
+  stageMap: Readonly<Record<string, CanonicalStage>>,
+  vendorLabel: string,
+  isClosed: boolean,
+  isWon: boolean,
+): { stage: CanonicalStage; stageConfidence: StageConfidence } {
+  const mapped = stageMap[vendorLabel];
+  if (mapped) {
+    // A mapping that contradicts Salesforce's own IsClosed/IsWon flags is
+    // a map error: the flags win, and the record counts as unmapped so
+    // stage_mapping_coverage shows it.
+    const mappedClosed = mapped === 'closed_won' || mapped === 'closed_lost';
+    const agrees = mappedClosed ? isClosed && (mapped === 'closed_won') === isWon : !isClosed;
+    if (agrees) return { stage: mapped, stageConfidence: 'mapped' };
+  }
   // Unmapped custom stage: fall back to what IsClosed/IsWon already tell us
   // rather than a bare guess — those two booleans are always trustworthy
   // regardless of the picklist label.
@@ -459,6 +521,8 @@ export class SalesforceAdapter implements CrmAdapter {
   readonly orgId: string;
 
   private cachedToken: CachedToken | null = null;
+  /** Default Sales Process map with the org's own stage map merged over it. */
+  private readonly stageMap: Readonly<Record<string, CanonicalStage>>;
   /** Enhanced Note full-text fetches used so far by this instance (one run). */
   private noteFullTextFetchesUsed = 0;
   /** opportunityId -> last-seen toStage, for deriving fromStage across listStageHistory pages/calls on this instance. */
@@ -466,6 +530,7 @@ export class SalesforceAdapter implements CrmAdapter {
 
   constructor(private readonly config: SalesforceConfig) {
     this.orgId = new URL(config.instanceUrl).host;
+    this.stageMap = { ...SALESFORCE_STAGE_MAP, ...config.stageMap };
   }
 
   capabilities(): AdapterCapabilities {
@@ -507,7 +572,7 @@ export class SalesforceAdapter implements CrmAdapter {
       // Static Developer-Edition-typical estimate, not queried live via
       // /services/data/vXX/limits/. Flagged as a known gap in STATUS.md.
       rateLimit: { kind: 'daily_quota', value: 15000 },
-      stageMap: SALESFORCE_STAGE_MAP,
+      stageMap: this.stageMap,
       accountBatchLimit: 200,
       contactBatchLimit: 200,
       childRecordBatchLimit: 200,
@@ -675,7 +740,7 @@ export class SalesforceAdapter implements CrmAdapter {
   });
 
   private mapOpportunity = (raw: RawOpportunity, contactLinks: readonly OpportunityContactLink[] = []): Opportunity => {
-    const { stage, stageConfidence } = mapStage(raw.StageName, raw.IsClosed, raw.IsWon);
+    const { stage, stageConfidence } = mapStage(this.stageMap, raw.StageName, raw.IsClosed, raw.IsWon);
     return {
       ref: this.ref('opportunity', raw.Id),
       accountRef: this.ref('account', raw.AccountId ?? raw.Id),
@@ -777,8 +842,14 @@ export class SalesforceAdapter implements CrmAdapter {
     }),
   });
 
+  /** A history row's stage: mapped, or a 'prospecting' placeholder marked unmapped (never a silent guess). */
+  private historyStage(stageName: string | null): { toStage: CanonicalStage; unmapped: boolean } {
+    const mapped = stageName ? this.stageMap[stageName] : undefined;
+    return mapped ? { toStage: mapped, unmapped: false } : { toStage: 'prospecting', unmapped: true };
+  }
+
   private mapStageHistory = (raw: RawOpportunityHistory): StageHistoryEntry => {
-    const toStage: CanonicalStage = raw.StageName ? (SALESFORCE_STAGE_MAP[raw.StageName] ?? 'prospecting') : 'prospecting';
+    const { toStage, unmapped } = this.historyStage(raw.StageName);
     const fromStage = this.lastKnownStage.get(raw.OpportunityId);
     this.lastKnownStage.set(raw.OpportunityId, toStage);
     return {
@@ -789,6 +860,7 @@ export class SalesforceAdapter implements CrmAdapter {
       changedAt: raw.CreatedDate,
       changedBy: raw.CreatedById ?? undefined,
       closeDateAtChange: raw.CloseDate ?? undefined,
+      ...(unmapped ? { toStageConfidence: 'unmapped' as const } : {}),
     };
   };
 
@@ -1097,7 +1169,7 @@ export class SalesforceAdapter implements CrmAdapter {
     let previous: CanonicalStage | undefined;
     const result: StageHistoryEntry[] = [];
     for (const raw of rows) {
-      const toStage: CanonicalStage = raw.StageName ? (SALESFORCE_STAGE_MAP[raw.StageName] ?? 'prospecting') : 'prospecting';
+      const { toStage, unmapped } = this.historyStage(raw.StageName);
       result.push({
         ref: this.ref('stage_history', raw.Id),
         opportunityRef: this.ref('opportunity', raw.OpportunityId),
@@ -1106,6 +1178,7 @@ export class SalesforceAdapter implements CrmAdapter {
         changedAt: raw.CreatedDate,
         changedBy: raw.CreatedById ?? undefined,
         closeDateAtChange: raw.CloseDate ?? undefined,
+        ...(unmapped ? { toStageConfidence: 'unmapped' as const } : {}),
       });
       previous = toStage;
     }

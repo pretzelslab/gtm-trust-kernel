@@ -168,6 +168,12 @@ the canonical ladder defined in the adapter contract.
 *distinct picklist values*. A retired stage value that no sampled deal
 currently uses does not count against coverage. This is what makes
 `viableAt: 1.0` reachable rather than permanently blocked by legacy config.
+**Custom stages (Salesforce, 2026-09-30):** an org maps its own stage
+labels with a JSON stage map (`SF_STAGE_MAP_PATH`), merged over the default
+Sales Process map. A mapping that contradicts Salesforce's own
+IsClosed/IsWon flags counts as unmapped (the flags decide the stage), so a
+map error shows up here rather than silently. Stage labels never appear in
+the report.
 **Threshold:** `stage_mapping_coverage`.
 
 ### duplicate_account_rate
@@ -585,6 +591,11 @@ means stage definitions aren't being applied consistently. This is
 unaffected by segment mix and is correctly kept as a gate on
 `forecast_assistance` (see `rubric.ts` rationale — do not reinterpret this
 as a segment metric in implementation).
+**Unmapped history (2026-09-30):** a stage-history entry whose vendor stage
+has no canonical mapping (`StageHistoryEntry.toStageConfidence:
+'unmapped'`) carries only a placeholder `toStage`, so it is skipped, and
+the number skipped goes in `note`. An opportunity with only unmapped
+entries is not eligible.
 **Data source:** `StageHistoryEntry.toStage`, keyed by `opportunityRef`,
 fetched via `CrmAdapter.getStageHistoryByOpportunity(oppRefs)` (new,
 same shape as `getNotesByOpportunity` — a closed deal's `Opportunity.stage`

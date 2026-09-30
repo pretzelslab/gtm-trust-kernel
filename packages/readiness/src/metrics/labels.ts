@@ -113,7 +113,26 @@ export function winRateDispersion(sample: CoverageSample, _config: MetricConfig)
     };
   }
 
-  const eligible = sample.closedOpportunities.filter((o) => (sample.stageHistoryByOpportunity.get(o.ref.id)?.length ?? 0) > 0);
+  // An entry whose vendor stage has no canonical mapping carries only a
+  // placeholder toStage, so it is skipped; the count goes in the note.
+  const mappedEntries = (oppId: string) =>
+    (sample.stageHistoryByOpportunity.get(oppId) ?? []).filter((e) => e.toStageConfidence !== 'unmapped');
+  let unmappedEntryCount = 0;
+  for (const o of sample.closedOpportunities) {
+    for (const e of sample.stageHistoryByOpportunity.get(o.ref.id) ?? []) {
+      if (e.toStageConfidence === 'unmapped') unmappedEntryCount++;
+    }
+  }
+  const unmappedNote =
+    unmappedEntryCount > 0
+      ? `${unmappedEntryCount} stage-history entr${unmappedEntryCount === 1 ? 'y' : 'ies'} with an unmapped stage excluded`
+      : null;
+  const withUnmappedNote = (note: string | null): { note?: string } => {
+    const parts = [note, unmappedNote].filter((p): p is string => p !== null);
+    return parts.length > 0 ? { note: parts.join('; ') } : {};
+  };
+
+  const eligible = sample.closedOpportunities.filter((o) => mappedEntries(o.ref.id).length > 0);
   if (eligible.length === 0) {
     return {
       metric: 'win_rate_dispersion',
@@ -121,14 +140,14 @@ export function winRateDispersion(sample: CoverageSample, _config: MetricConfig)
       value: null,
       sampleSize: 0,
       lowConfidence: false,
-      note: 'no closed opportunities in sample with a resolvable stage-history entry',
+      ...withUnmappedNote('no closed opportunities in sample with a resolvable stage-history entry'),
     };
   }
 
   const wonByStage = new Map<CanonicalStage, number>();
   const lostByStage = new Map<CanonicalStage, number>();
   for (const o of eligible) {
-    const entries = sample.stageHistoryByOpportunity.get(o.ref.id) ?? [];
+    const entries = mappedEntries(o.ref.id);
     const stagesVisited = new Set(entries.map((e) => e.toStage).filter((stage) => INTERMEDIATE_STAGES.has(stage)));
     const bucket = o.isWon ? wonByStage : lostByStage;
     for (const stage of stagesVisited) {
@@ -157,7 +176,9 @@ export function winRateDispersion(sample: CoverageSample, _config: MetricConfig)
       value: null,
       sampleSize: 0,
       lowConfidence: false,
-      note: `fewer than 2 canonical stages have at least ${MIN_CLOSED_OPPORTUNITIES_PER_STAGE} closed opportunities (${excludedStageCount} stage${excludedStageCount === 1 ? '' : 's'} excluded)`,
+      ...withUnmappedNote(
+        `fewer than 2 canonical stages have at least ${MIN_CLOSED_OPPORTUNITIES_PER_STAGE} closed opportunities (${excludedStageCount} stage${excludedStageCount === 1 ? '' : 's'} excluded)`,
+      ),
     };
   }
 
@@ -167,8 +188,10 @@ export function winRateDispersion(sample: CoverageSample, _config: MetricConfig)
     value: standardDeviation(winRates),
     sampleSize: eligible.length,
     lowConfidence: eligible.length < LOW_CONFIDENCE_SAMPLE_SIZE,
-    ...(excludedStageCount > 0
-      ? { note: `${excludedStageCount} stage${excludedStageCount === 1 ? '' : 's'} excluded: fewer than ${MIN_CLOSED_OPPORTUNITIES_PER_STAGE} closed opportunities` }
-      : {}),
+    ...withUnmappedNote(
+      excludedStageCount > 0
+        ? `${excludedStageCount} stage${excludedStageCount === 1 ? '' : 's'} excluded: fewer than ${MIN_CLOSED_OPPORTUNITIES_PER_STAGE} closed opportunities`
+        : null,
+    ),
   };
 }

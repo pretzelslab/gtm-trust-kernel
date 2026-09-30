@@ -113,6 +113,25 @@ describe('winRateDispersion', () => {
     });
   });
 
+  it('skips stage-history entries with an unmapped stage and counts them in note, value/sampleSize otherwise unchanged', () => {
+    const base = winRateDispersionFixture();
+    let added = 0;
+    const stageHistoryByOpportunity = new Map(
+      [...base.stageHistoryByOpportunity].map(([oppId, entries]) => {
+        const first = entries[0];
+        if (!first) return [oppId, entries];
+        added++;
+        // Placeholder toStage an unmapped row carries; counted, it would add a stage bucket.
+        return [oppId, [...entries, { ...first, ref: { ...first.ref, id: `${first.ref.id}-unmapped` }, toStage: 'negotiation' as const, toStageConfidence: 'unmapped' as const }]];
+      }),
+    );
+    const result = winRateDispersion({ ...base, stageHistoryByOpportunity }, { asOf: WIN_RATE_DISPERSION_ASOF });
+    expect(added).toBeGreaterThan(1);
+    expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_EXPECTED.value, 10);
+    expect(result.sampleSize).toBe(WIN_RATE_DISPERSION_EXPECTED.sampleSize);
+    expect(result.note).toBe(`${added} stage-history entries with an unmapped stage excluded`);
+  });
+
   it('excludes a stage below the 5-opportunity minimum, reporting exactly 1 excluded in note, value/sampleSize otherwise unchanged', () => {
     const result = winRateDispersion(winRateDispersionExcludedStageFixture(), { asOf: WIN_RATE_DISPERSION_ASOF });
     expect(result.value).toBeCloseTo(WIN_RATE_DISPERSION_EXCLUDED_STAGE_EXPECTED.value, 10);

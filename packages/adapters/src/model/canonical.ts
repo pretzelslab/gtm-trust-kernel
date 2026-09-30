@@ -167,6 +167,12 @@ export interface StageHistoryEntry {
   readonly changedBy?: string;
   /** Close date at the moment of the change, for push-count signals. */
   readonly closeDateAtChange?: string;
+  /**
+   * 'unmapped' when the vendor stage recorded here has no canonical
+   * mapping; `toStage` is then only a placeholder and stage-based metrics
+   * must skip the entry. Absent means mapped.
+   */
+  readonly toStageConfidence?: StageConfidence;
 }
 
 export interface OwnerChange {

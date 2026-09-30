@@ -6,7 +6,16 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ACTIVITY_CAPTURE_HINT, ENHANCED_NOTE_PREVIEW_CAP, htmlToText, loadSalesforceConfigFromEnv } from '../src/salesforce.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import {
+  ACTIVITY_CAPTURE_HINT,
+  ENHANCED_NOTE_PREVIEW_CAP,
+  htmlToText,
+  loadSalesforceConfigFromEnv,
+  loadStageMapFile,
+} from '../src/salesforce.js';
 import { AdapterError } from '../src/types.js';
 import { installFakeSalesforce, sfId, sfRef } from './support/fakeSalesforce.js';
 
@@ -351,6 +360,86 @@ describe('SalesforceAdapter (fake API)', () => {
       sf.on(/SELECT COUNT\(\) FROM Opportunity WHERE IsClosed = true AND CloseDate >= 2025-09-30 AND CloseDate <= 2026-09-30$/, [{}, {}]);
       const count = await sf.adapter().countOpportunitiesForSample(population);
       expect([count.open, count.closedInWindow, count.apiCallsConsumed]).toEqual([0, 2, 2]);
+    });
+  });
+
+  describe('custom stage mapping', () => {
+    function mapFile(content: string): string {
+      const file = path.join(mkdtempSync(path.join(tmpdir(), 'gtk-stage-map-')), 'stage-map.json');
+      writeFileSync(file, content, 'utf8');
+      return file;
+    }
+
+    it('loads a valid map file, including through SF_STAGE_MAP_PATH', () => {
+      const file = mapFile(JSON.stringify({ 'Technical Win': 'evaluation', Signed: 'closed_won' }));
+      expect(loadStageMapFile(file)).toEqual({ 'Technical Win': 'evaluation', Signed: 'closed_won' });
+      const config = loadSalesforceConfigFromEnv({
+        SF_CLIENT_ID: 'id', SF_CLIENT_SECRET: 'secret', SF_INSTANCE_URL: 'https://example.my.salesforce.com', SF_STAGE_MAP_PATH: file,
+      });
+      expect(config.stageMap).toEqual({ 'Technical Win': 'evaluation', Signed: 'closed_won' });
+    });
+
+    it('names the bad entry when a label maps to something that is not a stage', () => {
+      const file = mapFile(JSON.stringify({ 'Technical Win': 'tech' }));
+      expect(() => loadStageMapFile(file)).toThrow(
+        `Stage map ${file}: "Technical Win" maps to "tech", which is not a canonical stage. ` +
+          'Use one of: prospecting, discovery, evaluation, proposal, negotiation, closed_won, closed_lost.',
+      );
+    });
+
+    it.each([
+      ['not JSON', '{nope', /is not valid JSON/],
+      ['an array', '["evaluation"]', /must be a JSON object/],
+      ['an empty label', '{" ": "evaluation"}', /has an empty stage label/],
+    ])('rejects a file that is %s', (_name, content, error) => {
+      expect(() => loadStageMapFile(mapFile(content))).toThrow(error);
+    });
+
+    it('rejects a missing file with its path', () => {
+      expect(() => loadStageMapFile(path.join(tmpdir(), 'gtk-no-such-map.json'))).toThrow(/Cannot read stage map .*gtk-no-such-map\.json/);
+    });
+
+    it('maps a custom stage label, and exposes the merged map in capabilities()', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Opportunity /, [rawOpp(OPP_1, { StageName: 'Technical Win' }), rawOpp(OPP_2, { StageName: 'Qualification' })]);
+      sf.on(/FROM OpportunityContactRole/, []);
+      const adapter = sf.adapter({ stageMap: { 'Technical Win': 'evaluation' } });
+      const page = await adapter.listOpportunities({ limit: 200 });
+      expect(page.items.map((o) => [o.stage, o.stageConfidence])).toEqual([
+        ['evaluation', 'mapped'],
+        ['discovery', 'mapped'],
+      ]);
+      expect(adapter.capabilities().stageMap['Technical Win']).toBe('evaluation');
+      expect(adapter.capabilities().stageMap['Qualification']).toBe('discovery');
+    });
+
+    it("counts a mapping that contradicts Salesforce's closed flags as unmapped, trusting the flags", async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM Opportunity /, [
+        rawOpp(OPP_1, { StageName: 'Signed', IsClosed: false, IsWon: false }),
+        rawOpp(OPP_2, { StageName: 'Technical Win', IsClosed: true, IsWon: false }),
+      ]);
+      sf.on(/FROM OpportunityContactRole/, []);
+      const adapter = sf.adapter({ stageMap: { Signed: 'closed_won', 'Technical Win': 'evaluation' } });
+      const page = await adapter.listOpportunities({ limit: 200 });
+      expect(page.items.map((o) => [o.stage, o.stageConfidence])).toEqual([
+        ['prospecting', 'unmapped'],
+        ['closed_lost', 'unmapped'],
+      ]);
+    });
+
+    it('marks a stage-history row with an unmapped stage instead of silently calling it prospecting', async () => {
+      const sf = installFakeSalesforce();
+      sf.on(/FROM OpportunityHistory WHERE OpportunityId/, [
+        { Id: sfId('008', 1), OpportunityId: OPP_1, StageName: 'Custom Stage', CloseDate: null, CreatedById: null, CreatedDate: '2026-09-02T00:00:00.000+0000' },
+        { Id: sfId('008', 2), OpportunityId: OPP_1, StageName: 'Technical Win', CloseDate: null, CreatedById: null, CreatedDate: '2026-09-01T00:00:00.000+0000' },
+      ]);
+      const adapter = sf.adapter({ stageMap: { 'Technical Win': 'evaluation' } });
+      const result = await adapter.getStageHistoryByOpportunity([sfRef('opportunity', OPP_1)]);
+      expect(result.items.map((e) => [e.toStage, e.toStageConfidence])).toEqual([
+        ['evaluation', undefined],
+        ['prospecting', 'unmapped'],
+      ]);
     });
   });
 });
