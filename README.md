@@ -84,9 +84,9 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 |---|---|
 | I1 | A change to a field outside the creator's role allowlist is rejected at `build()`, and re-checked at `apply()` |
 | I2 | `apply()` accepts only the exact proposal object the same kernel's `approve()` returned, once. Approval is in-process only: a serialized, reloaded, copied or edited proposal is rejected. Managers, RevOps and admins can't approve their own proposals |
-| I3 | Every apply carries the concurrency token from proposal time |
+| I3 | Every write checks a concurrency token, so a record edited since it was read is never overwritten. When a proposal changes several fields on one record, each write after the first expects the token the previous write returned, as long as the changes were read from the same version of the record |
 | I4 | Every write stores an inverse patch, so rollback works |
-| I5 | Every step is added to a hash-chained ledger (except a failed inverse write during a partial rollback; see Known gaps) |
+| I5 | Every step is added to a hash-chained ledger, including any field a failed apply could not restore |
 | I6 | A proposal past its TTL expires instead of applying |
 | I7 | A kill switch stops all applies without a redeploy |
 
@@ -102,7 +102,7 @@ npm run ci
 - Reps can self-approve changes to their own `nextStep` and `closeDate`. This is by design. The approver's role is not checked, so a rep can approve a proposal created by an admin.
 - The injection guard is a short list of phrases plus a canary token. There is no injection test corpus or red-team report yet.
 - The audit ledger is in memory only and is not anchored outside itself, so rewriting the whole chain would go undetected.
-- If an inverse write during a partial rollback returns a conflict instead of throwing, it is not logged.
+- Writes are per field today, not atomic per record. If a later field fails, the earlier ones are rolled back; if that rollback can't complete, the proposal can't be retried and the unrestored field is logged.
 - The Salesforce adapter is read-only and experimental, and it is not yet validated against the contract suite.
 
 ## Status and roadmap
@@ -116,6 +116,7 @@ npm run ci
 | done | Salesforce adapter (read-only, experimental, not yet validated against the contract suite) |
 | next | `--out` flag to choose the report folder (0.1.1) |
 | next | Approver role check for I2 |
+| next | Per-record atomic writes via a multi-field adapter call (0.2) |
 | next | Live scan in the published CLI |
 | next | Injection test corpus and red-team report |
 | next | Evaluation harness with labelled ground truth |
