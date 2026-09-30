@@ -534,41 +534,29 @@ under that rule, which inflates this ratio, never silently deflates it.
 ## D7. Label availability
 
 ### closed_deal_count_12m
-**Definition:** count of sampled closed opportunities (`closedOpportunities`)
-with `isClosed = true` and `closeDate` within the trailing 12 months,
-**computed org-wide** in v0.1.
+**Definition:** the number of closed opportunities (won or lost) with a
+close date in the trailing 12 months, **computed org-wide** in v0.1.
+**Source (decided 2026-09-30):** the adapter's own population count
+(`countOpportunitiesForSample`'s `closedInWindow`; a `SELECT COUNT()` on
+Salesforce), taken before the scan, carried as
+`CoverageSample.closedInWindowCount`. Not the scanned or sampled rows, so
+it stays exact when the 5,000-deal scan budget is hit, and `floor` is
+always false. The adapter contract checks the count matches the full
+listing however little of it a scan reads. Not applicable when a sample
+carries no count.
 **Resolved ambiguity — "org-wide" (today):** read against this entry's own
-"per-segment" limitation below, "org-wide" means *not sliced by segment*,
-not "requires an unbounded, full-org count." The value is
-`closedOpportunities.length` after the `isClosed`/`closeDate` filter.
-**Resolved ambiguity — trust the sample's window (today):** `sample.ts`'s
-`closed_won`/`closed_lost` strata are already windowed to
-`CLOSED_WINDOW_MONTHS` (12) of the sample's `asOf` at sampling time. This
-metric trusts that window rather than re-deriving "within 12 months of
-`config.asOf`" independently against each opportunity's `closeDate` — a
-`sample.ts`-level regression test must assert `closedOpportunities` never
-contains an entry outside that window, so this metric can rely on it
-without re-checking.
-**Resolved ambiguity — sample-cap floor (today):** `closedOpportunities` is
-a stratified **reservoir sample**, bounded per stratum by
-`perStratumSampleSize` (caller-chosen per run, not derived from the org).
-Once either the `closed_won` or `closed_lost` stratum's reservoir fills
-(`StratumSampleResult.underfilled === false`), `closedOpportunities.length`
-for that stratum stops reflecting the org's true closed-deal volume — it
-saturates at the run's configured sample size instead. This metric's result
-MUST set `floor: true` whenever **either** closed stratum reports
-`underfilled: false`, reusing `MetricResult.floor` (same field the
-notes/activities truncation signal uses — a different underlying cause,
-same "this is a lower bound, not exact" contract). `CoverageSample` must
-carry both closed strata's `underfilled` flags forward from `SampleResult` —
-`buildCoverageSample` currently discards them when flattening into
-`closedOpportunities`; two new `CoverageSample` fields are needed (e.g.
-`closedWonUnderfilled`/`closedLostUnderfilled`, or equivalent).
+"per-segment" limitation below, "org-wide" means *not sliced by segment*.
+**Superseded (2026-09-30):** the value used to be the sampled
+`closedOpportunities.length`, with `floor: true` once a closed stratum's
+reservoir filled, so it could never exceed 2 x the per-stratum sample size.
+**Thresholds are provisional (calibrate in Phase 4):** `rubric.ts`'s 40/20
+were set against that 40-deal ceiling and are kept, unchanged, as real
+counts until Phase 4 calibration.
 **Known limitation, documented not fixed (today):** this should ideally be
 a per-segment floor (segment = deal-size band by default), so an enterprise
 org with 80 large deals across two segments isn't penalized the same way as
 one with 80 small deals in a single segment. Segment-aware computation is
-deferred to v0.2 pending real-org calibration; `rubric.ts`'s 60/25
+deferred to v0.2 pending real-org calibration; `rubric.ts`'s 40/20
 thresholds are set low specifically to avoid over-penalizing focused/
 enterprise motions in the meantime. Note this limitation in the report
 footer, same disclosure pattern as `RUBRIC_VERSION`.
@@ -669,13 +657,40 @@ trusts `closedOpportunities`' existing trailing-12-month window from
   only the opportunities a sample can use (every open one, plus closed ones
   with a close date in the trailing 12 months), newest created first
   (`CrmAdapter.listOpportunitiesForSample`), and counts that population up
-  front (`countOpportunitiesForSample`). The scan stops at the record
-  budget or as soon as every stratum is full, so it covers the most
-  recently created deals. When it never reached some eligible open deals,
-  the report says so (`ReportOrgSummary.olderOpenDealsExcluded`): "Scanned
-  the N most recently created of M eligible deals. K older open deals were
-  excluded, so this report describes newer deals." The population counts
-  are not sent to the narrative model.
+  front (`countOpportunitiesForSample`).
+- **Two tiers (decided 2026-09-30).**
+  - **Scan tier:** the scan reads every eligible deal up to 5,000
+    (`maxRecordsToScan`). Metrics that need only list-query fields run over
+    all of it (`buildReport.ts`, `SCAN_TIER_METRICS`):
+    `close_date_fill_rate`, `amount_fill_rate`, `owner_id_fill_rate`,
+    `next_step_fill_rate`, `contact_linkage_rate`,
+    `median_days_since_modified`, `past_due_close_date_rate`,
+    `round_amount_rate`, `stage_mapping_coverage`. `closed_deal_count_12m`
+    reads the population count instead (see its entry).
+  - **Detailed-check tier:** every other metric needs hydrated data (notes,
+    activities, history, accounts, contacts) and runs over a stratified
+    sample, up to 20 deals per stratum by default (`--hydrate-per-stratum`).
+    Each stratum's sample is a seeded reservoir over the whole scan, so it
+    is uniform across the population, not the newest deals, and the same
+    seed and data draw the same sample. The seed is recorded in the report
+    (`ReportOrgSummary.sampleSeed`).
+  - **Population weighting (accepted 2026-09-30):** scan-tier rates weight
+    each stage by how many deals it holds. The old sample held up to 20 per
+    stage, so a stage with 2,000 deals counted the same as one with 20;
+    now the large stage dominates. Thresholds keep their meaning (a share
+    of the org's deals); on a real org the numbers shift toward the
+    biggest stages.
+  - **Report:** both sizes and the seed are always shown: "Scanned N of M
+    eligible deals; detailed checks on K sampled deals (up to P per stage,
+    seed "S")."
+  - **Unread deals:** the scan runs to the end of the population unless
+    it hits the 5,000 budget or `--quick` stops it once every stratum's
+    sample is full (off by default). Whenever eligible deals go unread
+    (`ReportOrgSummary.eligibleDealsUnread`), the report says so: "Scanned
+    the N most recently created of M eligible deals. K older open deals were
+    excluded, so this report describes newer deals.", or, if every unread
+    deal is closed, "The K oldest were not read, ...". The population counts,
+    seed and per-stratum size are not sent to the narrative model.
 - **Blocked vs Not measured (decided 2026-09-30).** A gate with no reading
   is graded by *why* it has none:
   - **Blocked: the data is missing.** The CRM doesn't hold what the metric

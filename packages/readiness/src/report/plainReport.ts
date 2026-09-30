@@ -9,7 +9,7 @@
 import type { ReportData } from './buildReport.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildFullNarrative, type CapabilityOutcome } from './plainSummary.js';
-import { coverageNoticeText, stageMapNoticeText } from './render.js';
+import { coverageNoticeText, sampleSizeText, stageMapNoticeText } from './render.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -41,6 +41,7 @@ export function renderPlainReportHtml(data: ReportData, options?: { readonly mod
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">Data as of ${formatPlainDate(org.asOf)} · Report generated ${formatPlainDate(data.generatedAt)}</div>
+  <div class="meta">${escapeHtml(sampleSizeText(data))}</div>
   ${coverageNoticeText(data) ? `<p class="note">${escapeHtml(coverageNoticeText(data)!)}</p>` : ''}
   ${stageMapNoticeText(data) ? `<p class="note">${escapeHtml(stageMapNoticeText(data)!)}</p>` : ''}
   <p>${escapeHtml(narrative.summary)}</p>

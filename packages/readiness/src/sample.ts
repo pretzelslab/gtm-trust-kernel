@@ -85,10 +85,21 @@ export function classifyStratum(opportunity: Opportunity, asOf: Date): SampleStr
 export interface SampleConfig {
   /** Deterministic seed for the per-stratum reservoir sampling. */
   readonly seed: string;
-  /** Target number of opportunities to keep in each of the seven strata. */
+  /**
+   * Target number of opportunities to keep in each of the seven strata for
+   * the detailed checks (the hydration tier). A floor for a full stratum,
+   * not a reason to stop scanning: see stopWhenStrataFull.
+   */
   readonly perStratumSampleSize: number;
   /** Hard ceiling on total opportunities scanned from the adapter, across all pages. */
   readonly maxRecordsToScan: number;
+  /**
+   * --quick: stop scanning once every stratum holds perStratumSampleSize.
+   * Off by default, so the scan reads the whole eligible population (up to
+   * maxRecordsToScan) and each stratum's sample is drawn uniformly from all
+   * of it rather than from the newest deals.
+   */
+  readonly stopWhenStrataFull?: boolean;
   /** Page size to request when the adapter declares bulkRead support. */
   readonly pageSizeBulk: number;
   /** Page size to request when it does not. */
@@ -173,7 +184,7 @@ export function formatSamplePlan(plan: SamplePlan): string {
     `  Target per stratum: ${plan.perStratumSampleSize}`,
     `  Max records to scan: ${plan.maxRecordsToScan}`,
     `  Page size: ${plan.effectivePageSize}`,
-    `  Planned API calls: up to ${plan.plannedApiCalls} (worst case; may stop earlier if every stratum fills first)`,
+    `  Planned API calls: up to ${plan.plannedApiCalls} (worst case; stops earlier when the population runs out)`,
     `  Planned account hydration API calls: up to ${plan.plannedAccountApiCalls} (worst case: every sampled opportunity has a distinct account)`,
     `  ${formatRateLimit(plan.rateLimit, totalPlannedApiCalls)}`,
   ].join('\n');
@@ -282,6 +293,8 @@ export interface SampleRunResult extends SampleResult {
   readonly population: { readonly open: number; readonly closedInWindow: number };
   /** Open opportunities the scan read, sampled or not. population.open minus this is how many older open deals it never reached. */
   readonly openScanned: number;
+  /** Every eligible opportunity the scan read (the scan tier), in listing order. */
+  readonly scanned: { readonly open: readonly Opportunity[]; readonly closed: readonly Opportunity[] };
 }
 
 /**
@@ -325,12 +338,15 @@ export async function runSample(
   let recordsScanned = 0;
   let apiCallsConsumed = 0;
   let openScanned = 0;
+  const scanned = { open: [] as Opportunity[], closed: [] as Opportunity[] };
   let cursor: string | undefined;
   let stopReason: StopReason = 'source_exhausted';
 
-  // The population, newest created first: a scan that stops early (budget
-  // or full strata) has read the most recently created deals, and the
-  // counts let the report say how many older open deals it never reached.
+  // The population, newest created first: a scan that stops early (budget,
+  // or full strata under --quick) has read the most recently created deals,
+  // and the counts let the report say how many it never reached. A scan
+  // that runs to the end offers every deal to the reservoirs, so each
+  // stratum's sample is uniform over the whole population.
   const population = { asOf: asOf.toISOString(), closedWithinMonths: CLOSED_WINDOW_MONTHS };
   const count = await adapter.countOpportunitiesForSample(population);
   apiCallsConsumed += count.apiCallsConsumed;
@@ -339,26 +355,31 @@ export async function runSample(
     const page = await adapter.listOpportunitiesForSample({ ...population, limit: plan.effectivePageSize, cursor });
     apiCallsConsumed += page.apiCallsConsumed;
 
-    let budgetHit = false;
+    let stop: StopReason | null = null;
     for (const opportunity of page.items) {
       recordsScanned += 1;
       const stratum = classifyStratum(opportunity, asOf);
       if (stratum) {
         reservoirs.get(stratum)!.offer(opportunity);
-        if (OPEN_STAGES.has(stratum)) openScanned += 1;
+        if (OPEN_STAGES.has(stratum)) {
+          openScanned += 1;
+          scanned.open.push(opportunity);
+        } else {
+          scanned.closed.push(opportunity);
+        }
       }
       if (recordsScanned >= config.maxRecordsToScan) {
-        budgetHit = true;
+        stop = 'budget_exhausted';
+        break;
+      }
+      if (config.stopWhenStrataFull && allStrataFull(reservoirs, config.perStratumSampleSize)) {
+        stop = 'all_strata_full';
         break;
       }
     }
 
-    if (budgetHit) {
-      stopReason = 'budget_exhausted';
-      break;
-    }
-    if (allStrataFull(reservoirs, config.perStratumSampleSize)) {
-      stopReason = 'all_strata_full';
+    if (stop) {
+      stopReason = stop;
       break;
     }
     if (!page.nextCursor) {
@@ -384,6 +405,7 @@ export async function runSample(
     recordsScanned,
     population: { open: count.open, closedInWindow: count.closedInWindow },
     openScanned,
+    scanned,
     strata,
     stopReason,
   };

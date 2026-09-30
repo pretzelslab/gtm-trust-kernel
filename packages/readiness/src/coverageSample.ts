@@ -13,7 +13,7 @@
 
 import type { CrmAdapter } from '@gtm-trust-kernel/adapters/types.js';
 import type { Account, Activity, Contact, NextStepChange, Note, Opportunity, RecordRef, StageHistoryEntry } from '@gtm-trust-kernel/adapters/model/canonical.js';
-import type { SampleResult, SampleStratum } from './sample.js';
+import type { SampleResult, SampleRunResult, SampleStratum } from './sample.js';
 import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type { CoverageSample } from './metrics/types.js';
 
@@ -37,7 +37,15 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
-export function buildCoverageSample(result: SampleResult, capabilities: AdapterCapabilities): CoverageSample {
+/**
+ * closedInWindowCount is the adapter's population count
+ * (SampleRunResult.population.closedInWindow); null when there is none.
+ */
+export function buildCoverageSample(
+  result: SampleResult,
+  capabilities: AdapterCapabilities,
+  closedInWindowCount: number | null = null,
+): CoverageSample {
   const openOpportunities: Opportunity[] = [];
   const closedOpportunities: Opportunity[] = [];
   // Default true (underfilled) matches every stratum's real default: a
@@ -79,7 +87,24 @@ export function buildCoverageSample(result: SampleResult, capabilities: AdapterC
     missingContactCount: 0,
     closedWonUnderfilled,
     closedLostUnderfilled,
+    closedInWindowCount,
     capabilities,
+  };
+}
+
+/**
+ * The scan tier: every eligible opportunity the scan read, for the metrics
+ * that need only list fields (buildReport.ts, SCAN_TIER_METRICS). Nothing is
+ * hydrated; the underfilled flags are the detailed-check sample's.
+ */
+export function buildScanCoverageSample(result: SampleRunResult, capabilities: AdapterCapabilities): CoverageSample {
+  const sample = buildCoverageSample(result, capabilities, result.population.closedInWindow);
+  const all = [...result.scanned.open, ...result.scanned.closed];
+  return {
+    ...sample,
+    openOpportunities: result.scanned.open,
+    closedOpportunities: result.scanned.closed,
+    oppsWithoutAccountRef: all.filter((o) => !hasAccountRef(o)).length,
   };
 }
 

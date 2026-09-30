@@ -56,14 +56,18 @@ const EXPECTED_STRING_PATHS: readonly string[] = [
   'org.orgLabel',
   'org.orgDescription',
   'org.asOf',
+  // Reviewed 2026-09-30: the sampling seed, a run setting ('report' unless
+  // the caller passes one), never org data.
+  'org.sampleSeed',
   'org.stopReason',
   'metrics[].metric',
   'metrics[].dimension',
   'metrics[].dimensionLabel',
   'metrics[].status',
   'metrics[].note',
-  // Reviewed 2026-09-30: adapter-authored setting hint (AdapterCapabilities.settingHints),
-  // static text, never org data; set only on not-measured rows.
+  // Reviewed 2026-09-30: adapter-authored hint (AdapterCapabilities.settingHints
+  // on not-measured rows, stageMapHint on stage rows with an unmapped stage),
+  // static text, never org data.
   'metrics[].fixHint',
   'metrics[].tier',
   'metrics[].unit',

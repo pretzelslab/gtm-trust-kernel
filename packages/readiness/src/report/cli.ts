@@ -15,6 +15,8 @@
  *   npm run report -- --fixture fresh --json
  *   npm run report -- --live --json         # real Salesforce org, from .env
  *   npm run report -- --narrative           # adds an LLM narrative (needs ANTHROPIC_API_KEY); not supported with --all
+ *   npm run report -- --live --hydrate-per-stratum 10   # detailed checks on 10 deals per stage (default 20)
+ *   npm run report -- --live --quick        # stop scanning once every stage's sample is full
  */
 
 import { parseArgs } from 'node:util';
@@ -24,7 +26,8 @@ import { loadSalesforceConfigFromEnv, SalesforceAdapter } from '@gtm-trust-kerne
 import { FIXTURE_NAMES, type FixtureName } from '../fixtures/mockOrgs.js';
 import { buildFromFixture } from './buildFromFixture.js';
 import { loadEnvFileIfPresent } from './envFile.js';
-import { buildReportData, type ReportData } from './buildReport.js';
+import { buildReportData, type BuildReportOptions, type ReportData } from './buildReport.js';
+import { sampleOptionsFromFlags } from './sampleFlags.js';
 import { renderComparisonHtml, renderReportHtml } from './render.js';
 import { renderPlainReportHtml } from './plainReport.js';
 import { AnthropicNarrativeModelClient } from './anthropicNarrativeModelClient.js';
@@ -34,13 +37,14 @@ function isFixtureName(name: string): name is FixtureName {
   return (FIXTURE_NAMES as readonly string[]).includes(name);
 }
 
-async function buildLive(): Promise<ReportData> {
+async function buildLive(sampling: Pick<BuildReportOptions, 'hydratePerStratum' | 'quick'>): Promise<ReportData> {
   const config = loadSalesforceConfigFromEnv();
   const adapter = new SalesforceAdapter(config);
   return buildReportData(adapter, undefined, {
     orgLabel: 'Live Salesforce org',
     orgDescription: adapter.orgId,
     asOf: new Date().toISOString(),
+    ...sampling,
   });
 }
 
@@ -94,9 +98,20 @@ async function main(): Promise<void> {
       json: { type: 'boolean', default: false },
       live: { type: 'boolean', default: false },
       narrative: { type: 'boolean', default: false },
+      'hydrate-per-stratum': { type: 'string' },
+      quick: { type: 'boolean', default: false },
     },
     allowPositionals: false,
   });
+
+  let sampling: ReturnType<typeof sampleOptionsFromFlags>;
+  try {
+    sampling = sampleOptionsFromFlags(values);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+    return;
+  }
 
   // Decision 24: no plain-English narrative for a multi-org comparison page -- same reason renderComparisonHtml never took a narrative option.
   if (values.all && values.narrative) {
@@ -112,7 +127,7 @@ async function main(): Promise<void> {
   if (values.live) {
     let data: ReportData;
     try {
-      data = await buildLive();
+      data = await buildLive(sampling);
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
@@ -133,7 +148,7 @@ async function main(): Promise<void> {
   if (values.all) {
     const datas: ReportData[] = [];
     for (const name of FIXTURE_NAMES) {
-      datas.push(await buildFromFixture(name));
+      datas.push(await buildFromFixture(name, sampling));
     }
     const html = renderComparisonHtml(datas);
     await writeHtml(outDir, `report-all-${timestamp}.html`, 'latest-all.html', html);
@@ -150,7 +165,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const data = await buildFromFixture(fixtureArg);
+  const data = await buildFromFixture(fixtureArg, sampling);
   const narrative = await resolveNarrative(data, values.narrative);
   if (narrative === 'exit') return;
   const html = renderReportHtml(data, { narrative });

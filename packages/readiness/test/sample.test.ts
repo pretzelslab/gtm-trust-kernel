@@ -209,3 +209,48 @@ describe('runSample closed-stratum window (regression, not just classifyStratum)
     }
   });
 });
+
+/**
+ * Two tiers (2026-09-30): the scan reads every eligible deal up to
+ * maxRecordsToScan, and the per-stratum sample for detailed checks is drawn
+ * uniformly from the whole scan. Stopping once every stratum is full is
+ * --quick only (stopWhenStrataFull), off by default.
+ */
+describe('runSample two tiers', () => {
+  const pagedConfig: SampleConfig = { ...baseConfig, seed: 'two-tier', pageSizeBulk: 10, pageSizeStandard: 10 };
+  const run = async (config: SampleConfig) => {
+    const result = await runSample(new MockAdapter(ORG, buildOrgData(50)), config, alwaysConfirm);
+    if ('cancelled' in result) throw new Error('unexpected cancellation in test');
+    return result;
+  };
+
+  it('scans the whole eligible population by default, even after every stratum is full', async () => {
+    const result = await run(pagedConfig);
+    expect(result.recordsScanned).toBe(7 * 50);
+    expect(result.stopReason).toBe('source_exhausted');
+    expect(result.scanned.open).toHaveLength(5 * 50);
+    expect(result.scanned.closed).toHaveLength(2 * 50);
+    for (const s of result.strata) expect(s.opportunities).toHaveLength(3);
+  });
+
+  it('stops once every stratum is full only with stopWhenStrataFull (--quick)', async () => {
+    const result = await run({ ...pagedConfig, stopWhenStrataFull: true });
+    expect(result.stopReason).toBe('all_strata_full');
+    expect(result.recordsScanned).toBeLessThan(7 * 50);
+    expect(result.scanned.open.length + result.scanned.closed.length).toBe(result.recordsScanned);
+  });
+
+  it('draws the detailed-check sample from the whole scan, not just the newest deals', async () => {
+    const quick = await run({ ...pagedConfig, stopWhenStrataFull: true });
+    const full = await run(pagedConfig);
+    const newest = new Set([...quick.scanned.open, ...quick.scanned.closed].map((o) => o.ref.id));
+    const sampled = full.strata.flatMap((s) => s.opportunities.map((o) => o.ref.id));
+    expect(sampled.some((id) => !newest.has(id))).toBe(true);
+  });
+
+  it('stops at maxRecordsToScan, keeping what it scanned', async () => {
+    const result = await run({ ...pagedConfig, maxRecordsToScan: 25 });
+    expect(result.stopReason).toBe('budget_exhausted');
+    expect(result.scanned.open.length + result.scanned.closed.length).toBe(25);
+  });
+});

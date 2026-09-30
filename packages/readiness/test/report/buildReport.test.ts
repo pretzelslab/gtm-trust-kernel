@@ -165,16 +165,16 @@ describe('fixture differentiation (the 4 fixtures must not accidentally look ide
     expect(row.value!).toBeGreaterThanOrEqual(row.viableAt!);
   });
 
-  it('closed_deal_count_12m: healthy has no floor (well under the default per-stratum sample size); volume\'s reservoir fills on both closed strata', async () => {
+  it('closed_deal_count_12m: the population count, never a sample-size ceiling (healthy 24, volume its real 60)', async () => {
     const [healthy, volume] = await Promise.all([buildFor('healthy'), buildFor('volume')]);
     const row = (d: ReportData) => d.metrics.find((m) => m.metric === 'closed_deal_count_12m')!;
 
     expect(row(healthy).floor).toBe(false);
-    expect(row(healthy).value).toBeLessThan(40); // healthy seeds 12 per closed stage, well under the 20-per-stratum default
+    expect(row(healthy).value).toBe(24); // healthy seeds 12 per closed stage
 
-    expect(row(volume).floor).toBe(true);
-    expect(row(volume).value).toBe(40); // 20 (perStratumSampleSize default) x 2 closed strata — a sample-size ceiling, not volume's real 60
-    expect(row(volume).note).toContain('sample-size ceiling');
+    expect(row(volume).floor).toBe(false);
+    expect(row(volume).value).toBe(60); // all of volume's closed deals, though the detailed-check sample holds 40
+    expect(row(volume).note).toBeNull();
   });
 });
 

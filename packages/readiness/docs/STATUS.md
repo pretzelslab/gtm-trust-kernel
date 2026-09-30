@@ -14,6 +14,45 @@ repeated here.
 
 ---
 
+## Status as of 2026-09-30, later (pending decisions resolved)
+
+All pushed; `npm run ci` green after each commit.
+
+| Commit | What |
+|---|---|
+| `fd5d9e5` | Stage-map hint (`AdapterCapabilities.stageMapHint`, Salesforce names `SF_STAGE_MAP_PATH`) shown once, only when the sample has an unmapped stage; never a stage label |
+| `c7e0dc3` | `report`/`narrative:smoke` run `tsx --conditions=source` (no stale adapter `dist/`); `scriptResolution.test.ts`; CI runs the report with nothing built |
+| sampling commit (after `c7e0dc3`) | Two-tier sampling, below |
+
+**Two-tier sampling (decided 2026-09-30).** The scan reads every eligible
+deal up to 5,000; list-field metrics (`SCAN_TIER_METRICS` in
+`buildReport.ts`) run over all of it, population-weighted. Detailed checks
+run over a seeded, uniform, stratified sample drawn from the whole scan,
+20 per stratum by default (`--hydrate-per-stratum`). `--quick` stops the
+scan once every stratum's sample is full (off by default). The report
+always states both sizes and the seed, and shows the unread notice
+whenever eligible deals went unread. `closed_deal_count_12m` reads the
+adapter's population count (`SELECT COUNT()`), not the rows, so it is
+exact when the budget is hit; its 40/20 thresholds are kept as real counts
+and marked provisional ("calibrate in Phase 4") in `rubric.ts`'s rationale
+and `metric-definitions.md`. The adapter contract gained a check that the
+count doesn't depend on how much of the listing is read. Fixture values
+that moved: `volume` `closed_deal_count_12m` 40 to 60 (viable either way)
+and `volume` `stage_mapping_coverage` sample size 115 to 135 (value 1.0
+unchanged); no verdict changed.
+
+**Estimated Salesforce API calls per run at 5,000 eligible deals:** scan
+tier about 52 (2 counts, 25 list pages of 200, 25 contact-role batches);
+detailed checks at 20 per stratum (140 deals) about 565, plus up to 200
+Enhanced Note full-text fetches.
+
+**Logged for Phase 3b:** batch the detailed-check queries by id, 200 ids
+per query (legacy Notes, Tasks, Events, OpportunityHistory are one query
+per deal today), cutting about 565 calls to about 40. A prerequisite for a
+future `--deep` mode (detailed checks over more of the scan). Also:
+`CoverageSample.closedWonUnderfilled`/`closedLostUnderfilled` no longer
+feed any metric; remove them or put them in the report.
+
 ## Status as of 2026-09-30 (Phase 3a: Salesforce adapter fixes)
 
 From the product gap audit (kept outside the repo). All on master, not
@@ -46,10 +85,8 @@ endpoint and its HTML; `SELECT COUNT()` responses; the Event
 `ActivityDateTime` ordering; that activity capture can't be detected (not
 chased if the org has no activity capture).
 
-**Open, for the user to decide:** the sampler stops as soon as every
-stratum is full (`sample.ts`, `all_strata_full`), so with newest-first
-order the sample is drawn from the newest deals even on small orgs, and
-the exclusion notice will usually show on a real org.
+**Decided later on 2026-09-30:** the early stop once every stratum is
+full is now `--quick` only (off by default); see "Two-tier sampling" below.
 
 **Running the report from source:** `npm run report` (and
 `narrative:smoke`) run `tsx --conditions=source`, so
@@ -834,39 +871,31 @@ the doc describes.)
 
 ## Handoff, 2026-09-30 (end of session)
 
-**HEAD:** `664a999` on master. **Pushed:** up to `6cc3d0b` (origin/master).
-**Local only, not pushed:** 10 commits, `7111b08..664a999`. **CI:** `npm run
-ci` green locally at 579 tests after every commit; GitHub CI has not run
-on the local commits.
+**HEAD:** the two-tier sampling commit on master, pushed with
+`fd5d9e5` and `c7e0dc3`; nothing is local only. **CI:** `npm run ci` green
+locally after every commit; GitHub CI green through `c7e0dc3` (run
+36757065795), and on the sampling commit per the session report.
 
-**Phase 3a summary (all local):** "Not measured" verdict (tool can't see
-the data) vs Blocked (data missing), with D5 blocked when no second source
-is connected and bool gates below target blocked; plain-English blocked
-reason ignores not-measured gates; in-memory Salesforce API fake and unit
-tests; contact roles loaded in listings; `SF_ACTIVITY_CAPTURE` declared
-setting with adapter-supplied fix hints; Enhanced Notes (preview, full
-text up to `SF_NOTE_FULLTEXT_FETCH_LIMIT`, floor past it) and Events read;
-eligible population sampled newest created first and counted, with an
-older-open-deals-excluded notice; custom stage map (`SF_STAGE_MAP_PATH`)
-with unmapped history rows skipped; docs. Details in the 2026-09-30 entry
-above.
-
-**Pending decisions (verbatim):**
-- full-population sampling up to 5,000 with 20-per-stratum as a floor (early exit removed or behind --quick, off by default)
-- stage-map hint only when unmapped count > 0, never print names
-- prereport build step so report never runs stale dist, plus a CI guard
+**Done today:** Phase 3a (see its entry above) and the three pending
+decisions: stage-map hint only when a stage is unmapped; report scripts
+run from adapter source with a CI guard; two-tier sampling with
+`closed_deal_count_12m` from the population count (entries above).
 
 **Live-org questions for the Developer Edition smoke run:**
 - Enhanced Notes link filter (`ContentDocumentLink ... ContentDocument.FileType = 'SNOTE'`)
 - 255 preview cap (`ContentNote.TextPreview`, `ENHANCED_NOTE_PREVIEW_CAP`)
 - full-text endpoint (`sobjects/ContentNote/{id}/Content` and its HTML)
-- `COUNT()` responses
+- `COUNT()` responses (now also the source of `closed_deal_count_12m`)
 - meeting order (Event `ActivityDateTime` ordering)
+- the stage-map notice on an org with custom stages
+- real API calls per run against the estimate above (about 52 + 565)
 
 **Next, in order:**
-1. Three commits, one per pending decision above.
-2. Push (only on the user's word).
-3. Smoke run on the Developer Edition org (the user runs it; until the
-   prereport build step lands, run `npm run build -w
-   @gtm-trust-kernel/adapters` first).
-4. Phase 3b: Salesforce contract tests, `--fail-on` (opt-in, default off), CI.
+1. Smoke run on the Developer Edition org (the user runs it:
+   `npm run report -- --live --json` from `packages/readiness`; no build
+   step needed any more).
+2. Phase 3b: batch detailed-check queries by id (logged above), Salesforce
+   contract tests, `--fail-on` (opt-in, default off), CI.
+3. Phase 4: calibrate `closed_deal_count_12m` (provisional 40/20) and the
+   other thresholds against real orgs.
+4. Adapters 0.2.0 release (public interface changed; the user publishes).

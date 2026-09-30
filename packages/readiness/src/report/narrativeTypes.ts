@@ -65,11 +65,20 @@ export interface NarrativePromptMetricRow {
  */
 export interface NarrativePromptInput {
   readonly generatedAt: string;
-  // eligibleOpportunities/olderOpenDealsExcluded are left out too: pipeline
-  // size is business-sensitive and not needed for a per-item claim.
+  // eligibleOpportunities/olderOpenDealsExcluded/eligibleDealsUnread are
+  // left out too: pipeline size is business-sensitive and not needed for a
+  // per-item claim. sampleSeed/hydratePerStratum are run settings, not
+  // findings.
   readonly org: Omit<
     ReportOrgSummary,
-    'orgDescription' | 'capabilityVerdictCounts' | 'metricStatusCounts' | 'eligibleOpportunities' | 'olderOpenDealsExcluded'
+    | 'orgDescription'
+    | 'capabilityVerdictCounts'
+    | 'metricStatusCounts'
+    | 'eligibleOpportunities'
+    | 'olderOpenDealsExcluded'
+    | 'eligibleDealsUnread'
+    | 'sampleSeed'
+    | 'hydratePerStratum'
   >;
   readonly metrics: readonly NarrativePromptMetricRow[];
   readonly capabilities: ReportData['capabilities'];

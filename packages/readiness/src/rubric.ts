@@ -516,9 +516,10 @@ export const THRESHOLDS: Readonly<Record<MetricId, Threshold>> = {
     direction: 'higher_is_better',
     viableAt: 40,
     degradedAt: 20,
-    // Ceiling-aware: 2 strata × default perStratumSampleSize 20 = 40 max
-    // sampled; thresholds calibrated to that ceiling pending CLI flag for
-    // larger samples.
+    // PROVISIONAL (2026-09-30): first set against the old 2 x 20 closed
+    // sample ceiling; since then the value is the adapter's real count of
+    // closed deals in 12 months, and 40/20 are kept as real counts until
+    // Phase 4 calibration.
     question: 'How many closed deals in 12 months are needed to calibrate or evaluate anything?',
     candidates: [
       { value: 200, implication: 'Enough to slice by stage and segment.' },
@@ -526,7 +527,7 @@ export const THRESHOLDS: Readonly<Record<MetricId, Threshold>> = {
       { value: 50, implication: 'Directional only. Say so explicitly in the report.' },
     ],
     rationale:
-      'Deliberately below the file\'s own candidates (200/100/50): v0.1 computes this org-wide, with no segment-aware slicing yet, so a high floor would fail enterprise motions with few, large deals. Segment-scoped computation is a v0.2 recalibration item, not a v0.1 rubric change.',
+      'Provisional: calibrate in Phase 4. 40/20 are real counts of closed deals in the trailing 12 months (the adapter\'s population count, since 2026-09-30), kept from when they capped a 2 x 20 sample. Deliberately below the file\'s own candidates (200/100/50): v0.1 computes this org-wide, with no segment-aware slicing yet, so a high floor would fail enterprise motions with few, large deals. Segment-scoped computation is a v0.2 recalibration item, not a v0.1 rubric change.',
     remediation: 'Too few outcomes to evaluate against. Revisit after another quarter or two.',
   },
 

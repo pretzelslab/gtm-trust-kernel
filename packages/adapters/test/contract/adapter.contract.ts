@@ -497,6 +497,17 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       expect(count.open).toBe(items.filter((o) => !o.isClosed).length);
       expect(count.closedInWindow).toBe(items.filter((o) => o.isClosed).length);
     });
+
+    it('counts the whole population however little of the listing is read', async () => {
+      const { adapter } = await make();
+      const all = await listAll(adapter, 200);
+      const firstPage = await adapter.listOpportunitiesForSample({ ...population, limit: 1 });
+      const count = await adapter.countOpportunitiesForSample(population);
+      expect(firstPage.items.length).toBeLessThanOrEqual(1);
+      expect(count.closedInWindow).toBe(all.filter((o) => o.isClosed).length);
+      expect(count.open + count.closedInWindow).toBe(all.length);
+      expect(count.apiCallsConsumed).toBeGreaterThan(0);
+    });
   });
 
   describe('health', () => {

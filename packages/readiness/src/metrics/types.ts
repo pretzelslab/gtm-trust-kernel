@@ -37,11 +37,10 @@ export interface MetricResult {
    *  - per-opportunity child-record truncation (CoverageSample's
    *    notesTruncatedOpportunityIds / activitiesTruncatedOpportunityIds) —
    *    see shared.ts's applyTruncationFloor.
-   *  - a stratified reservoir sample hitting its cap (CoverageSample's
-   *    closedWonUnderfilled / closedLostUnderfilled being false) — see
-   *    closed_deal_count_12m (metrics/labels.ts), the only metric this
-   *    applies to today.
-   * Never set for a metric that reads neither.
+   * Before 2026-09-30 a second cause, a full closed reservoir stratum,
+   * set it on closed_deal_count_12m; that metric now reads the adapter's
+   * population count and is always exact.
+   * Never set for a metric that reads no truncated child records.
    */
   readonly floor?: boolean;
 }
@@ -172,12 +171,20 @@ export interface CoverageSample {
    * closedOpportunities' closed_won members are capped at the run's
    * perStratumSampleSize, not the org's true count. True (the default
    * shape) means every closed_won opportunity in the window was captured.
-   * Used by closed_deal_count_12m (metrics/labels.ts) to set
-   * MetricResult.floor — see that field's docblock.
+   * No metric reads it since closed_deal_count_12m moved to
+   * closedInWindowCount (2026-09-30); kept as a description of the
+   * detailed-check sample.
    */
   readonly closedWonUnderfilled: boolean;
   /** Same as closedWonUnderfilled, for the closed_lost stratum. */
   readonly closedLostUnderfilled: boolean;
+  /**
+   * The adapter's count of closed opportunities in the trailing 12-month
+   * window (CrmAdapter.countOpportunitiesForSample's closedInWindow), taken
+   * before the scan, so it is exact even when the scan budget is hit. Null
+   * when the sample wasn't built from a counted population.
+   */
+  readonly closedInWindowCount: number | null;
   readonly capabilities: AdapterCapabilities;
 }
 

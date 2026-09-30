@@ -8,9 +8,12 @@
 
 import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import { MOCK_ORG_FIXTURES, type FixtureName } from '../fixtures/mockOrgs.js';
-import { buildReportData, type ReportData } from './buildReport.js';
+import { buildReportData, type BuildReportOptions, type ReportData } from './buildReport.js';
 
-export async function buildFromFixture(name: FixtureName): Promise<ReportData> {
+export async function buildFromFixture(
+  name: FixtureName,
+  sampling: Pick<BuildReportOptions, 'hydratePerStratum' | 'quick'> = {},
+): Promise<ReportData> {
   const fixture = MOCK_ORG_FIXTURES[name];
   const adapter = new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities);
   const secondSourceAdapter = fixture.secondSource
@@ -20,5 +23,6 @@ export async function buildFromFixture(name: FixtureName): Promise<ReportData> {
     orgLabel: fixture.label,
     orgDescription: fixture.description,
     asOf: fixture.asOf,
+    ...sampling,
   });
 }

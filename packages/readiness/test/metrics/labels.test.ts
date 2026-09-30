@@ -6,6 +6,7 @@ import {
   closedDealCount12mEmptyFixture,
   closedDealCount12mFixture,
   closedDealCount12mFloorFixture,
+  closedDealCount12mNoCountFixture,
 } from '../fixtures/closed_deal_count_12m.js';
 import {
   OUTCOME_EVIDENCE_RETENTION_RATE_ASOF,
@@ -57,11 +58,19 @@ describe('closedDealCountTwelveMonths', () => {
     });
   });
 
-  it('sets floor: true with an explanatory note when the closed_won reservoir stratum filled to target', () => {
+  it('reads the population count, not the sampled rows, with no floor even when a closed stratum filled', () => {
     const result = closedDealCountTwelveMonths(closedDealCount12mFloorFixture(), { asOf: CLOSED_DEAL_COUNT_12M_ASOF });
-    expect(result.floor).toBe(true);
-    expect(result.value).toBe(2);
-    expect(result.note).toContain('sample-size ceiling');
+    expect(result.floor).toBe(false);
+    expect(result.value).toBe(60);
+    expect(result.sampleSize).toBe(60);
+    expect(result.lowConfidence).toBe(false);
+    expect(result.note).toBeUndefined();
+  });
+
+  it('is not applicable when the sample carries no population count', () => {
+    const result = closedDealCountTwelveMonths(closedDealCount12mNoCountFixture(), { asOf: CLOSED_DEAL_COUNT_12M_ASOF });
+    expect(result.status).toBe('not_applicable');
+    expect(result.value).toBeNull();
   });
 });
 

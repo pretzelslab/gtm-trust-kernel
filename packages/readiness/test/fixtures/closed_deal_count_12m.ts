@@ -31,8 +31,9 @@ function coverageSample(
   closedOpportunities: readonly Opportunity[],
   closedWonUnderfilled: boolean,
   closedLostUnderfilled: boolean,
+  closedInWindowCount: number | null = closedOpportunities.length,
 ): CoverageSample {
-  return makeCoverageSample({ closedOpportunities, closedWonUnderfilled, closedLostUnderfilled });
+  return makeCoverageSample({ closedOpportunities, closedWonUnderfilled, closedLostUnderfilled, closedInWindowCount });
 }
 
 /**
@@ -65,5 +66,10 @@ export function closedDealCount12mEmptyFixture(): CoverageSample {
  */
 export function closedDealCount12mFloorFixture(): CoverageSample {
   const closedOpportunities = [closedOpportunity('won-1', true), closedOpportunity('lost-1', false)];
-  return coverageSample(closedOpportunities, false, true);
+  return coverageSample(closedOpportunities, false, true, 60);
+}
+
+/** A sample built without a population count (a hand-built CoverageSample). */
+export function closedDealCount12mNoCountFixture(): CoverageSample {
+  return coverageSample([closedOpportunity('won-1', true)], true, true, null);
 }

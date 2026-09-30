@@ -12,6 +12,7 @@
 import type { AdapterCapabilities, CrmAdapter, SecondSourceAdapter } from '@gtm-trust-kernel/adapters/types.js';
 import {
   buildCoverageSample,
+  buildScanCoverageSample,
   hydrateAccounts,
   hydrateActivities,
   hydrateContacts,
@@ -210,10 +211,19 @@ export interface ReportOrgSummary {
   readonly eligibleOpportunities: number;
   /**
    * Eligible open opportunities the scan never reached. The scan reads the
-   * newest created first and stops early, so these are the oldest open
-   * deals; when above 0 the report says they were excluded.
+   * newest created first, so when it stops early these are the oldest open
+   * deals.
    */
   readonly olderOpenDealsExcluded: number;
+  /**
+   * Eligible opportunities, open or closed, the scan never read (budget hit,
+   * or a --quick early stop). Above 0, the report says so.
+   */
+  readonly eligibleDealsUnread: number;
+  /** Seed for the detailed-check sample; the same seed and data draw the same sample. */
+  readonly sampleSeed: string;
+  /** Target deals per stratum for the detailed checks (openSampleSize/closedSampleSize are what was drawn). */
+  readonly hydratePerStratum: number;
   readonly stopReason: StopReason;
   readonly capabilityVerdictCounts: Readonly<Record<CapabilityVerdict, number>>;
   readonly metricStatusCounts: Readonly<Record<MetricRowStatus, number>>;
@@ -239,11 +249,39 @@ export interface BuildReportOptions {
   readonly orgLabel: string;
   readonly orgDescription: string;
   readonly asOf: string;
-  /** Fixed for reproducible sampling; not exposed as a CLI flag (this report is a fixed, minimal dev view, not a tunable run). */
+  /** Fixed for reproducible sampling; not exposed as a CLI flag. Recorded in the report (ReportOrgSummary.sampleSeed). */
   readonly seed?: string;
-  readonly perStratumSampleSize?: number;
+  /** Deals per stratum for the detailed checks (the hydration tier); --hydrate-per-stratum, default 20. */
+  readonly hydratePerStratum?: number;
+  /** Eligible deals the scan reads at most; default 5,000. */
   readonly maxRecordsToScan?: number;
+  /** --quick: stop the scan once every stratum's detailed-check sample is full. Off by default. */
+  readonly quick?: boolean;
 }
+
+/**
+ * The scan tier: metrics that read only fields the list query returns, so
+ * they run over every scanned deal. Every other metric needs hydrated data
+ * (notes, activities, history, accounts, contacts) and runs over the
+ * per-stratum detailed-check sample. closed_deal_count_12m reads the
+ * adapter's population count (CoverageSample.closedInWindowCount).
+ * docs/metric-definitions.md, "Sample population and order".
+ */
+export const SCAN_TIER_METRICS: ReadonlySet<MetricId> = new Set<MetricId>([
+  'close_date_fill_rate',
+  'amount_fill_rate',
+  'owner_id_fill_rate',
+  'next_step_fill_rate',
+  'contact_linkage_rate',
+  'median_days_since_modified',
+  'past_due_close_date_rate',
+  'round_amount_rate',
+  'stage_mapping_coverage',
+  'closed_deal_count_12m',
+]);
+
+export const DEFAULT_HYDRATE_PER_STRATUM = 20;
+const DEFAULT_SEED = 'report';
 
 /** Which adapter capability each capability-gated metric needs, for looking up its setting hint. */
 const SETTING_HINT_KEY: Partial<Record<MetricId, keyof NonNullable<AdapterCapabilities['settingHints']>>> = {
@@ -261,9 +299,10 @@ export async function buildReportData(
   options: BuildReportOptions,
 ): Promise<ReportData> {
   const sampleConfig: SampleConfig = {
-    seed: options.seed ?? 'report',
-    perStratumSampleSize: options.perStratumSampleSize ?? 20,
+    seed: options.seed ?? DEFAULT_SEED,
+    perStratumSampleSize: options.hydratePerStratum ?? DEFAULT_HYDRATE_PER_STRATUM,
     maxRecordsToScan: options.maxRecordsToScan ?? 5000,
+    stopWhenStrataFull: options.quick ?? false,
     pageSizeBulk: 2000,
     pageSizeStandard: 200,
     asOf: options.asOf,
@@ -274,7 +313,8 @@ export async function buildReportData(
     throw new Error('unreachable: report always auto-confirms sampling');
   }
 
-  let sample = buildCoverageSample(sampleResult, adapter.capabilities());
+  const scanSample = buildScanCoverageSample(sampleResult, adapter.capabilities());
+  let sample = buildCoverageSample(sampleResult, adapter.capabilities(), sampleResult.population.closedInWindow);
   sample = (await hydrateAccounts(sample, adapter)).sample;
   sample = (await hydrateStageHistory(sample, adapter)).sample;
   sample = (await hydrateNotes(sample, adapter)).sample;
@@ -302,7 +342,7 @@ export async function buildReportData(
   // stage-history row (win_rate_dispersion).
   const stageMapHint = adapter.capabilities().stageMapHint ?? null;
   const unmappedStageIn: Partial<Record<MetricId, boolean>> = {
-    stage_mapping_coverage: [...sample.openOpportunities, ...sample.closedOpportunities].some(
+    stage_mapping_coverage: [...scanSample.openOpportunities, ...scanSample.closedOpportunities].some(
       (o) => o.stageConfidence === 'unmapped',
     ),
     win_rate_dispersion: sample.closedOpportunities.some((o) =>
@@ -320,7 +360,7 @@ export async function buildReportData(
 
     const fn = IMPLEMENTED[metric];
     if (fn) {
-      const result = fn(sample, metricConfig);
+      const result = fn(SCAN_TIER_METRICS.has(metric) ? scanSample : sample, metricConfig);
       const note = result.note ?? null;
       // D5 with no second source connected is missing data (Blocked), not
       // an unseen capability: docs/metric-definitions.md, section D5.
@@ -425,6 +465,12 @@ export async function buildReportData(
       recordsScanned: sampleResult.recordsScanned,
       eligibleOpportunities: sampleResult.population.open + sampleResult.population.closedInWindow,
       olderOpenDealsExcluded: Math.max(0, sampleResult.population.open - sampleResult.openScanned),
+      eligibleDealsUnread: Math.max(
+        0,
+        sampleResult.population.open + sampleResult.population.closedInWindow - sampleResult.recordsScanned,
+      ),
+      sampleSeed: sampleConfig.seed,
+      hydratePerStratum: sampleConfig.perStratumSampleSize,
       stopReason: sampleResult.stopReason,
       capabilityVerdictCounts,
       metricStatusCounts,

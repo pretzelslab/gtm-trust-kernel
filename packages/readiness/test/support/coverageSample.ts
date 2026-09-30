@@ -66,6 +66,7 @@ export function makeCoverageSample(overrides: Partial<CoverageSample> = {}): Cov
     missingContactCount: 0,
     closedWonUnderfilled: true,
     closedLostUnderfilled: true,
+    closedInWindowCount: null,
     capabilities: DEFAULT_TEST_CAPABILITIES,
     ...overrides,
   };

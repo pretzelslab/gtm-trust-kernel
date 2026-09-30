@@ -13,38 +13,32 @@ import { rateOverOpportunities, standardDeviation } from './shared.js';
 const MIN_CLOSED_OPPORTUNITIES_PER_STAGE = 5;
 
 /**
- * closedOpportunities.length, trusting sample.ts's own trailing-12-month
- * window (CLOSED_WINDOW_MONTHS) rather than re-deriving it against
- * closeDate/config.asOf — a sample.ts-level regression test asserts that
- * window holds, so this metric doesn't re-check it (metric-definitions.md
- * D7). "org-wide" (per the doc) means not sliced by segment, not an
- * unbounded full-org count.
- *
- * floor: true whenever EITHER the closed_won or closed_lost reservoir
- * stratum filled to its target (underfilled: false) — closedOpportunities
- * is a stratified reservoir sample bounded by a caller-chosen
- * perStratumSampleSize, not derived from the org, so a full reservoir means
- * this count is a sample-size ceiling, not the org's true closed-deal
- * volume. Same "lower bound, not exact" contract as MetricResult.floor's
- * other cause (per-opportunity child-record truncation), different
- * underlying reason — see that field's docblock (metrics/types.ts).
+ * The adapter's own count of closed opportunities in the trailing 12-month
+ * window (CoverageSample.closedInWindowCount), not the scanned or sampled
+ * rows: the count is taken before the scan, so it stays exact when the scan
+ * budget is hit, and floor is always false (metric-definitions.md D7).
+ * "org-wide" means not sliced by segment. Not applicable when the sample
+ * carries no population count.
  */
 export function closedDealCountTwelveMonths(sample: CoverageSample, _config: MetricConfig): MetricResult {
-  const count = sample.closedOpportunities.length;
-  const floor = !sample.closedWonUnderfilled || !sample.closedLostUnderfilled;
-
+  const count = sample.closedInWindowCount;
+  if (count === null) {
+    return {
+      metric: 'closed_deal_count_12m',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
+      lowConfidence: false,
+      note: 'no closed-deal population count from the adapter',
+    };
+  }
   return {
     metric: 'closed_deal_count_12m',
     status: 'ok',
     value: count,
     sampleSize: count,
     lowConfidence: count < LOW_CONFIDENCE_SAMPLE_SIZE,
-    floor,
-    ...(floor
-      ? {
-          note: 'the closed_won or closed_lost sample stratum filled to its target — this count is a sample-size ceiling, not necessarily the org\'s true closed-deal volume',
-        }
-      : {}),
+    floor: false,
   };
 }
 

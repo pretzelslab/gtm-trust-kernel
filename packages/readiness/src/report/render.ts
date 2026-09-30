@@ -86,16 +86,28 @@ function renderGatesHoldingBack(c: ReportCapabilityRow, metrics: readonly Metric
 }
 
 /**
- * Shown when the scan never reached some eligible open deals: it reads the
- * newest created first, so the ones it missed are the oldest.
+ * Shown whenever the scan left eligible deals unread (budget hit, or a
+ * --quick early stop): it reads the newest created first, so the ones it
+ * missed are the oldest.
  */
 export function coverageNoticeText(data: ReportData): string | null {
   const { org } = data;
-  if (org.olderOpenDealsExcluded <= 0) return null;
+  if (org.eligibleDealsUnread <= 0) return null;
+  const scanned = `Scanned the ${org.recordsScanned} most recently created of ${org.eligibleOpportunities} eligible deals. `;
+  if (org.olderOpenDealsExcluded <= 0) {
+    return `${scanned}The ${org.eligibleDealsUnread} oldest were not read, so this report describes newer deals.`;
+  }
   const deals = org.olderOpenDealsExcluded === 1 ? 'older open deal was' : 'older open deals were';
+  return `${scanned}${org.olderOpenDealsExcluded} ${deals} excluded, so this report describes newer deals.`;
+}
+
+/** Always shown: both tiers' sizes and the seed that drew the detailed-check sample. */
+export function sampleSizeText(data: ReportData): string {
+  const { org } = data;
   return (
-    `Scanned the ${org.recordsScanned} most recently created of ${org.eligibleOpportunities} eligible deals. ` +
-    `${org.olderOpenDealsExcluded} ${deals} excluded, so this report describes newer deals.`
+    `Scanned ${org.recordsScanned} of ${org.eligibleOpportunities} eligible deals; ` +
+    `detailed checks on ${org.openSampleSize + org.closedSampleSize} sampled deals ` +
+    `(up to ${org.hydratePerStratum} per stage, seed "${org.sampleSeed}").`
   );
 }
 
@@ -217,6 +229,7 @@ export function renderReportHtml(
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
+  <div class="meta">${escapeHtml(sampleSizeText(data))}</div>
   ${renderCoverageNotice(data)}
   ${renderStageMapNotice(data)}
   <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
