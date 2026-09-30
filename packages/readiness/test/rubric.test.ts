@@ -20,6 +20,13 @@ import {
 
 const allMetrics = Object.keys(THRESHOLDS) as MetricId[];
 
+const readAt = (metric: MetricId, value: number): MetricReading => ({ metric, value, sampleSize: 100 });
+
+/** Every given gate read exactly at its viableAt. */
+function viableReadingsFor(gates: readonly MetricId[]): Map<MetricId, MetricReading> {
+  return new Map(gates.map((g) => [g, readAt(g, THRESHOLDS[g].viableAt as number)]));
+}
+
 describe('rubric completeness', () => {
   it.each(allMetrics)('%s has both thresholds set', (m) => {
     expect(THRESHOLDS[m].viableAt, `${m}.viableAt is still PENDING`).not.toBe(PENDING);
@@ -110,6 +117,45 @@ describe('capability grading', () => {
     const result = gradeCapability(spec, new Map());
     expect(result.verdict).toBe('blocked');
     expect(result.blockers.length).toBe(spec.gates.length);
+  });
+
+  it('grades a gate the tool cannot see as not_measured, never as a pass', () => {
+    const spec = CAPABILITIES.find((c) => c.id === 'close_date_realism')!;
+    const readings = viableReadingsFor(spec.gates);
+    const unseen = spec.gates[0]!;
+    readings.delete(unseen);
+    const result = gradeCapability(spec, readings, new Set([unseen]));
+    expect(result.verdict).toBe('not_measured');
+    expect(result.blockers.map((b) => [b.metric, b.verdict])).toEqual([[unseen, 'not_measured']]);
+    expect(result.blockers[0]!.remediation).toMatch(/^Not measured:/);
+  });
+
+  it('ranks blocked above not_measured, and not_measured above degraded', () => {
+    const spec = CAPABILITIES.find((c) => c.id === 'forecast_assistance')!;
+    const [unseen, degradedGate, blockedGate] = spec.gates as readonly MetricId[];
+    const readings = viableReadingsFor(spec.gates);
+    readings.delete(unseen!);
+    readings.set(degradedGate!, { metric: degradedGate!, value: THRESHOLDS[degradedGate!].degradedAt as number, sampleSize: 100 });
+
+    const notMeasured = gradeCapability(spec, readings, new Set([unseen!]));
+    expect(notMeasured.verdict).toBe('not_measured');
+    // The degraded gate is still listed under a not-measured capability.
+    expect(notMeasured.blockers.map((b) => b.verdict)).toEqual(['not_measured', 'degraded']);
+
+    const t = THRESHOLDS[blockedGate!];
+    const worse = t.direction === 'higher_is_better' ? (t.degradedAt as number) - 1 : (t.degradedAt as number) + 1;
+    readings.set(blockedGate!, { metric: blockedGate!, value: worse, sampleSize: 100 });
+    const blocked = gradeCapability(spec, readings, new Set([unseen!]));
+    expect(blocked.verdict).toBe('blocked');
+    expect(blocked.blockers.map((b) => b.verdict)).toEqual(['blocked', 'not_measured', 'degraded']);
+  });
+
+  it('grades a bool gate at 0 as blocked, not degraded (no degraded band for bools)', () => {
+    for (const m of ['close_date_history_enabled', 'owner_history_enabled'] as const) {
+      expect(THRESHOLDS[m].unit).toBe('bool');
+      expect(gradeGate(readAt(m, 0)).verdict).toBe('blocked');
+      expect(gradeGate(readAt(m, 1)).verdict).toBe('viable');
+    }
   });
 
   it('grades every capability without throwing once the rubric is complete', () => {

@@ -45,6 +45,7 @@ import {
   gradeAll,
   gradeGate,
   type CapabilityId,
+  type CapabilityVerdict,
   type MetricId,
   type MetricReading,
   type Unit,
@@ -189,7 +190,7 @@ export interface ReportOrgSummary {
   readonly closedSampleSize: number;
   readonly recordsScanned: number;
   readonly stopReason: StopReason;
-  readonly capabilityVerdictCounts: Readonly<Record<Verdict, number>>;
+  readonly capabilityVerdictCounts: Readonly<Record<CapabilityVerdict, number>>;
   readonly metricStatusCounts: Readonly<Record<MetricRowStatus, number>>;
 }
 
@@ -197,7 +198,7 @@ export interface ReportCapabilityRow {
   readonly id: CapabilityId;
   readonly label: string;
   readonly description: string;
-  readonly verdict: Verdict;
+  readonly verdict: CapabilityVerdict;
   readonly coverageCeiling: number | null;
   readonly blockerCount: number;
 }
@@ -261,6 +262,7 @@ export async function buildReportData(
 
   const metricConfig: MetricConfig = { asOf: options.asOf, secondSourceResolution };
   const readings = new Map<MetricId, MetricReading>();
+  const unmeasured = new Set<MetricId>();
   const rows: MetricRow[] = [];
 
   for (const metric of Object.keys(THRESHOLDS) as MetricId[]) {
@@ -272,6 +274,7 @@ export async function buildReportData(
     if (fn) {
       const result = fn(sample, metricConfig);
       const note = result.note ?? null;
+      if (result.status === 'not_instrumented') unmeasured.add(metric);
 
       let tier: Verdict | null = null;
       let viableAt: number | null = null;
@@ -305,6 +308,7 @@ export async function buildReportData(
 
     const deferredReason = DEFERRED_REASONS[metric];
     const status: MetricRowStatus = deferredReason ? 'deferred' : 'not_implemented';
+    unmeasured.add(metric);
     const note = deferredReason ?? 'Not yet implemented.';
 
     rows.push({
@@ -325,7 +329,7 @@ export async function buildReportData(
     });
   }
 
-  const capabilityResults = gradeAll(readings);
+  const capabilityResults = gradeAll(readings, unmeasured);
   const capabilities: ReportCapabilityRow[] = capabilityResults.map((r) => {
     const spec = CAPABILITIES.find((c) => c.id === r.capability)!;
     return {
@@ -338,7 +342,7 @@ export async function buildReportData(
     };
   });
 
-  const capabilityVerdictCounts: Record<Verdict, number> = { viable: 0, degraded: 0, blocked: 0 };
+  const capabilityVerdictCounts: Record<CapabilityVerdict, number> = { viable: 0, degraded: 0, not_measured: 0, blocked: 0 };
   for (const c of capabilities) {
     capabilityVerdictCounts[c.verdict] += 1;
   }
@@ -370,4 +374,17 @@ export async function buildReportData(
     metrics: rows,
     capabilities,
   };
+}
+
+/**
+ * The verdict a metric row contributes as a gate, derived the same way
+ * gradeCapability does: its graded tier when it has a value; 'not_measured'
+ * when the tool couldn't see the data (not_instrumented, deferred, not
+ * implemented); 'blocked' when the data it needs is missing
+ * (not_applicable). Used by the renderers to list a capability's gates.
+ */
+export function gateVerdictOf(row: MetricRow): CapabilityVerdict {
+  if (row.status === 'ok' && row.tier) return row.tier;
+  if (row.status === 'not_applicable' || row.status === 'ok') return 'blocked';
+  return 'not_measured';
 }

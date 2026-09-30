@@ -18,8 +18,8 @@
  * rather than guessing — see NEUTRAL_REASON.
  */
 
-import type { MetricDimension, ReportCapabilityRow, ReportData } from './buildReport.js';
-import type { CapabilityId, Verdict } from '../rubric.js';
+import { gateVerdictOf, type MetricDimension, type ReportCapabilityRow, type ReportData } from './buildReport.js';
+import type { CapabilityId, CapabilityVerdict } from '../rubric.js';
 
 /** Lowercase, mid-sentence phrasing — sentence-case with capitalize() for a standalone label (e.g. a list heading). */
 export const PLAIN_CAPABILITY: Readonly<Record<CapabilityId, string>> = {
@@ -45,42 +45,49 @@ const DIMENSION_REASON: Readonly<Record<MetricDimension, string>> = {
 
 const NEUTRAL_REASON = "the data doesn't meet the quality bar";
 
-const PLAIN_OUTCOME: Readonly<Record<CapabilityId, Readonly<Record<Verdict, string>>>> = {
+const PLAIN_OUTCOME: Readonly<Record<CapabilityId, Readonly<Record<CapabilityVerdict, string>>>> = {
   grounded_account_brief: {
     viable: 'Account summaries can safely cite real notes and deal history.',
     degraded:
       'Account summaries can be generated, but with thinner supporting evidence than ideal — treat them as a starting point, not a finished brief.',
     blocked: 'There is not yet enough reliable note history to safely generate an account summary.',
+    not_measured: "This scan can't see all the notes or account records an account summary would draw on, so it can't say yet whether one would be safe.",
   },
   pipeline_risk_signals: {
     viable: 'Stalled, silent or slipping deals can be flagged automatically.',
     degraded: 'Deal-risk flags can run, but over a smaller or less certain slice of the pipeline than ideal.',
     blocked: 'There is not yet enough reliable activity data to flag at-risk deals.',
+    not_measured: "This scan can't see how activity is captured in your CRM, so it can't say yet whether a quiet deal really means a stalled one.",
   },
   close_date_realism: {
     viable: 'Deals with unrealistic or already-passed close dates can be flagged automatically.',
     degraded: 'Close-date flags can run, but some will rest on incomplete history.',
     blocked: 'Close dates are not filled in or tracked reliably enough to flag unrealistic ones.',
+    not_measured: "This scan can't see how close dates are tracked over time, so it can't say yet whether slipping dates could be flagged.",
   },
   next_action_recommendation: {
     viable: 'A grounded "what to do next" suggestion can be generated for open deals.',
     degraded: 'Next-step suggestions can run, but with less supporting detail than ideal.',
     blocked: 'There is not yet enough activity and note detail to safely suggest a next step.',
+    not_measured: "This scan can't see all the activity and note detail a next-step suggestion would rely on, so it can't say yet whether one would be safe.",
   },
   enablement_answer_engine: {
     viable: '"How have we handled this before" questions can be answered from real closed-deal history.',
     degraded: 'Past-deal answers can be generated, but from a thinner set of closed history than ideal.',
     blocked: 'There is not yet enough closed-deal history to answer "how have we handled this before."',
+    not_measured: "This scan can't see all the closed-deal history these answers would draw on, so it can't say yet whether they would be reliable.",
   },
   forecast_assistance: {
     viable: 'A human forecast call can be supported with evidence and outlier flags from real pipeline data.',
     degraded: 'Forecast support can run, but on a less complete picture of the pipeline than ideal.',
     blocked: 'The pipeline data is not yet complete enough to support a forecast call.',
+    not_measured: "This scan can't see all the pipeline data forecast support would need, so it can't say yet whether it would help.",
   },
   bulk_hygiene_automation: {
     viable: 'Batch fixes for stale or missing data can be proposed for a person to approve.',
     degraded: 'Batch fixes can be proposed, but over a smaller or less certain slice of records than ideal.',
     blocked: 'The data is not yet clean enough to safely propose batch fixes.',
+    not_measured: "This scan can't see all the records batch fixes would touch, so it can't say yet whether proposing them would be safe.",
   },
   autonomous_writeback: {
     viable:
@@ -89,6 +96,8 @@ const PLAIN_OUTCOME: Readonly<Record<CapabilityId, Readonly<Record<Verdict, stri
     // Not ready, so this line must read as a not-ready line, not a caution line.
     degraded: 'AI should not write to the CRM without a person checking every change yet.',
     blocked: 'AI should not write to the CRM without a person checking every change.',
+    // Fail-safe wording, same as degraded above: not measured is also bucketed as Not ready.
+    not_measured: "AI should not write to the CRM without a person checking every change, and this scan can't see everything needed to judge otherwise.",
   },
 };
 
@@ -96,10 +105,11 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-type Bucket = 'ready' | 'caution' | 'notReady';
+type Bucket = 'ready' | 'caution' | 'notMeasured' | 'notReady';
 
+/** Degraded or not measured: either way, AI writing to the CRM is not ready (see effectiveBucket). */
 function isWritebackFailSafe(c: ReportCapabilityRow): boolean {
-  return c.id === 'autonomous_writeback' && c.verdict === 'degraded';
+  return c.id === 'autonomous_writeback' && (c.verdict === 'degraded' || c.verdict === 'not_measured');
 }
 
 /**
@@ -115,6 +125,7 @@ function effectiveBucket(c: ReportCapabilityRow): Bucket {
   if (isWritebackFailSafe(c)) return 'notReady';
   if (c.verdict === 'viable') return 'ready';
   if (c.verdict === 'degraded') return 'caution';
+  if (c.verdict === 'not_measured') return 'notMeasured';
   return 'notReady';
 }
 
@@ -165,9 +176,10 @@ function aggregateReason(data: ReportData, notReady: readonly ReportCapabilityRo
 const WRITEBACK_NOT_READY_CLAUSE = 'fully automatic CRM updates stay off until a person checks every change';
 
 /**
- * 3-6 plain-English sentences for a sales-leader reader: no metric names,
- * no tier labels ("viable"/"degraded"/"blocked" never appear). Three
- * buckets (see effectiveBucket) — ready, usable with caution, not ready —
+ * 3-7 plain-English sentences for a sales-leader reader: no metric names,
+ * no tier labels ("viable"/"degraded"/"blocked" never appear). Four
+ * buckets (see effectiveBucket) — ready, usable with caution, can't tell
+ * yet (not measured: the scan can't see the data), not ready —
  * each get at most one sentence, omitted when empty (the caution sentence
  * is two sentences on its own once populated); a degraded capability is
  * never described as "not ready" EXCEPT autonomous_writeback, which the
@@ -179,13 +191,15 @@ const WRITEBACK_NOT_READY_CLAUSE = 'fully automatic CRM updates stay off until a
  * contains every capability, its sentence collapses to a fixed "all
  * N"/"none of the N" line instead of enumerating. The fixed closing line
  * is itself two sentences, so the overall range is 3 (one populated
- * single-sentence bucket + closing) to 6 (all three buckets, caution's two
- * sentences included, + closing).
+ * single-sentence bucket + closing) to 7 (all four buckets, caution's two
+ * sentences included, + closing). A not-measured autonomous_writeback is
+ * bucketed as not ready by the same fail-safe as a degraded one.
  */
 export function buildExecutiveSummary(data: ReportData): string {
   const total = data.capabilities.length;
   const ready = data.capabilities.filter((c) => effectiveBucket(c) === 'ready');
   const caution = data.capabilities.filter((c) => effectiveBucket(c) === 'caution');
+  const notMeasured = data.capabilities.filter((c) => effectiveBucket(c) === 'notMeasured');
   const notReady = data.capabilities.filter((c) => effectiveBucket(c) === 'notReady');
 
   const sentences: string[] = [];
@@ -201,6 +215,14 @@ export function buildExecutiveSummary(data: ReportData): string {
   if (caution.length > 0) {
     sentences.push(
       `The data can also support ${joinPlain(caution.map((c) => PLAIN_CAPABILITY[c.id]))}, but treat the output with caution. It's thinner or less certain than ideal for now.`,
+    );
+  }
+
+  if (notMeasured.length > 0) {
+    sentences.push(
+      notMeasured.length === total
+        ? `This scan can't see enough of the data to judge any of the ${total} AI-assisted sales tools yet.`
+        : `This scan can't see some of the data behind ${joinPlain(notMeasured.map((c) => PLAIN_CAPABILITY[c.id]))}, so it can't say yet whether ${notMeasured.length === 1 ? 'that is' : 'those are'} ready.`,
     );
   }
 
@@ -236,12 +258,25 @@ export interface FullNarrative {
   readonly summary: string;
   readonly ready: readonly CapabilityOutcome[];
   readonly caution: readonly CapabilityOutcome[];
+  readonly notMeasured: readonly CapabilityOutcome[];
   readonly notReady: readonly CapabilityOutcome[];
+}
+
+/** Added for a not-measured capability when some of the gates the scan could see are thinner than ideal. */
+const NOT_MEASURED_THIN_CLAUSE = 'Of the data it could see, some is thinner than ideal.';
+
+function hasDegradedGate(data: ReportData, capabilityId: CapabilityId): boolean {
+  return data.metrics.some(
+    (m) => m.gatesCapabilities.some((g) => g.id === capabilityId) && gateVerdictOf(m) === 'degraded',
+  );
 }
 
 function outcomeFor(data: ReportData, c: ReportCapabilityRow, bucket: Bucket): CapabilityOutcome {
   const base = PLAIN_OUTCOME[c.id][c.verdict];
-  const outcome = bucket === 'ready' ? base : `${base} Right now, ${notReadyReason(data, c.id)}.`;
+  let outcome: string;
+  if (bucket === 'ready') outcome = base;
+  else if (bucket === 'notMeasured') outcome = hasDegradedGate(data, c.id) ? `${base} ${NOT_MEASURED_THIN_CLAUSE}` : base;
+  else outcome = `${base} Right now, ${notReadyReason(data, c.id)}.`;
   return { label: capitalize(PLAIN_CAPABILITY[c.id]), outcome };
 }
 
@@ -249,13 +284,15 @@ function outcomeFor(data: ReportData, c: ReportCapabilityRow, bucket: Bucket): C
 export function buildFullNarrative(data: ReportData): FullNarrative {
   const ready: CapabilityOutcome[] = [];
   const caution: CapabilityOutcome[] = [];
+  const notMeasured: CapabilityOutcome[] = [];
   const notReady: CapabilityOutcome[] = [];
   for (const c of data.capabilities) {
     const bucket = effectiveBucket(c);
     const outcome = outcomeFor(data, c, bucket);
     if (bucket === 'ready') ready.push(outcome);
     else if (bucket === 'caution') caution.push(outcome);
+    else if (bucket === 'notMeasured') notMeasured.push(outcome);
     else notReady.push(outcome);
   }
-  return { summary: buildExecutiveSummary(data), ready, caution, notReady };
+  return { summary: buildExecutiveSummary(data), ready, caution, notMeasured, notReady };
 }

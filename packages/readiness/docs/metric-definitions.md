@@ -614,10 +614,28 @@ trusts `closedOpportunities`' existing trailing-12-month window from
   the report layer decides how to display that, the metric doesn't decide
   thresholds.
 - A metric returning `not_applicable` or `not_instrumented` is not the same
-  as a `blocked` verdict — `gradeCapability` in `rubric.ts` already treats
-  an absent reading as blocked, so a metric should only return one of these
-  statuses when it genuinely cannot compute a number, not as a way to signal
-  a bad result.
+  as a `blocked` verdict. A metric should only return one of these statuses
+  when it genuinely cannot compute a number, not as a way to signal a bad
+  result.
+- **Blocked vs Not measured (decided 2026-09-30).** A gate with no reading
+  is graded by *why* it has none:
+  - **Blocked: the data is missing.** The CRM doesn't hold what the metric
+    needs (e.g. no sampled notes, no open opportunities). Status
+    `not_applicable`. This is a verdict about the org's data.
+  - **Not measured: the tool can't see it.** The adapter lacks the
+    capability (`not_instrumented`, e.g. `activitySync` off or no second
+    source connected), or the metric is `deferred`/`not_implemented`. This
+    says nothing about the org's data either way.
+
+  A capability takes its worst gate in the order **blocked > not measured >
+  degraded > viable**. The report still lists every non-viable gate under
+  the capability, so a not-measured capability shows its degraded gates too.
+  A single metric row is never "not measured": its status carries that.
+  `buildReport.ts`'s `gateVerdictOf` and `rubric.ts`'s `gradeCapability`
+  implement this rule.
+- A metric with `unit: 'bool'` has no degraded band (decided 2026-09-30): a
+  value below `viableAt` grades **blocked**. A capability either exists or
+  it doesn't.
 - A metric with `rubric.ts`'s `unit: 'bool'` reports `MetricResult.value`
   as `1` (true) or `0` (false), never a JS boolean — `value`'s type is
   `number | null`. Established by `owner_history_enabled` (D4), the first

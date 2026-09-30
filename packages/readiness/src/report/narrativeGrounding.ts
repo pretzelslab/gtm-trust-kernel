@@ -40,7 +40,7 @@
  * leans on unchecked vocabulary to imply a tier.
  */
 
-import type { CapabilityId, MetricId, Verdict } from '../rubric.js';
+import type { CapabilityId, CapabilityVerdict, MetricId } from '../rubric.js';
 import type { MetricRow, ReportCapabilityRow, ReportData } from './buildReport.js';
 import { SUMMARY_IDS, type NarrativeClaim, type SummaryId } from './narrativeTypes.js';
 
@@ -72,21 +72,24 @@ const PERCENT_TOLERANCE_POINTS = 0.5;
 // no listed synonym, so only the bare word is checked for it.
 // ---------------------------------------------------------------------------
 
-const TIER_WORDS: Readonly<Record<Verdict, readonly string[]>> = {
+// 'not measured' is a capability verdict only (a metric row never has it as
+// a tier), so it can only match a cited capability.
+const TIER_WORDS: Readonly<Record<CapabilityVerdict, readonly string[]>> = {
   viable: ['viable', 'ready', 'strong'],
   degraded: ['degraded'],
+  not_measured: ['not measured'],
   blocked: ['blocked', 'not ready', 'weak'],
 };
 
-const ALL_TIER_TERMS: readonly { readonly term: string; readonly verdict: Verdict }[] = (
-  Object.entries(TIER_WORDS) as [Verdict, readonly string[]][]
+const ALL_TIER_TERMS: readonly { readonly term: string; readonly verdict: CapabilityVerdict }[] = (
+  Object.entries(TIER_WORDS) as [CapabilityVerdict, readonly string[]][]
 )
   .flatMap(([verdict, terms]) => terms.map((term) => ({ term, verdict })))
   // Longest phrase first, so "not ready" is matched (and consumed) before
   // the bare "ready" it contains would otherwise also match.
   .sort((a, b) => b.term.length - a.term.length);
 
-function findTierWordMismatches(text: string, expectedTiers: ReadonlySet<Verdict>): string[] {
+function findTierWordMismatches(text: string, expectedTiers: ReadonlySet<CapabilityVerdict>): string[] {
   let remaining = text.toLowerCase();
   const mismatches: string[] = [];
   for (const { term, verdict } of ALL_TIER_TERMS) {
@@ -155,7 +158,7 @@ function validateClaim(
     return [{ claimIndex, reason: 'claim cites no metric or capability id' }];
   }
 
-  const expectedTiers = new Set<Verdict>();
+  const expectedTiers = new Set<CapabilityVerdict>();
   const citedMetrics: MetricRow[] = [];
   const citedSummaryEntries: { id: SummaryId; value: number }[] = [];
   for (const id of claim.groundedIn) {

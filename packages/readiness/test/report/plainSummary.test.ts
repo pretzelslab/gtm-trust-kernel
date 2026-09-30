@@ -3,7 +3,7 @@ import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters
 import { MOCK_ORG_FIXTURES, type FixtureName } from '../../src/fixtures/mockOrgs.js';
 import { buildReportData, type ReportCapabilityRow, type ReportData } from '../../src/report/buildReport.js';
 import { PLAIN_CAPABILITY, buildExecutiveSummary, buildFullNarrative } from '../../src/report/plainSummary.js';
-import { THRESHOLDS, type MetricId, type Verdict } from '../../src/rubric.js';
+import { THRESHOLDS, type CapabilityVerdict, type MetricId, type Verdict } from '../../src/rubric.js';
 
 const METRIC_IDS = Object.keys(THRESHOLDS);
 const TIER_WORDS = [/\bviable\b/i, /\bdegraded\b/i, /\bblocked\b/i];
@@ -46,7 +46,7 @@ function fullyMixedVerdictSetFixture(base: ReportData): ReportData {
     if (c.id === 'autonomous_writeback') return { ...c, verdict: 'degraded' };
     return { ...c, verdict: 'viable' };
   });
-  const capabilityVerdictCounts: Record<Verdict, number> = { viable: 0, degraded: 0, blocked: 0 };
+  const capabilityVerdictCounts: Record<CapabilityVerdict, number> = { viable: 0, degraded: 0, not_measured: 0, blocked: 0 };
   for (const c of capabilities) capabilityVerdictCounts[c.verdict] += 1;
   return { ...base, capabilities, org: { ...base.org, capabilityVerdictCounts } };
 }

@@ -4,18 +4,19 @@
  * Not covered by tests (buildReport.ts's ReportData shape is; this isn't).
  */
 
-import type { MetricRow, MetricRowStatus, ReportCapabilityRow, ReportData } from './buildReport.js';
-import { THRESHOLDS, type Unit, type Verdict } from '../rubric.js';
+import { gateVerdictOf, type MetricRow, type MetricRowStatus, type ReportCapabilityRow, type ReportData } from './buildReport.js';
+import { THRESHOLDS, type CapabilityVerdict, type Unit } from '../rubric.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildExecutiveSummary } from './plainSummary.js';
 import type { NarrativeResult } from './narrative.js';
 
-type StatusKey = Verdict | MetricRowStatus;
+type StatusKey = CapabilityVerdict | MetricRowStatus;
 
 const STATUS_META: Readonly<Record<StatusKey, { label: string; cssClass: string }>> = {
   viable: { label: 'Viable', cssClass: 'status-viable' },
   degraded: { label: 'Degraded', cssClass: 'status-degraded' },
   blocked: { label: 'Blocked', cssClass: 'status-blocked' },
+  not_measured: { label: 'Not measured', cssClass: 'status-not_instrumented' },
   ok: { label: 'OK', cssClass: 'status-viable' }, // only reached when a row somehow has no tier; shouldn't happen for graded metrics.
   not_applicable: { label: 'N/A', cssClass: 'status-not_applicable' },
   not_instrumented: { label: 'Not instrumented', cssClass: 'status-not_instrumented' },
@@ -58,14 +59,32 @@ function renderSummaryCards(data: ReportData): string {
     <div class="card"><div class="n">${org.openSampleSize}</div><div class="l">Open sampled</div></div>
     <div class="card"><div class="n">${org.closedSampleSize}</div><div class="l">Closed sampled</div></div>
     <div class="card"><div class="n">${org.recordsScanned}</div><div class="l">Records scanned</div></div>
-    <div class="card"><div class="n">${cv.viable} / ${cv.degraded} / ${cv.blocked}</div><div class="l">Capabilities: viable / degraded / blocked</div></div>
+    <div class="card"><div class="n">${cv.viable} / ${cv.degraded} / ${cv.not_measured} / ${cv.blocked}</div><div class="l">Capabilities: viable / degraded / not measured / blocked</div></div>
     <div class="card"><div class="n">${ms.ok}</div><div class="l">Metrics computed</div></div>
     <div class="card"><div class="n">${ms.not_applicable + ms.not_instrumented}</div><div class="l">Not applicable / not instrumented</div></div>
     <div class="card"><div class="n">${ms.deferred + ms.not_implemented}</div><div class="l">Deferred / not yet implemented</div></div>
   </div>`;
 }
 
-function renderCapabilitiesTable(caps: readonly ReportCapabilityRow[]): string {
+const GATE_RANK: Readonly<Record<CapabilityVerdict, number>> = { viable: 0, degraded: 1, not_measured: 2, blocked: 3 };
+
+/**
+ * Every gate holding a capability back, worst first, each with its own
+ * verdict. A not-measured capability still lists its degraded gates, so the
+ * reader sees what the scan could measure as well as what it couldn't.
+ */
+function renderGatesHoldingBack(c: ReportCapabilityRow, metrics: readonly MetricRow[]): string {
+  const held = metrics
+    .filter((m) => m.gatesCapabilities.some((g) => g.id === c.id))
+    .map((m) => ({ metric: m.metric, verdict: gateVerdictOf(m) }))
+    .filter((g) => g.verdict !== 'viable')
+    .sort((a, b) => GATE_RANK[b.verdict] - GATE_RANK[a.verdict]);
+  if (held.length === 0) return '';
+  const items = held.map((g) => `${escapeHtml(g.metric)} (${STATUS_META[g.verdict].label.toLowerCase()})`).join(', ');
+  return `<div class="gates">${items}</div>`;
+}
+
+function renderCapabilitiesTable(caps: readonly ReportCapabilityRow[], metrics: readonly MetricRow[]): string {
   const rows = caps
     .map((c) => {
       const meta = STATUS_META[c.verdict];
@@ -73,7 +92,7 @@ function renderCapabilitiesTable(caps: readonly ReportCapabilityRow[]): string {
         <td>${escapeHtml(c.label)}<div class="note">${escapeHtml(c.description)}</div></td>
         <td><span class="pill ${meta.cssClass}">${meta.label}</span></td>
         <td>${c.coverageCeiling !== null ? `${(c.coverageCeiling * 100).toFixed(1)}%` : '—'}</td>
-        <td>${c.blockerCount}</td>
+        <td>${c.blockerCount}${renderGatesHoldingBack(c, metrics)}</td>
       </tr>`;
     })
     .join('');
@@ -163,7 +182,7 @@ export function renderReportHtml(
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
   <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
   ${renderSummaryCards(data)}
-  ${renderCapabilitiesTable(data.capabilities)}
+  ${renderCapabilitiesTable(data.capabilities, data.metrics)}
   ${renderMetricsTable(data.metrics)}
   `;
   return pageShell(`Readiness report — ${org.orgLabel}`, body);
@@ -178,7 +197,7 @@ export function renderComparisonHtml(datas: readonly ReportData[]): string {
     <div class="card">
       <div class="n">${escapeHtml(d.org.orgLabel)}</div>
       <div class="l">${escapeHtml(d.org.orgDescription)}</div>
-      <div class="note">Capabilities viable/degraded/blocked: ${d.org.capabilityVerdictCounts.viable} / ${d.org.capabilityVerdictCounts.degraded} / ${d.org.capabilityVerdictCounts.blocked}</div>
+      <div class="note">Capabilities viable/degraded/not measured/blocked: ${d.org.capabilityVerdictCounts.viable} / ${d.org.capabilityVerdictCounts.degraded} / ${d.org.capabilityVerdictCounts.not_measured} / ${d.org.capabilityVerdictCounts.blocked}</div>
     </div>`,
     )
     .join('');

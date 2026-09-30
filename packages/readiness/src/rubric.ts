@@ -667,6 +667,16 @@ export const CAPABILITIES: readonly CapabilitySpec[] = [
 
 export type Verdict = 'viable' | 'degraded' | 'blocked';
 
+/**
+ * A gate's or capability's verdict. Adds 'not_measured' to the three metric
+ * tiers: the tool could not see the data a gate needs (the adapter lacks the
+ * capability, or the metric isn't built yet), so it can say nothing about
+ * the org's data either way. Distinct from 'blocked', which is a verdict
+ * about the data itself, including data that is missing from the CRM. A
+ * single metric is never 'not_measured'; it has a MetricStatus instead.
+ */
+export type CapabilityVerdict = Verdict | 'not_measured';
+
 export interface MetricReading {
   readonly metric: MetricId;
   readonly value: number;
@@ -675,7 +685,7 @@ export interface MetricReading {
 
 export interface GateResult {
   readonly metric: MetricId;
-  readonly verdict: Verdict;
+  readonly verdict: CapabilityVerdict;
   readonly value: number;
   readonly sampleSize: number;
   readonly viableAt: number;
@@ -683,13 +693,18 @@ export interface GateResult {
   readonly remediation: string;
 }
 
+/** A gate graded from a real reading: always one of the three metric tiers. */
+export interface GradedGate extends GateResult {
+  readonly verdict: Verdict;
+}
+
 export interface CapabilityResult {
   readonly capability: CapabilityId;
-  readonly verdict: Verdict;
+  readonly verdict: CapabilityVerdict;
   readonly gates: readonly GateResult[];
   /** Share of pipeline this capability can operate on, if bounded. */
   readonly coverageCeiling: number | null;
-  /** Gates that are not Viable, worst first. */
+  /** Gates that are not Viable, worst first (blocked, not_measured, degraded). */
   readonly blockers: readonly GateResult[];
 }
 
@@ -706,15 +721,18 @@ function resolve(t: Threshold): { viableAt: number; degradedAt: number } {
   return { viableAt: t.viableAt, degradedAt: t.degradedAt };
 }
 
-export function gradeGate(reading: MetricReading): GateResult {
+export function gradeGate(reading: MetricReading): GradedGate {
   const t = THRESHOLDS[reading.metric];
   const { viableAt, degradedAt } = resolve(t);
   const better = (a: number, b: number) =>
     t.direction === 'higher_is_better' ? a >= b : a <= b;
 
+  // A bool gate has no degraded band: the capability is either there or it
+  // isn't, so anything short of viableAt is blocked (decided 2026-09-30).
+  // degradedAt is still resolved above so a PENDING value keeps failing.
   const verdict: Verdict = better(reading.value, viableAt)
     ? 'viable'
-    : better(reading.value, degradedAt)
+    : t.unit !== 'bool' && better(reading.value, degradedAt)
       ? 'degraded'
       : 'blocked';
 
@@ -729,34 +747,43 @@ export function gradeGate(reading: MetricReading): GateResult {
   };
 }
 
-const RANK: Record<Verdict, number> = { viable: 0, degraded: 1, blocked: 2 };
+const RANK: Record<CapabilityVerdict, number> = { viable: 0, degraded: 1, not_measured: 2, blocked: 3 };
 
+/**
+ * `unmeasured` names the metrics the tool could not see (see
+ * CapabilityVerdict). A gate with no reading is 'not_measured' if listed
+ * there, and 'blocked' otherwise: no reading and no reason means the data
+ * the metric needs is missing. Neither is ever an assumed pass.
+ */
 export function gradeCapability(
   spec: CapabilitySpec,
   readings: ReadonlyMap<MetricId, MetricReading>,
+  unmeasured: ReadonlySet<MetricId> = new Set(),
 ): CapabilityResult {
   const gates: GateResult[] = [];
   for (const m of spec.gates) {
     const r = readings.get(m);
-    // A metric that could not be measured is a blocker, never an assumed pass.
     if (!r) {
       const t = THRESHOLDS[m];
       const { viableAt, degradedAt } = resolve(t);
+      const notMeasured = unmeasured.has(m);
       gates.push({
         metric: m,
-        verdict: 'blocked',
+        verdict: notMeasured ? 'not_measured' : 'blocked',
         value: Number.NaN,
         sampleSize: 0,
         viableAt,
         degradedAt,
-        remediation: `Could not measure ${m}. ${t.remediation}`,
+        remediation: notMeasured
+          ? `Not measured: this scan cannot see the data ${m} needs. ${t.remediation}`
+          : `No data to measure ${m}. ${t.remediation}`,
       });
       continue;
     }
     gates.push(gradeGate(r));
   }
 
-  const verdict = gates.reduce<Verdict>(
+  const verdict = gates.reduce<CapabilityVerdict>(
     (worst, g) => (RANK[g.verdict] > RANK[worst] ? g.verdict : worst),
     'viable',
   );
@@ -776,6 +803,7 @@ export function gradeCapability(
 
 export function gradeAll(
   readings: ReadonlyMap<MetricId, MetricReading>,
+  unmeasured: ReadonlySet<MetricId> = new Set(),
 ): readonly CapabilityResult[] {
-  return CAPABILITIES.map((c) => gradeCapability(c, readings));
+  return CAPABILITIES.map((c) => gradeCapability(c, readings, unmeasured));
 }

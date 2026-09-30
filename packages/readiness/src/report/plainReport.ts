@@ -43,6 +43,7 @@ export function renderPlainReportHtml(data: ReportData, options?: { readonly mod
   <p>${escapeHtml(narrative.summary)}</p>
   ${renderBucket('Ready to use', narrative.ready)}
   ${renderBucket('Usable with caution', narrative.caution)}
+  ${renderBucket("Can't tell yet", narrative.notMeasured)}
   ${renderBucket('Not ready yet', narrative.notReady)}
   `;
   return pageShell(`Readiness report (plain English) — ${org.orgLabel}`, body);
