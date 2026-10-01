@@ -25,27 +25,5 @@ jobs:
       - name: Report runs from source, without a build
         run: npm run report -w @gtm-trust-kernel/readiness
 
-  # Disabled: SF_CLIENT_ID / SF_CLIENT_SECRET / SF_INSTANCE_URL are not
-  # configured as repo secrets yet (checked via `gh secret list`, 2026-09-28
-  # -- none exist). Add a `schedule:` trigger (weekly, off the default
-  # branch) plus `workflow_dispatch:` to `on:` above, and change this `if`
-  # to `github.event_name == 'schedule' || github.event_name ==
-  # 'workflow_dispatch'`, once those three secrets are added. Deliberately
-  # never `pull_request` -- this job must not be reachable from a PR,
-  # forked or not, since it holds real credentials.
-  live-contract:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
-      - name: Salesforce contract suite
-        env:
-          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
-          SF_CLIENT_SECRET: ${{ secrets.SF_CLIENT_SECRET }}
-          SF_INSTANCE_URL: ${{ secrets.SF_INSTANCE_URL }}
-        run: npm test -- --testNamePattern="salesforce"
+# The Salesforce live contract run is in live-contract.yml (schedule and
+# manual dispatch only, never on a pull request).

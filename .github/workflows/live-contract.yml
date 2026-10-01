@@ -1,0 +1,59 @@
+name: live-contract
+
+# The Salesforce adapter's live contract tests
+# (packages/adapters/test/salesforce.live.test.ts) against a real org:
+# weekly, or by hand. Read-only; nothing here writes to Salesforce.
+#
+# Deliberately never `pull_request` (or `push`): this workflow holds real
+# org credentials and must not be reachable from a PR, forked or not.
+#
+# Unreachable until the repo secrets SF_CLIENT_ID, SF_CLIENT_SECRET and
+# SF_INSTANCE_URL all exist: `secrets` can't be read in a job-level `if`,
+# so `secrets-check` reports whether they are set and `live-contract`
+# runs only when they are. Until then a run shows `live-contract` skipped.
+# GitHub pauses scheduled workflows after 60 days without repo activity.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets-check:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
+          SF_CLIENT_SECRET: ${{ secrets.SF_CLIENT_SECRET }}
+          SF_INSTANCE_URL: ${{ secrets.SF_INSTANCE_URL }}
+        run: |
+          if [ -n "$SF_CLIENT_ID" ] && [ -n "$SF_CLIENT_SECRET" ] && [ -n "$SF_INSTANCE_URL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Salesforce live contract skipped: SF_CLIENT_ID, SF_CLIENT_SECRET and SF_INSTANCE_URL are not all set as repo secrets."
+          fi
+
+  live-contract:
+    needs: secrets-check
+    if: needs.secrets-check.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Salesforce live contract tests
+        env:
+          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
+          SF_CLIENT_SECRET: ${{ secrets.SF_CLIENT_SECRET }}
+          SF_INSTANCE_URL: ${{ secrets.SF_INSTANCE_URL }}
+        run: npm run test:live -w @gtm-trust-kernel/adapters -- test/salesforce.live.test.ts
