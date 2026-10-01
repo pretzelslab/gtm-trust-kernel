@@ -8,39 +8,78 @@ own Developer Edition org by hand, with the Salesforce CLI (`sf`).
 
 The live contract tests (`npm run test:live -w @gtm-trust-kernel/adapters`)
 include a check on one deal with more Tasks than the adapter's per-deal
-cap of 200. It finds that deal by `CONTRACT-PAGINATION` in the Task
-Subject and skips if there isn't one. This file holds 250 such Tasks
-(`Subject` "CONTRACT-PAGINATION 1" to "CONTRACT-PAGINATION 250",
-`Status` "Completed"). Every row's `WhatId` is the placeholder
-`REPLACE_WITH_OPPORTUNITY_ID`, so importing the file unedited fails
-instead of attaching Tasks to the wrong record.
+cap of 200. The check signs in as the connected app's **Run As user**,
+in the org named by `SF_INSTANCE_URL` in `.env`. It finds the deal by
+`CONTRACT-PAGINATION` in the Task Subject and skips if it sees none. When
+it skips, it prints the org host and Run As username it checked.
 
-From the repo root, in Git Bash:
+This file holds 250 Tasks (`Subject` "CONTRACT-PAGINATION 1" to
+"CONTRACT-PAGINATION 250", `Status` "Completed") with two placeholders in
+every row:
 
-1. Choose one open opportunity and copy its 18-character Id (from its URL
-   in Salesforce, for example). All 250 Tasks go on that one deal.
+- `WhatId` = `REPLACE_WITH_OPPORTUNITY_ID`: the deal the Tasks go on.
+- `OwnerId` = `REPLACE_WITH_RUN_AS_USER_ID`: the Run As user, so the
+  Tasks are visible to it. An `sf` import otherwise makes you the owner,
+  and the Run As user may not see your Tasks.
 
-2. Fill in a local copy (`*.local.csv` is git-ignored; the tracked file
+**Replace both placeholders before you import.** Left in place, they make
+the import fail instead of creating Tasks on the wrong record or owner.
+
+From the repo root, in Git Bash (`<alias>` is your org's `sf` alias):
+
+1. **Use the org in `.env`.** Check that the alias points to it:
+
+   ```bash
+   sf org display --target-org <alias>
+   ```
+
+   Its Instance Url must match `SF_INSTANCE_URL` in `.env`.
+
+2. **Remove any earlier `CONTRACT-PAGINATION` Tasks first** (see
+   "Removing the Tasks" below), so only one set exists, on one deal and
+   owner.
+
+3. **Find the Run As user's Id.** In Setup, open App Manager, find the
+   connected app the adapter uses, choose View (or Manage), and read the
+   username under Client Credentials Flow, "Run As". Then:
+
+   ```bash
+   sf data query --query "SELECT Id FROM User WHERE Username = '<run as username>'" --target-org <alias>
+   ```
+
+4. **Choose the deal.** Copy one open opportunity's 18-character Id (from
+   its URL in Salesforce, for example).
+
+5. **Fill in a local copy** (`*.local.csv` is git-ignored; the tracked file
    stays a template):
 
    ```bash
-   sed 's/REPLACE_WITH_OPPORTUNITY_ID/<opportunity id>/' scripts/seed/contract-pagination.csv > scripts/seed/contract-pagination.local.csv
+   sed -e 's/REPLACE_WITH_OPPORTUNITY_ID/<opportunity id>/' -e 's/REPLACE_WITH_RUN_AS_USER_ID/<run as user id>/' scripts/seed/contract-pagination.csv > scripts/seed/contract-pagination.local.csv
+   grep -c REPLACE_WITH scripts/seed/contract-pagination.local.csv   # must print 0
    ```
 
-3. Import it (Bulk API 2.0; `<alias>` is your org's `sf` alias):
+6. **Import it** (Bulk API 2.0):
 
    ```bash
    sf data import bulk --sobject Task --file scripts/seed/contract-pagination.local.csv --line-ending LF --wait 10 --target-org <alias>
    ```
 
-4. Run the live tests. The pagination check should now run, and it prints
-   whether Salesforce split the deal's Tasks across result pages.
+7. **Check the result.** This should print 250:
 
-### Removing the Tasks afterwards
+   ```bash
+   sf data query --query "SELECT COUNT() FROM Task WHERE Subject LIKE 'CONTRACT-PAGINATION %' AND WhatId = '<opportunity id>' AND OwnerId = '<run as user id>'" --target-org <alias>
+   ```
+
+8. Run the live tests. The pagination check should now run. It prints
+   each child page's row count, whether Salesforce returned a
+   `nextRecordsUrl` on the child rows, and the calls it used.
+
+### Removing the Tasks
 
 ```bash
 sf data query --query "SELECT Id FROM Task WHERE Subject LIKE 'CONTRACT-PAGINATION %'" --result-format csv --target-org <alias> > scripts/seed/contract-pagination-delete.local.csv
 sf data delete bulk --sobject Task --file scripts/seed/contract-pagination-delete.local.csv --line-ending LF --wait 10 --target-org <alias>
 ```
 
-Check that the query file lists 250 Ids before you run the delete.
+Check the Ids in the query file before you run the delete (250 per
+earlier import).

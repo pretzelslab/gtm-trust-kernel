@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest';
 import type { Activity, RecordRef } from '../src/model/canonical.js';
 import { loadSalesforceConfigFromEnv, SalesforceAdapter } from '../src/salesforce.js';
 import { runAdapterContract, type ContractHarness } from './contract/adapter.contract.js';
-import { checkSalesforceShapes, recordSalesforceResponses } from './contract/salesforceShapes.js';
+import { checkSalesforceShapes, recordSalesforceResponses, type RecordedResponse } from './contract/salesforceShapes.js';
 import { unresolvableSalesforceIdFor } from './support/salesforceIds.js';
 
 const ROOT_ENV = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.env');
@@ -77,6 +77,53 @@ async function discover(): Promise<ContractHarness> {
   };
 }
 
+/**
+ * Logging only: each page of one deal's `relationship` child rows, in
+ * request order (the inline first page, then any nextRecordsUrl pages).
+ */
+function childPages(responses: readonly RecordedResponse[], relationship: string, dealId: string): { rows: number; next: boolean }[] {
+  const pages: { rows: number; next: boolean }[] = [];
+  const pageOf = (v: unknown) => {
+    const p = v as { records?: unknown[]; nextRecordsUrl?: unknown } | null;
+    return { rows: p?.records?.length ?? 0, next: typeof p?.nextRecordsUrl === 'string' };
+  };
+  for (const r of responses) {
+    if (r.kind !== 'query' || !r.soql?.includes(` FROM ${relationship} `)) continue;
+    if (r.role === 'child') {
+      pages.push(pageOf(r.body));
+      continue;
+    }
+    const records = (r.body as { records?: Record<string, unknown>[] }).records ?? [];
+    const parent = records.find((p) => p.Id === dealId);
+    if (parent) pages.push(pageOf(parent[relationship]));
+  }
+  return pages;
+}
+
+/**
+ * Logging only, on the skip path: the Run As user's username, from a fresh
+ * client-credentials token and the userinfo endpoint (2 calls, outside any
+ * budget). Never throws; a failure is reported in the returned text.
+ */
+async function runAsUsername(): Promise<string> {
+  try {
+    const config = loadSalesforceConfigFromEnv();
+    const tokenRes = await fetch(`${config.instanceUrl}/services/oauth2/token`, {
+      method: 'POST',
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: config.clientId, client_secret: config.clientSecret }),
+    });
+    const token = (await tokenRes.json()) as { access_token?: string; instance_url?: string };
+    if (!token.access_token) return `unknown (token request answered ${tokenRes.status})`;
+    const infoRes = await fetch(`${token.instance_url ?? config.instanceUrl}/services/oauth2/userinfo`, {
+      headers: { Authorization: `Bearer ${token.access_token}` },
+    });
+    const info = (await infoRes.json()) as { preferred_username?: string };
+    return info.preferred_username ?? `unknown (userinfo answered ${infoRes.status})`;
+  } catch (err) {
+    return `unknown (${err instanceof Error ? err.message : String(err)})`;
+  }
+}
+
 describe.skipIf(missing.length > 0)('SalesforceAdapter (live org)', () => {
   let harness: Promise<ContractHarness> | undefined;
   const make = () => (harness ??= discover());
@@ -126,6 +173,7 @@ describe.skipIf(missing.length > 0)('SalesforceAdapter (live org)', () => {
     const deals = new Map(marked.flatMap((a) => a.relatedTo.filter((r) => r.id.startsWith('006'))).map((r) => [r.id, r]));
     if (deals.size === 0) {
       console.warn(`Child pagination check skipped: no Task has "${PAGINATION_MARKER}" in its Subject. Seed about 250 on one deal by hand to run it.`);
+      console.warn(`Looked in org ${adapter.orgId} as Run As user ${await runAsUsername()} (Tasks must be in this org and visible to this user).`);
       ctx.skip();
     }
     expect(deals.size, `Tasks marked ${PAGINATION_MARKER} should all be on one deal`).toBe(1);
@@ -144,6 +192,14 @@ describe.skipIf(missing.length > 0)('SalesforceAdapter (live org)', () => {
     console.info(
       `Child pagination ${report.seen.has('child-paged') ? 'observed' : 'not observed'} on ${marked.length} marked Tasks (${rec.requests.length} API calls).`,
     );
+    for (const relationship of ['Tasks', 'Events']) {
+      const pages = childPages(rec.responses, relationship, deal.id);
+      console.info(
+        `${relationship} child pages for ${deal.id}: ${pages.length} page(s), rows per page [${pages.map((p) => p.rows).join(', ')}], ` +
+          `nextRecordsUrl on the child: ${pages.some((p) => p.next) ? 'yes' : 'no'}.`,
+      );
+    }
+    console.info(`getActivitiesByOpportunity for the deal: ${rec.requests.length} API calls in total.`);
     expect(report.violations).toEqual([]);
     expect(result.items).toHaveLength(limit);
     expect(result.truncatedOpportunityIds.has(deal.id)).toBe(true);
