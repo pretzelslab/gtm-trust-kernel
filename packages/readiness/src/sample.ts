@@ -190,17 +190,29 @@ export function planSample(adapter: CrmAdapter, config: SampleConfig): SamplePla
   };
 }
 
-/** Quota impact of the full run (plannedTotalApiCalls) — understating it would defeat the point of the quota-discipline display. */
-function formatRateLimit(rateLimit: AdapterCapabilities['rateLimit'], totalPlannedApiCalls: number): string {
+/**
+ * Quota impact of the full run (plannedTotalApiCalls) — understating it would
+ * defeat the point of the quota-discipline display. With an estimate, split
+ * like the total line: a ceiling part plus an at-least part (detailed checks).
+ */
+function formatRateLimit(plan: SamplePlan): string {
+  const { rateLimit, plannedTotalApiCalls, plannedDetailApiCalls } = plan;
   if (rateLimit.kind === 'none' || rateLimit.value <= 0) {
     return 'Quota: adapter reports no rate limit';
   }
+  const ceilingApiCalls = plannedTotalApiCalls - plannedDetailApiCalls;
   if (rateLimit.kind === 'daily_quota') {
-    const pct = ((100 * totalPlannedApiCalls) / rateLimit.value).toFixed(1);
-    return `Quota: up to ${pct}% of the daily quota of ${rateLimit.value}`;
+    const pct = (calls: number) => ((100 * calls) / rateLimit.value).toFixed(1);
+    if (!plan.apiCallEstimate) {
+      return `Quota: up to ${pct(plannedTotalApiCalls)}% of the daily quota of ${rateLimit.value}`;
+    }
+    return `Quota: ${pct(plannedTotalApiCalls)}% of the daily quota of ${rateLimit.value} = up to ${pct(ceilingApiCalls)}% (scan, account hydration, fixed) + at least ${pct(plannedDetailApiCalls)}% (detailed checks)`;
   }
-  const seconds = (totalPlannedApiCalls / rateLimit.value).toFixed(1);
-  return `Quota: at least ~${seconds}s at ${rateLimit.value} calls/sec`;
+  const seconds = (calls: number) => (calls / rateLimit.value).toFixed(1);
+  if (!plan.apiCallEstimate) {
+    return `Quota: at least ~${seconds(plannedTotalApiCalls)}s at ${rateLimit.value} calls/sec`;
+  }
+  return `Quota: ~${seconds(plannedTotalApiCalls)}s at ${rateLimit.value} calls/sec = up to ~${seconds(ceilingApiCalls)}s (scan, account hydration, fixed) + at least ~${seconds(plannedDetailApiCalls)}s (detailed checks)`;
 }
 
 /** Pure. Renders the plan for the confirmation prompt. */
@@ -232,7 +244,7 @@ export function formatSamplePlan(plan: SamplePlan): string {
     ...estimateLines,
     `  Planned account hydration API calls: up to ${plan.plannedAccountApiCalls} (worst case: every sampled opportunity has a distinct account)`,
     totalLine,
-    `  ${formatRateLimit(plan.rateLimit, plan.plannedTotalApiCalls)}`,
+    `  ${formatRateLimit(plan)}`,
   ].join('\n');
 }
 

@@ -188,7 +188,7 @@ describe('planSample full-run estimate', () => {
     expect(text).toContain('Planned detailed-check API calls: at least 562 (4 per sampled deal across up to 140 deals, plus 2 batched reads; a minimum that excludes extra result pages)');
     expect(text).toContain('Planned fixed API calls: up to 203 (3 per run, plus up to 200 per-record fetches)');
     expect(text).toContain('Planned API calls in total: 816 = up to 254 (scan, account hydration, fixed) + at least 562 (detailed checks, excluding extra result pages)');
-    expect(text).toContain('Quota: up to 5.4% of the daily quota of 15000');
+    expect(text).toContain('Quota: 5.4% of the daily quota of 15000 = up to 1.7% (scan, account hydration, fixed) + at least 3.7% (detailed checks)');
   });
 
   it('says so when the adapter declares no estimate, and counts only what it can', () => {
