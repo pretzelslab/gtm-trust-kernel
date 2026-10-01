@@ -406,8 +406,8 @@ describe('SalesforceAdapter (fake API)', () => {
 
     it('merges Events with Tasks by date, as meetings with the same trust tier', async () => {
       const sf = installFakeSalesforce();
-      sf.on(/FROM Task WHERE WhatId/, [task(1, '2026-09-10'), task(2, '2026-09-01')]);
-      sf.on(/FROM Event WHERE WhatId/, [event(1, '2026-09-05T15:00:00.000+0000'), event(2, null, '2026-08-20')]);
+      sf.subqueryRows('Tasks', 'WhatId', [task(1, '2026-09-10'), task(2, '2026-09-01')]);
+      sf.subqueryRows('Events', 'WhatId', [event(1, '2026-09-05T15:00:00.000+0000'), event(2, null, '2026-08-20')]);
       const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1)]);
 
       expect(result.items.map((a) => [a.subject?.value, a.kind])).toEqual([
@@ -425,16 +425,16 @@ describe('SalesforceAdapter (fake API)', () => {
 
     it('reads TaskSubtype: Call is a call, Email an email, anything else other', async () => {
       const sf = installFakeSalesforce();
-      sf.on(/FROM Task WHERE WhatId/, [
+      sf.subqueryRows('Tasks', 'WhatId', [
         { ...task(1, '2026-09-04'), TaskSubtype: 'Call' },
         { ...task(2, '2026-09-03'), TaskSubtype: 'Email' },
         { ...task(3, '2026-09-02'), TaskSubtype: 'Task' },
         { ...task(4, '2026-09-01'), TaskSubtype: null },
       ]);
-      sf.on(/FROM Event WHERE WhatId/, []);
+      sf.subqueryRows('Events', 'WhatId', []);
       const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1)]);
 
-      expect(sf.queries.find((q) => /FROM Task WHERE WhatId/.test(q))).toMatch(/\bTaskSubtype\b/);
+      expect(sf.queries.find((q) => /FROM Tasks /.test(q))).toMatch(/\bTaskSubtype\b/);
       expect(result.items.map((a) => [a.subject?.value, a.kind])).toEqual([
         ['task 4', 'other'],
         ['task 3', 'other'],
@@ -445,8 +445,8 @@ describe('SalesforceAdapter (fake API)', () => {
 
     it('applies the per-opportunity limit to Tasks and Events combined', async () => {
       const sf = installFakeSalesforce();
-      sf.on(/FROM Task WHERE WhatId/, Array.from({ length: 150 }, (_, i) => task(i + 1, '2026-08-01')));
-      sf.on(/FROM Event WHERE WhatId/, Array.from({ length: 60 }, (_, i) => event(i + 1, '2026-09-01T00:00:00.000+0000')));
+      sf.subqueryRows('Tasks', 'WhatId', Array.from({ length: 150 }, (_, i) => task(i + 1, '2026-08-01')));
+      sf.subqueryRows('Events', 'WhatId', Array.from({ length: 60 }, (_, i) => event(i + 1, '2026-09-01T00:00:00.000+0000')));
       const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1)]);
       expect(result.items).toHaveLength(200);
       expect(result.truncatedOpportunityIds.has(OPP_1)).toBe(true);
@@ -634,6 +634,67 @@ describe('SalesforceAdapter (fake API)', () => {
         const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
 
         const count = (opp: string) => result.items.filter((n) => n.relatedTo[0]!.id === opp).length;
+        expect([count(OPP_1), count(OPP_2)]).toEqual([200, 200]);
+        expect([...result.truncatedOpportunityIds]).toEqual([OPP_1]);
+        expect(result.apiCallsConsumed).toBe(2);
+      });
+    });
+
+    describe('Tasks and Events', () => {
+      const tasksFor = (opp: string, count: number, base: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          Id: sfId('00T', base + i), WhoId: null, WhatId: opp, Subject: `task ${opp} ${i}`, Description: null,
+          ActivityDate: at(count - i).slice(0, 10), TaskSubtype: null, CreatedDate: at(count - i), SystemModstamp: at(count - i),
+        }));
+      const eventsFor = (opp: string, count: number, base: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          Id: sfId('00U', base + i), WhoId: null, WhatId: opp, Subject: `meeting ${opp} ${i}`, Description: null,
+          ActivityDate: null, ActivityDateTime: at(count - i), CreatedDate: at(count - i), SystemModstamp: at(count - i),
+        }));
+
+      it('reads several deals in one Tasks and one Events query, each with LIMIT limit+1', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Tasks', 'WhatId', [...tasksFor(OPP_1, 2, 1), ...tasksFor(OPP_2, 1, 100)]);
+        sf.subqueryRows('Events', 'WhatId', eventsFor(OPP_2, 1, 1));
+        const adapter = sf.adapter();
+        const result = await adapter.getActivitiesByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
+
+        const limitClause = `LIMIT ${adapter.capabilities().activitiesPerOpportunityLimit + 1})`;
+        expect(sf.queries.filter(subqueryFor('Tasks'))).toEqual([expect.stringContaining(limitClause)]);
+        expect(sf.queries.filter(subqueryFor('Events'))).toEqual([expect.stringContaining(limitClause)]);
+        expect(result.items.map((a) => a.relatedTo[0]!.id).sort()).toEqual([OPP_1, OPP_1, OPP_2, OPP_2]);
+        expect(result.apiCallsConsumed).toBe(2);
+      });
+
+      it('splits the ids into batches of childRecordBatchLimit', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Tasks', 'WhatId', []);
+        sf.subqueryRows('Events', 'WhatId', []);
+        const result = await sf.adapter().getActivitiesByOpportunity(opps(450).map((id) => sfRef('opportunity', id)));
+
+        const sizes = (rel: string) => sf.queries.filter(subqueryFor(rel)).map((q) => (q.match(/'006/g) ?? []).length);
+        expect([sizes('Tasks'), sizes('Events')]).toEqual([[200, 200, 50], [200, 200, 50]]);
+        expect(result.apiCallsConsumed).toBe(6);
+      });
+
+      it('follows the outer and child nextRecordsUrl chains and counts each page', async () => {
+        const sf = installFakeSalesforce();
+        const ids = opps(3);
+        sf.subqueryRows('Tasks', 'WhatId', ids.flatMap((id, i) => tasksFor(id, 1, i * 10 + 1)), { parentPageSize: 2 });
+        sf.subqueryRows('Events', 'WhatId', eventsFor(OPP_1, 5, 1), { childPageSize: 2 });
+        const result = await sf.adapter().getActivitiesByOpportunity(ids.map((id) => sfRef('opportunity', id)));
+
+        expect(result.items).toHaveLength(8);
+        expect(result.apiCallsConsumed).toBe(5); // Tasks: 1 + 1 outer page; Events: 1 + 2 child pages
+      });
+
+      it('caps each deal at the limit and flags only the deal with more than limit activities', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Tasks', 'WhatId', [...tasksFor(OPP_1, 250, 1), ...tasksFor(OPP_2, 150, 1000)]);
+        sf.subqueryRows('Events', 'WhatId', [...eventsFor(OPP_1, 250, 1), ...eventsFor(OPP_2, 50, 1000)]);
+        const result = await sf.adapter().getActivitiesByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
+
+        const count = (opp: string) => result.items.filter((a) => a.relatedTo[0]!.id === opp).length;
         expect([count(OPP_1), count(OPP_2)]).toEqual([200, 200]);
         expect([...result.truncatedOpportunityIds]).toEqual([OPP_1]);
         expect(result.apiCallsConsumed).toBe(2);

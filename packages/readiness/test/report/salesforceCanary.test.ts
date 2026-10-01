@@ -57,9 +57,9 @@ function install() {
     { Id: NOTE_CAPPED, Title: 't', TextPreview: CANARY.notePreview.padEnd(ENHANCED_NOTE_PREVIEW_CAP, 'z'), OwnerId: null, CreatedDate: '2026-09-02T00:00:00.000+0000' },
   ]);
   sf.noteContent(NOTE_CAPPED, `<p>${CANARY.noteFull}</p>`);
-  sf.on(/FROM Task WHERE WhatId/, []);
-  sf.on(/FROM Event WHERE WhatId/, (soql) =>
-    soql.includes(OPEN)
+  sf.subqueryRows('Tasks', 'WhatId', []);
+  sf.subqueryRows('Events', 'WhatId', (parentIds) =>
+    parentIds.includes(OPEN)
       ? [
           {
             Id: sfId('00U', 1), WhoId: null, WhatId: OPEN, Subject: CANARY.eventSubject, Description: CANARY.eventBody,

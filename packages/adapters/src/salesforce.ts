@@ -1247,8 +1247,9 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   /**
-   * Tasks and Events (meetings) per opportunity, each queried newest-first
-   * with LIMIT limit+1, merged by occurredAt and cut to
+   * Tasks and Events (meetings) per opportunity, each read newest-first with
+   * LIMIT limit+1 per deal (the Tasks and Events subqueries, batched by id,
+   * see childRowsByOpportunity), merged by occurredAt and cut to
    * activitiesPerOpportunityLimit, newest kept. Truncated if the merged
    * list had more than the limit.
    */
@@ -1256,25 +1257,28 @@ export class SalesforceAdapter implements CrmAdapter {
     if (oppRefs.length === 0) return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
     const limit = this.capabilities().activitiesPerOpportunityLimit;
     const ids = dedupeIds(oppRefs);
+    ids.forEach(assertValidSalesforceId);
+    const tasks = await this.childRowsByOpportunity<RawTask>(
+      ids,
+      'Tasks',
+      `SELECT ${TASK_FIELDS.join(', ')} FROM Tasks ORDER BY ActivityDate DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`,
+    );
+    const events = await this.childRowsByOpportunity<RawEvent>(
+      ids,
+      'Events',
+      `SELECT ${EVENT_FIELDS.join(', ')} FROM Events ORDER BY ActivityDateTime DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`,
+    );
     const items: Activity[] = [];
     const truncatedOpportunityIds = new Set<string>();
     for (const oppId of ids) {
-      assertValidSalesforceId(oppId);
-      const tasks = await this.soqlQuery<RawTask>(
-        `SELECT ${TASK_FIELDS.join(', ')} FROM Task WHERE WhatId = '${oppId}' ` +
-          `ORDER BY ActivityDate DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`,
-      );
-      const events = await this.soqlQuery<RawEvent>(
-        `SELECT ${EVENT_FIELDS.join(', ')} FROM Event WHERE WhatId = '${oppId}' ` +
-          `ORDER BY ActivityDateTime DESC NULLS LAST, CreatedDate DESC LIMIT ${limit + 1}`,
-      );
-      const desc = [...tasks.records.map(this.mapTask), ...events.records.map(this.mapEvent)].sort(
-        newestFirst((a) => a.occurredAt),
-      );
+      const desc = [
+        ...(tasks.rowsByOpportunity.get(oppId) ?? []).map(this.mapTask),
+        ...(events.rowsByOpportunity.get(oppId) ?? []).map(this.mapEvent),
+      ].sort(newestFirst((a) => a.occurredAt));
       if (desc.length > limit) truncatedOpportunityIds.add(oppId);
       items.push(...desc.slice(0, limit).reverse());
     }
-    return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length * 2 };
+    return { items, truncatedOpportunityIds, apiCallsConsumed: tasks.apiCallsConsumed + events.apiCallsConsumed };
   }
 
   /**
