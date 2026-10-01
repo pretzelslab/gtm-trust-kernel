@@ -3,7 +3,7 @@
  */
 
 import type { CoverageSample, MetricConfig, MetricResult } from './types.js';
-import { DAY_MS, applyTruncationFloor, hasQualifyingActivity, notesIncompleteResult, rateOverOpportunities } from './shared.js';
+import { DAY_MS, NEW_OPPORTUNITY_EXCLUSION_DAYS, applyTruncationFloor, hasQualifyingActivity, notesIncompleteResult, rateOverOpportunities } from './shared.js';
 
 export function closeDateFillRate(sample: CoverageSample, _config: MetricConfig): MetricResult {
   return rateOverOpportunities('close_date_fill_rate', sample.openOpportunities, (o) => o.closeDate != null);
@@ -66,12 +66,6 @@ export function ownerIdFillRate(sample: CoverageSample, _config: MetricConfig): 
 
 /** Trailing window a qualifying activity must fall within, relative to asOf. Per metric-definitions.md D1. */
 const ACTIVITY_CAPTURE_WINDOW_DAYS = 30;
-/**
- * Opportunities created more recently than this are excluded from the
- * denominator — they haven't had time to accrue activity yet. Per
- * metric-definitions.md D1.
- */
-const NEW_OPPORTUNITY_EXCLUSION_DAYS = 7;
 
 /**
  * Gated on the adapter's activitySync capability: returns not_instrumented

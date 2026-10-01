@@ -221,6 +221,13 @@ trailing 21 days.
 not a percentage or count threshold. "Contradiction" window = 21 days, not
 30, since a late-stage deal implies more frequent expected touchpoints than
 an early-stage one.
+**Denominator exclusion (2026-10-01):** opportunities created in the last
+7 days are excluded, the same rule and constant as `activity_capture_rate`
+(`NEW_OPPORTUNITY_EXCLUSION_DAYS`). A deal created straight into proposal
+or negotiation hasn't had time to accrue activity, so flagging it would
+count its age, not a contradiction. The live smoke run found exactly
+that: a deal created the same day was flagged. If every late-stage deal
+is excluded, the result is not applicable (no value), never 0 or 1.
 **Threshold:** `stage_activity_contradiction_rate`.
 
 ### round_amount_rate

@@ -9,6 +9,7 @@ import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
 import {
   DAY_MS,
   DEFAULT_SHARED_PROVIDER_DENYLIST,
+  NEW_OPPORTUNITY_EXCLUSION_DAYS,
   applyTruncationFloor,
   hasQualifyingActivity,
   normalizeDomain,
@@ -34,7 +35,8 @@ const CONTRADICTION_STAGES: ReadonlySet<CanonicalStage> = new Set(CANONICAL_STAG
  * (it needs the same activity data). Contradiction = an open opportunity in
  * the top two canonical stages with zero qualifying activities (same
  * predicate as activity_capture_rate, imported via hasQualifyingActivity) in
- * the trailing 21 days.
+ * the trailing 21 days. Opportunities created in the last
+ * NEW_OPPORTUNITY_EXCLUSION_DAYS are left out, as in activity_capture_rate.
  */
 export function stageActivityContradictionRate(sample: CoverageSample, config: MetricConfig): MetricResult {
   if (!sample.capabilities.activitySync) {
@@ -51,18 +53,23 @@ export function stageActivityContradictionRate(sample: CoverageSample, config: M
   const asOf = new Date(config.asOf).getTime();
   const windowStart = asOf - CONTRADICTION_WINDOW_DAYS * DAY_MS;
 
+  const newOpportunityCutoff = asOf - NEW_OPPORTUNITY_EXCLUSION_DAYS * DAY_MS;
+
   const lateStage = sample.openOpportunities.filter((o) => CONTRADICTION_STAGES.has(o.stage));
+  const eligible = lateStage.filter((o) => new Date(o.createdAt).getTime() < newOpportunityCutoff);
 
   const result = rateOverOpportunities(
     'stage_activity_contradiction_rate',
-    lateStage,
+    eligible,
     (o) => {
       const activities = sample.activitiesByOpportunity.get(o.ref.id) ?? [];
       return !hasQualifyingActivity(o, activities, windowStart, asOf);
     },
-    'no open opportunities in proposal or negotiation stage in sample',
+    lateStage.length === 0
+      ? 'no open opportunities in proposal or negotiation stage in sample'
+      : `every open opportunity in proposal or negotiation stage was created in the last ${NEW_OPPORTUNITY_EXCLUSION_DAYS} days`,
   );
-  return applyTruncationFloor(result, lateStage, sample.activitiesTruncatedOpportunityIds);
+  return applyTruncationFloor(result, eligible, sample.activitiesTruncatedOpportunityIds);
 }
 
 /**

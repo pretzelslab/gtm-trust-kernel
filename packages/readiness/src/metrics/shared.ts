@@ -12,6 +12,14 @@ import { LOW_CONFIDENCE_SAMPLE_SIZE } from './types.js';
 export const DAY_MS = 86_400_000;
 
 /**
+ * Opportunities created more recently than this are excluded from the
+ * denominator of activity_capture_rate (D1) and
+ * stage_activity_contradiction_rate (D3): they haven't had time to accrue
+ * activity yet. Per metric-definitions.md D1 and D3.
+ */
+export const NEW_OPPORTUNITY_EXCLUSION_DAYS = 7;
+
+/**
  * The qualifying-activity predicate, negotiated for activity_capture_rate
  * (metric-definitions.md D1) and reused as-is by stage_activity_contradiction_rate
  * (D3) with a different window length: occurredAt within [windowStart, asOf]

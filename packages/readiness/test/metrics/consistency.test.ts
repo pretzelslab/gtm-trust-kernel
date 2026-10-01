@@ -14,8 +14,10 @@ import {
 import {
   STAGE_ACTIVITY_CONTRADICTION_RATE_ASOF,
   STAGE_ACTIVITY_CONTRADICTION_RATE_EXPECTED,
+  stageActivityContradictionRateAllNewFixture,
   stageActivityContradictionRateFixture,
   stageActivityContradictionRateGateOffFixture,
+  stageActivityContradictionRateNewDealFixture,
   stageActivityContradictionRateNoLateStageFixture,
   stageActivityContradictionRateTruncatedFixture,
 } from '../fixtures/stage_activity_contradiction_rate.js';
@@ -89,6 +91,31 @@ describe('stageActivityContradictionRate', () => {
       lowConfidence: true,
       floor: true,
       note: '1 opportunity had truncated related records — value is a floor, not exact',
+    });
+  });
+
+  it('excludes a deal created in the last 7 days, same as activity_capture_rate; an older one is still flagged', () => {
+    const result = stageActivityContradictionRate(stageActivityContradictionRateNewDealFixture(), {
+      asOf: STAGE_ACTIVITY_CONTRADICTION_RATE_ASOF,
+    });
+    expect(result).toEqual({
+      metric: 'stage_activity_contradiction_rate',
+      status: 'ok',
+      value: 1,
+      sampleSize: 1,
+      lowConfidence: true,
+    });
+  });
+
+  it('returns not_applicable, not 0 or 1, when every late-stage deal is newer than 7 days', () => {
+    const result = stageActivityContradictionRate(stageActivityContradictionRateAllNewFixture(), {
+      asOf: STAGE_ACTIVITY_CONTRADICTION_RATE_ASOF,
+    });
+    expect(result).toMatchObject({
+      metric: 'stage_activity_contradiction_rate',
+      status: 'not_applicable',
+      value: null,
+      sampleSize: 0,
     });
   });
 

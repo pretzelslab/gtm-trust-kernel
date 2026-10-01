@@ -133,3 +133,24 @@ export function stageActivityContradictionRateTruncatedFixture(): CoverageSample
   const sample = stageActivityContradictionRateFixture();
   return { ...sample, activitiesTruncatedOpportunityIds: new Set(['negotiation-boundary-21d']) };
 }
+
+/**
+ * New-deal exclusion, same 7 days as activity_capture_rate: neither deal
+ * has any activity. 'proposal-created-2d' is only 2 days old, so it's
+ * excluded from numerator and denominator; 'proposal-created-12d' is old
+ * enough and is still a contradiction. Expected value: 1 / 1 = 1.0.
+ */
+export function stageActivityContradictionRateNewDealFixture(): CoverageSample {
+  return coverageSample([
+    baseOpportunity('proposal-created-2d', 'proposal', daysFromAsOf(-2)),
+    baseOpportunity('proposal-created-12d', 'proposal', daysFromAsOf(-12)),
+  ]);
+}
+
+/** Every late-stage deal is newer than the exclusion window, so the denominator is 0. */
+export function stageActivityContradictionRateAllNewFixture(): CoverageSample {
+  return coverageSample([
+    baseOpportunity('proposal-created-2d', 'proposal', daysFromAsOf(-2)),
+    baseOpportunity('negotiation-created-1d', 'negotiation', daysFromAsOf(-1)),
+  ]);
+}
