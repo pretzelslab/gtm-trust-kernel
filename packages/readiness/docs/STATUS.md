@@ -51,7 +51,9 @@ apply here.
 2. Stage-map notice: add a custom Stage value to the org and set
    `SEED_CUSTOM_STAGE` in `.env`, then `scripts/seed-dev-org.mjs
    --top-up --apply --allow-no-enhanced` and a smoke run with and
-   without a stage map.
+   without a stage map. Rechecked 2026-09-30: still blocked;
+   `SEED_CUSTOM_STAGE` is unset and the org's Stage picklist has only the
+   10 standard values (all active).
 3. `untrusted_text_ratio` treats all Tasks and Events as external and may
    over-block on activity-heavy orgs: Phase 4 (see the open design
    question below).
