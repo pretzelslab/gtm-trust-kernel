@@ -23,7 +23,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@gtm-trust-kernel/adapters": "^0.1.0",
+    "@gtm-trust-kernel/adapters": "^0.2.0",
     "@anthropic-ai/sdk": "0.128.0",
     "tldts": "7.4.13"
   },
