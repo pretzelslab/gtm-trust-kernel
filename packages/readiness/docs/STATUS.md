@@ -56,6 +56,8 @@ apply here.
    over-block on activity-heavy orgs: Phase 4 (see the open design
    question below).
 4. Then Phase 3b, as in the earlier handoffs.
+5. If stage_activity_contradiction_rate becomes a capability gate, null ->
+   Blocked (src/rubric.ts:767-783). Intended; confirm before gating.
 
 ## Status as of 2026-09-30, top-up smoke run
 
