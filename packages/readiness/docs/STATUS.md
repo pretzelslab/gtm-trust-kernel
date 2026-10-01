@@ -14,6 +14,49 @@ repeated here.
 
 ---
 
+## Status as of 2026-09-30, Phase 3b: batched detailed checks
+
+All pushed; GitHub CI green after each commit. `npm run ci`: 646 tests.
+
+| Commit | What |
+|---|---|
+| `4d18beb` | Legacy Notes read through the `Notes` parent-child subquery, batched by id; shared helper `childRowsByOpportunity`; fake gains `subqueryRows` |
+| `b580c62` | Tasks and Events through the `Tasks` and `Events` subqueries (one query per relationship) |
+| `752c24e` | `OpportunityHistory` through the `OpportunityHistories` subquery; the fake fails on an unregistered subquery |
+
+Shape: `SELECT Id, (SELECT <fields> FROM <Rel> ORDER BY <as before> LIMIT
+limit+1) FROM Opportunity WHERE Id IN (<= 200 ids)`. The per-deal cap and
+truncation flag are exactly as with the per-deal queries; no row cap was
+added. Outer and child `nextRecordsUrl` chains are followed and every page
+is counted. Checked on the Developer Edition org before coding: all four
+relationship names exist, return every field read, and match the flat
+queries' row counts (1, 2, 2, 67 over 35 deals). Neither pagination could
+be observed there (35 parents, 67 child rows at most); both are covered by
+unit tests on the fake.
+
+**Smoke run** (same org, `SF_ACTIVITY_CAPTURE` unset, then `auto`; 35
+eligible, all scanned; both exit 0): **12 API calls per run, down from
+132**, counted per request: 1 `ContentNote` describe, 4 scan (2 counts, 1
+page, 1 contact-role batch), 7 detailed checks (1 each of the `Notes`,
+`Tasks`, `Events` and `OpportunityHistories` subqueries, account,
+`ContentDocumentLink`, batched `OpportunityHistory`). Metrics match the
+previous live run (28 rows; only `median_days_since_modified` moved, with
+the clock): with `auto`, `stage_activity_contradiction_rate` 1.0 on 4
+deals and `activity_capture_rate` 0 of 13. No record text in any output.
+
+**Open:**
+- `apiCallEstimate` still declares `perSampledOpportunity: 4,
+  perChildRecordBatch: 2` (`src/salesforce.ts`, pinned by
+  `salesforce.unit.test.ts`), so the planned-calls line overstates
+  detailed checks (562 planned at 140 deals). The batched shape is 0 per
+  deal and 6 per batch of 200 (4 subqueries, `ContentDocumentLink`,
+  `ContentNote`), plus extra pages. Changing it changes a tested value:
+  awaiting a decision.
+- Possible later optimisation: Tasks and Events (or all four
+  relationships) as subqueries of one Opportunity query, 1 call per batch
+  instead of 4. The dev org accepted all four in one query. Not done in
+  this phase.
+
 ## Handoff, 2026-10-01
 
 **HEAD and CI.** The last code commit is `fad556f` (new-deal exclusion
