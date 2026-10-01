@@ -14,6 +14,38 @@ repeated here.
 
 ---
 
+## Handoff, 2026-10-01 (Phase 3b done)
+
+**HEAD and CI.** Last code commit `df16a4f`, pushed; GitHub CI green (run
+36917109263). `npm run ci`: 694 tests.
+
+| Commit | What |
+|---|---|
+| `b3780e8` | Planned total split: up to N (scan, account hydration, fixed) + at least M (detailed checks) |
+| `f761a2f` | Quota line split the same way; salesforce-setup.md section 6 at 5 calls per 200 deals |
+| `3b4cbc0` | Salesforce contract tests: response shapes against the fake (CI) and a real org (`npm run test:live`, opt-in) |
+| `29b3ec8` | `--fail-on` (opt-in) for `npm run report` and `scan --demo`; exit 2 on a listed verdict, 1 on error |
+| `df16a4f` | `live-contract.yml`: weekly + manual, never on PRs, skipped until the `SF_*` secrets exist (checked: run 36917244599) |
+
+**Decisions this session (approved):** `ContractHarness.unresolvableId`
+(optional; Salesforce passes well-formed non-existent ids, the
+malformed-id guard stays); capability `minPageSize` (optional, default 1;
+Salesforce 200); live read-pass budget 25 API calls, provisional (12
+measured); child pagination read from a hand-seeded deal
+(`CONTRACT-PAGINATION` in Task Subjects), never seeded by the package.
+
+**Live run on the dev org** (read-only): 42 passed, the pagination check
+skipped (not seeded yet), read pass 12 API calls.
+
+**Next:**
+1. The user seeds about 250 `CONTRACT-PAGINATION` Tasks on one deal, then
+   runs `npm run test:live -w @gtm-trust-kernel/adapters`; record whether
+   child pagination was observed.
+2. The user adds the three `SF_*` repo secrets to switch on the weekly job.
+3. Adapters 0.2.0 (interface grew: `minPageSize`, `unresolvableId`); the
+   user publishes.
+4. Phase 4: calibrate thresholds; `untrusted_text_ratio`.
+
 ## Handoff, 2026-10-01 (Phase 3b, after batching)
 
 **HEAD and CI.** Last code commit `dd1e99d` (`apiCallEstimate` matched to
