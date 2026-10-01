@@ -16,7 +16,8 @@
  *    A thrown Error in the result simulates a network failure.
  *  - A parent-child subquery, SELECT Id, (SELECT ... FROM <Rel> ... LIMIT n)
  *    FROM Opportunity WHERE Id IN (...): the rows registered with
- *    subqueryRows(<Rel>, ...), checked before the regex handlers. The
+ *    subqueryRows(<Rel>, ...), checked before the regex handlers; an
+ *    unregistered relationship fails like an unhandled query. The
  *    rows are grouped under each parent in the IN list by their parent
  *    field and cut to the subquery's LIMIT, in the order given (so give
  *    them in the query's ORDER BY order). Options split the parents, or a
@@ -104,12 +105,12 @@ export function installFakeSalesforce(): FakeSalesforce {
     return nextRecordsUrl;
   }
 
-  /** The response to a parent-child subquery, or undefined if soql isn't one with a registered relationship. */
+  /** The response to a parent-child subquery, or undefined if soql isn't one; fails if its relationship isn't registered. */
   function answerSubquery(soql: string): Response | undefined {
     const m = /^SELECT Id, \(SELECT .+ FROM (\w+) .*LIMIT (\d+)\) FROM Opportunity WHERE Id IN \(([^)]*)\)$/.exec(soql);
     if (!m) return undefined;
     const registered = subqueries.get(m[1]!);
-    if (!registered) return undefined;
+    if (!registered) throw new Error(`fakeSalesforce: no subqueryRows registered for ${m[1]}: ${soql}`);
     const limit = Number(m[2]);
     const parentIds = [...m[3]!.matchAll(/'(\w+)'/g)].map((x) => x[1]!);
     const rows = typeof registered.rows === 'function' ? registered.rows(parentIds) : registered.rows;

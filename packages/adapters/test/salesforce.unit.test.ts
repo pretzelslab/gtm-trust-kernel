@@ -556,7 +556,7 @@ describe('SalesforceAdapter (fake API)', () => {
 
     it('marks a stage-history row with an unmapped stage instead of silently calling it prospecting', async () => {
       const sf = installFakeSalesforce();
-      sf.on(/FROM OpportunityHistory WHERE OpportunityId/, [
+      sf.subqueryRows('OpportunityHistories', 'OpportunityId', [
         { Id: sfId('008', 1), OpportunityId: OPP_1, StageName: 'Custom Stage', CloseDate: null, CreatedById: null, CreatedDate: '2026-09-02T00:00:00.000+0000' },
         { Id: sfId('008', 2), OpportunityId: OPP_1, StageName: 'Technical Win', CloseDate: null, CreatedById: null, CreatedDate: '2026-09-01T00:00:00.000+0000' },
       ]);
@@ -698,6 +698,63 @@ describe('SalesforceAdapter (fake API)', () => {
         expect([count(OPP_1), count(OPP_2)]).toEqual([200, 200]);
         expect([...result.truncatedOpportunityIds]).toEqual([OPP_1]);
         expect(result.apiCallsConsumed).toBe(2);
+      });
+    });
+
+    describe('OpportunityHistory', () => {
+      // Newest first, as the subquery's ORDER BY returns them.
+      const historyFor = (opp: string, count: number, base: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          Id: sfId('008', base + i), OpportunityId: opp, StageName: 'Prospecting', CloseDate: null, CreatedById: null, CreatedDate: at(count - i),
+        }));
+
+      it('reads several deals in one query, with LIMIT limit+1 in the subquery', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('OpportunityHistories', 'OpportunityId', [...historyFor(OPP_1, 2, 1), ...historyFor(OPP_2, 1, 100)]);
+        const adapter = sf.adapter();
+        const result = await adapter.getStageHistoryByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
+
+        expect(sf.queries.filter(subqueryFor('OpportunityHistories'))).toEqual([
+          expect.stringContaining(`LIMIT ${adapter.capabilities().historyPerOpportunityLimit + 1})`),
+        ]);
+        expect(result.items.map((e) => e.opportunityRef.id).sort()).toEqual([OPP_1, OPP_1, OPP_2]);
+        // fromStage is derived per deal: each deal's oldest row has none.
+        expect(result.items.filter((e) => e.fromStage === undefined).map((e) => e.opportunityRef.id).sort()).toEqual([OPP_1, OPP_2]);
+        expect(result.apiCallsConsumed).toBe(1);
+      });
+
+      it('splits the ids into batches of childRecordBatchLimit', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('OpportunityHistories', 'OpportunityId', []);
+        const result = await sf.adapter().getStageHistoryByOpportunity(opps(450).map((id) => sfRef('opportunity', id)));
+
+        const sizes = sf.queries.filter(subqueryFor('OpportunityHistories')).map((q) => (q.match(/'006/g) ?? []).length);
+        expect(sizes).toEqual([200, 200, 50]);
+        expect(result.apiCallsConsumed).toBe(3);
+      });
+
+      it('follows the outer and child nextRecordsUrl chains and counts each page', async () => {
+        const sf = installFakeSalesforce();
+        const ids = opps(3);
+        sf.subqueryRows('OpportunityHistories', 'OpportunityId', ids.flatMap((id, i) => historyFor(id, 3, i * 10 + 1)), {
+          parentPageSize: 2,
+          childPageSize: 2,
+        });
+        const result = await sf.adapter().getStageHistoryByOpportunity(ids.map((id) => sfRef('opportunity', id)));
+
+        expect(result.items).toHaveLength(9);
+        expect(result.apiCallsConsumed).toBe(5); // 1 query + 1 outer page + 3 child pages
+      });
+
+      it('caps each deal at the limit and flags only the deal with more than limit rows', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('OpportunityHistories', 'OpportunityId', [...historyFor(OPP_1, 250, 1), ...historyFor(OPP_2, 200, 1000)]);
+        const result = await sf.adapter().getStageHistoryByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
+
+        const count = (opp: string) => result.items.filter((e) => e.opportunityRef.id === opp).length;
+        expect([count(OPP_1), count(OPP_2)]).toEqual([200, 200]);
+        expect([...result.truncatedOpportunityIds]).toEqual([OPP_1]);
+        expect(result.apiCallsConsumed).toBe(1);
       });
     });
   });

@@ -43,6 +43,7 @@ function install() {
     { Id: ACC, Name: 'Acme', Website: 'acme.example', Industry: null, NumberOfEmployees: null, OwnerId: null, CreatedDate: '2026-01-01T00:00:00.000+0000', SystemModstamp: '2026-01-01T00:00:00.000+0000' },
   ]);
   sf.on(/FROM OpportunityHistory/, []);
+  sf.subqueryRows('OpportunityHistories', 'OpportunityId', []);
   sf.subqueryRows('Notes', 'ParentId', []);
   sf.on(/FROM ContentDocumentLink/, (soql) =>
     soql.includes(OPEN)

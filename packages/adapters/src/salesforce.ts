@@ -1312,31 +1312,33 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   /**
-   * Same per-opportunity SOQL shape as getNotesByOpportunity, reusing
+   * Same batched subquery shape as getNotesByOpportunity (the
+   * OpportunityHistories subquery, see childRowsByOpportunity), reusing
    * OpportunityHistory (the same always-on object listStageHistory already
-   * reads — see capabilities().closeDateHistory's docblock) with a
-   * WHERE OpportunityId = filter instead of a since-window. fromStage is
-   * derived locally per call (mapStageHistoryForOpportunity), not via the
-   * stateful mapStageHistory used by the stream.
+   * reads — see capabilities().closeDateHistory's docblock) per deal
+   * instead of a since-window. fromStage is derived locally per deal
+   * (mapStageHistoryForOpportunity), not via the stateful mapStageHistory
+   * used by the stream.
    */
   async getStageHistoryByOpportunity(oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<StageHistoryEntry>> {
     if (oppRefs.length === 0) return { items: [], truncatedOpportunityIds: new Set(), apiCallsConsumed: 0 };
     const limit = this.capabilities().historyPerOpportunityLimit;
     const ids = dedupeIds(oppRefs);
+    ids.forEach(assertValidSalesforceId);
+    const history = await this.childRowsByOpportunity<RawOpportunityHistory>(
+      ids,
+      'OpportunityHistories',
+      `SELECT ${OPPORTUNITY_HISTORY_FIELDS.join(', ')} FROM OpportunityHistories ORDER BY CreatedDate DESC LIMIT ${limit + 1}`,
+    );
     const items: StageHistoryEntry[] = [];
     const truncatedOpportunityIds = new Set<string>();
     for (const oppId of ids) {
-      assertValidSalesforceId(oppId);
-      const soql =
-        `SELECT ${OPPORTUNITY_HISTORY_FIELDS.join(', ')} FROM OpportunityHistory WHERE OpportunityId = '${oppId}' ` +
-        `ORDER BY CreatedDate DESC LIMIT ${limit + 1}`;
-      const page = await this.soqlQuery<RawOpportunityHistory>(soql);
-      const desc = [...page.records];
+      const desc = history.rowsByOpportunity.get(oppId) ?? [];
       if (desc.length > limit) truncatedOpportunityIds.add(oppId);
       const ascending = desc.slice(0, limit).reverse(); // back to ascending, newest-kept
       items.push(...this.mapStageHistoryForOpportunity(ascending));
     }
-    return { items, truncatedOpportunityIds, apiCallsConsumed: ids.length };
+    return { items, truncatedOpportunityIds, apiCallsConsumed: history.apiCallsConsumed };
   }
 
   async getNextStepHistoryByOpportunity(_oppRefs: readonly RecordRef[]): Promise<GetChildRecordsResult<NextStepChange>> {
