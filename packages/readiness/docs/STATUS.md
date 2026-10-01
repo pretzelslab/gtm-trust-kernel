@@ -14,6 +14,49 @@ repeated here.
 
 ---
 
+## Handoff, 2026-10-01
+
+**HEAD and CI.** The last code commit is `fad556f` (new-deal exclusion
+for `stage_activity_contradiction_rate`), pushed; GitHub CI green (run
+36797045568, `verify` success, `live-contract` skipped). Everything is
+pushed; this handoff is the only commit after it. `npm run ci`: 633 tests.
+
+**Done since the last handoff:** seed top-up (`bd70608`), D6 Task kind
+from `TaskSubtype` (`643dbd3`), smoke docs (`6876415`), D7 closed as org
+configuration (`99f189d`), 7-day new-deal exclusion (`fad556f`).
+
+**Smoke baseline** (Developer Edition org, `SF_ACTIVITY_CAPTURE=auto`, 35
+eligible deals, all scanned): 132 API calls per run;
+`stage_activity_contradiction_rate` 1.0 on 4 deals (the 4 signup-sample
+late-stage deals have no activity; SEED-Proposal deal is excluded as
+new); `activity_capture_rate` 0 of 13.
+
+**No D8.** A not-applicable result (no value) from
+`stage_activity_contradiction_rate` was traced through every consumer
+and each handles it: the row keeps `value: null` and `tier: null`
+(`src/report/buildReport.ts:383`, no reading is recorded); the tables
+show "—" and "N/A" (`src/report/render.ts:33`, `:21`); the JSON writes
+`null`; the narrative input passes `null` and grounding skips it
+(`src/report/narrativeGrounding.ts:132`); the status count card counts it
+(`src/report/render.ts:65`). The metric gates no capability
+(`src/rubric.ts:603-660`), so no verdict, plain-report entry or overall
+result reads it. An absent gate reading would be Blocked
+(`src/rubric.ts:767-783`), which is the documented rule, but it doesn't
+apply here.
+
+**Open items:**
+1. Enhanced Notes (`ContentNote`): not exposed to the Run As user on the
+   test org (org configuration, D7 closed). The 255 preview cap, the
+   Content endpoint and the SNOTE filter with data stay untested.
+2. Stage-map notice: add a custom Stage value to the org and set
+   `SEED_CUSTOM_STAGE` in `.env`, then `scripts/seed-dev-org.mjs
+   --top-up --apply --allow-no-enhanced` and a smoke run with and
+   without a stage map.
+3. `untrusted_text_ratio` treats all Tasks and Events as external and may
+   over-block on activity-heavy orgs: Phase 4 (see the open design
+   question below).
+4. Then Phase 3b, as in the earlier handoffs.
+
 ## Status as of 2026-09-30, top-up smoke run
 
 `npm run ci` green after each commit; not pushed yet.
