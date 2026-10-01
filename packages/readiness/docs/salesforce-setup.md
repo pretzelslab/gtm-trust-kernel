@@ -261,7 +261,8 @@ What a run does:
 Estimated API calls at 5,000 eligible deals: about 52 for the scan, and
 about 565 for the detailed checks at 20 per stage, plus up to 200 note
 full-text fetches and 4 fixed calls. The plan printed before each run
-states this worst case for the whole run. **Measured 2026-09-30:** 118
+states the whole run's total as a ceiling for the scan, account and fixed
+calls plus a minimum for the detailed checks. **Measured 2026-09-30:** 118
 calls on a 31-deal org (4 for the scan, 114 for the detailed checks, about
 4 per sampled deal), in line with the estimate; 132 on the same org with
 four seeded deals added (35 deals, 1 of them the `ContentNote` check). A Developer Edition org's daily API limit is 15,000

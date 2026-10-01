@@ -217,6 +217,12 @@ export function formatSamplePlan(plan: SamplePlan): string {
         `  Planned API calls: up to ${plan.plannedApiCalls} (worst case; stops earlier when the population runs out)`,
         '  Detailed-check and fixed API calls: not estimated (the adapter declares no call estimate)',
       ];
+  // With an estimate the total mixes ceilings (scan, accounts, fixed) with a
+  // minimum (detailed checks), so it is neither; print the two parts.
+  const ceilingApiCalls = plan.plannedTotalApiCalls - plan.plannedDetailApiCalls;
+  const totalLine = estimate
+    ? `  Planned API calls in total: ${plan.plannedTotalApiCalls} = up to ${ceilingApiCalls} (scan, account hydration, fixed) + at least ${plan.plannedDetailApiCalls} (detailed checks, excluding extra result pages)`
+    : `  Planned API calls in total: up to ${plan.plannedTotalApiCalls} (worst case)`;
   return [
     `Stratified sample plan (seed: ${plan.seed})`,
     `  Strata (${plan.strata.length}): ${plan.strata.join(', ')}`,
@@ -225,7 +231,7 @@ export function formatSamplePlan(plan: SamplePlan): string {
     `  Page size: ${plan.effectivePageSize}`,
     ...estimateLines,
     `  Planned account hydration API calls: up to ${plan.plannedAccountApiCalls} (worst case: every sampled opportunity has a distinct account)`,
-    `  Planned API calls in total: up to ${plan.plannedTotalApiCalls} (worst case)`,
+    totalLine,
     `  ${formatRateLimit(plan.rateLimit, plan.plannedTotalApiCalls)}`,
   ].join('\n');
 }
