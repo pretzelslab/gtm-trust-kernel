@@ -43,9 +43,11 @@ and the logged call is read as `call`, the older Task as `other`.
   data: `ContentNote` isn't available to the Run As user (System
   Administrator). The describe is still 404 after Notes Settings was
   saved, and `ContentNote` is missing from `GET /sobjects` at v62.0 while
-  `ContentDocument`, `ContentDocumentLink` and `Note` are listed, which
-  points away from a path or API version bug. The `sf sobject describe`
-  cross-check wasn't run (the Salesforce CLI isn't installed here).
+  `ContentDocument`, `ContentDocumentLink` and `Note` are listed.
+  **D7 (the 404 as a path or API version bug in the probe) is closed,
+  not a defect:** the object is missing from the user's own object list
+  at the same version, so this is the org's configuration, not the
+  request. The `sf sobject describe` cross-check was skipped.
 - Stage-map notice: no custom Stage value in the org yet
   (`SEED_CUSTOM_STAGE` unset).
 
