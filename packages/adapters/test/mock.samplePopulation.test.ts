@@ -54,4 +54,20 @@ describe('MockAdapter sample population', () => {
     const count = await adapter.countOpportunitiesForSample({ asOf: ASOF, closedWithinMonths: 12 });
     expect([count.open, count.closedInWindow]).toEqual([3, 1]);
   });
+
+  it('raises a smaller limit to minPageSize when one is set, and pages the rest', async () => {
+    const adapter = new MockAdapter(ORG, data(opportunities), { minPageSize: 3 });
+    const first = await adapter.listOpportunitiesForSample({ asOf: ASOF, closedWithinMonths: 12, limit: 1 });
+    expect(first.items.map((o) => o.ref.id)).toEqual(['opp-c', 'opp-b', 'opp-won-recent']);
+    const second = await adapter.listOpportunitiesForSample({ asOf: ASOF, closedWithinMonths: 12, limit: 1, cursor: first.nextCursor });
+    expect(second.items.map((o) => o.ref.id)).toEqual(['opp-a']);
+    expect(second.nextCursor).toBeUndefined();
+    expect((await adapter.listOpportunities({ limit: 1 })).items).toHaveLength(3);
+  });
+
+  it('honours the limit exactly when minPageSize is unset', async () => {
+    const adapter = new MockAdapter(ORG, data(opportunities));
+    const page = await adapter.listOpportunitiesForSample({ asOf: ASOF, closedWithinMonths: 12, limit: 1 });
+    expect(page.items.map((o) => o.ref.id)).toEqual(['opp-c']);
+  });
 });

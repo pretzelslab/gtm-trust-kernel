@@ -273,6 +273,20 @@ calls** (2026-09-30). A Developer Edition org's daily API limit is 15,000
 (**confirmed** from `/limits`; the adapter doesn't read it). `/limits`'s
 remaining count lags by minutes, so it can't measure a single run.
 
+### Live contract tests
+
+`npm run test:live -w @gtm-trust-kernel/adapters` runs the adapter's
+contract tests against the org in `.env`: the shared CRM adapter
+contract, the response shapes the adapter reads, and a readiness-shaped
+read pass held to at most 25 API calls (provisional; 12 measured on the
+35-deal org). Read-only. `npm test` never runs them, and they skip when
+the three `SF_*` credentials are unset.
+
+The child-pagination check needs one deal with more than 200 Tasks whose
+Subject contains `CONTRACT-PAGINATION` (about 250 is plenty). Seed them by
+hand (Data Loader or the `sf` CLI); the tests never write. Without them
+that check skips with a message.
+
 ## 7. What to expect
 
 ### An empty org

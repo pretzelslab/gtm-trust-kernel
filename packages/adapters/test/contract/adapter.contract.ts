@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { CanonicalObjectType } from '../../src/model/canonical.js';
 import type { CrmAdapter, FieldWrite } from '../../src/types.js';
 
 export interface ContractHarness {
@@ -26,6 +27,19 @@ export interface ContractHarness {
   knownContactId: string;
   /** Mutate the record out of band, to simulate a concurrent edit. */
   simulateConcurrentEdit?: (opportunityId: string) => Promise<void> | void;
+  /**
+   * Optional: an id of `objectType` that is well formed for this CRM but
+   * names no record, for the "unresolvable ref" checks; `index` makes it
+   * distinct when several are needed. Supply it when the adapter rejects
+   * ids that aren't in its own format (Salesforce refuses anything but 15
+   * or 18 alphanumeric characters). Defaults to 'no-such-<objectType>-xyz',
+   * or 'no-such-<objectType>-<index>' with an index.
+   */
+  unresolvableId?: (objectType: CanonicalObjectType, index?: number) => string;
+}
+
+function unresolvable(h: ContractHarness, objectType: CanonicalObjectType, index?: number): string {
+  return h.unresolvableId?.(objectType, index) ?? (index === undefined ? `no-such-${objectType}-xyz` : `no-such-${objectType}-${index}`);
 }
 
 export function runAdapterContract(make: () => Promise<ContractHarness> | ContractHarness) {
@@ -160,8 +174,9 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     });
 
     it('returns an empty result rather than throwing when every ref is unresolvable', async () => {
-      const { adapter } = await make();
-      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'account' as const, id: 'no-such-account-xyz' };
+      const h = await make();
+      const { adapter } = h;
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'account' as const, id: unresolvable(h, 'account') };
       const result = await adapter.getAccounts([ref]);
       expect(result.items).toHaveLength(0);
     });
@@ -169,7 +184,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     it('resolves the known ref and silently omits an unresolvable one from the same call', async () => {
       const h = await make();
       const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: h.knownAccountId };
-      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: 'no-such-account-xyz' };
+      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'account' as const, id: unresolvable(h, 'account') };
       const result = await h.adapter.getAccounts([known, missing]);
       expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
     });
@@ -182,7 +197,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
         crm: h.adapter.vendor,
         orgId: h.adapter.orgId,
         objectType: 'account' as const,
-        id: `no-such-account-${i}`,
+        id: unresolvable(h, 'account', i),
       }));
       const result = await h.adapter.getAccounts([known, ...padding]);
       expect(result.items.map((a) => a.ref.id)).toEqual([h.knownAccountId]);
@@ -212,8 +227,9 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     });
 
     it('returns an empty result rather than throwing when every ref is unresolvable', async () => {
-      const { adapter } = await make();
-      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'contact' as const, id: 'no-such-contact-xyz' };
+      const h = await make();
+      const { adapter } = h;
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'contact' as const, id: unresolvable(h, 'contact') };
       const result = await adapter.getContactsByRef([ref]);
       expect(result.items).toHaveLength(0);
     });
@@ -221,7 +237,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     it('resolves the known ref and silently omits an unresolvable one from the same call', async () => {
       const h = await make();
       const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: h.knownContactId };
-      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: 'no-such-contact-xyz' };
+      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'contact' as const, id: unresolvable(h, 'contact') };
       const result = await h.adapter.getContactsByRef([known, missing]);
       expect(result.items.map((c) => c.ref.id)).toEqual([h.knownContactId]);
     });
@@ -234,7 +250,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
         crm: h.adapter.vendor,
         orgId: h.adapter.orgId,
         objectType: 'contact' as const,
-        id: `no-such-contact-${i}`,
+        id: unresolvable(h, 'contact', i),
       }));
       const result = await h.adapter.getContactsByRef([known, ...padding]);
       expect(result.items.map((c) => c.ref.id)).toEqual([h.knownContactId]);
@@ -278,8 +294,9 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     });
 
     it('returns no items rather than throwing for an unresolvable opportunity ref', async () => {
-      const { adapter } = await make();
-      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: 'no-such-opportunity-xyz' };
+      const h = await make();
+      const { adapter } = h;
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: unresolvable(h, 'opportunity') };
       const notes = await adapter.getNotesByOpportunity([ref]);
       expect(notes.items).toHaveLength(0);
       const activities = await adapter.getActivitiesByOpportunity([ref]);
@@ -289,7 +306,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     it('resolves the known ref while an unresolvable ref in the same call contributes nothing', async () => {
       const h = await make();
       const known = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: h.knownOpportunityId };
-      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: 'no-such-opportunity-xyz' };
+      const missing = { crm: h.adapter.vendor, orgId: h.adapter.orgId, objectType: 'opportunity' as const, id: unresolvable(h, 'opportunity') };
       const result = await h.adapter.getNotesByOpportunity([known, missing]);
       expect(result.items.length).toBeGreaterThan(0);
       for (const n of result.items) {
@@ -305,7 +322,7 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
         crm: h.adapter.vendor,
         orgId: h.adapter.orgId,
         objectType: 'opportunity' as const,
-        id: `no-such-opportunity-${i}`,
+        id: unresolvable(h, 'opportunity', i),
       }));
       const result = await h.adapter.getNotesByOpportunity([known, ...padding]);
       expect(result.items.length).toBeGreaterThan(0);
@@ -344,8 +361,9 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
     });
 
     it('returns no items rather than throwing for an unresolvable opportunity ref', async () => {
-      const { adapter } = await make();
-      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: 'no-such-opportunity-xyz' };
+      const h = await make();
+      const { adapter } = h;
+      const ref = { crm: adapter.vendor, orgId: adapter.orgId, objectType: 'opportunity' as const, id: unresolvable(h, 'opportunity') };
       const stageHistory = await adapter.getStageHistoryByOpportunity([ref]);
       expect(stageHistory.items).toHaveLength(0);
       const nextStepChanges = await adapter.getNextStepHistoryByOpportunity([ref]);
@@ -503,7 +521,8 @@ export function runAdapterContract(make: () => Promise<ContractHarness> | Contra
       const all = await listAll(adapter, 200);
       const firstPage = await adapter.listOpportunitiesForSample({ ...population, limit: 1 });
       const count = await adapter.countOpportunitiesForSample(population);
-      expect(firstPage.items.length).toBeLessThanOrEqual(1);
+      // An adapter with a minimum page size may return more than asked for.
+      expect(firstPage.items.length).toBeLessThanOrEqual(Math.max(1, adapter.capabilities().minPageSize ?? 1));
       expect(count.closedInWindow).toBe(all.filter((o) => o.isClosed).length);
       expect(count.open + count.closedInWindow).toBe(all.length);
       expect(count.apiCallsConsumed).toBeGreaterThan(0);

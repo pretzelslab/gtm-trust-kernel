@@ -20,6 +20,7 @@ import {
 } from '../src/salesforce.js';
 import { AdapterError } from '../src/types.js';
 import { installFakeSalesforce, sfId, sfRef } from './support/fakeSalesforce.js';
+import { salesforceIdChecksum, unresolvableSalesforceId } from './support/salesforceIds.js';
 
 const OPP_1 = sfId('006', 1);
 const OPP_2 = sfId('006', 2);
@@ -782,5 +783,39 @@ describe('SalesforceAdapter (fake API)', () => {
         expect(result.apiCallsConsumed).toBe(1);
       });
     });
+  });
+});
+
+describe('SalesforceAdapter id guard', () => {
+  it.each(['no-such-account-xyz', "001' OR '1'='1", '001000000000', ''])('refuses the malformed id %j and sends no query', async (id) => {
+    const sf = installFakeSalesforce();
+    const adapter = sf.adapter();
+    await expect(adapter.getAccounts([sfRef('account', id)])).rejects.toThrow(/malformed Salesforce id/);
+    await expect(adapter.getNotesByOpportunity([sfRef('opportunity', id)])).rejects.toThrow(/malformed Salesforce id/);
+    expect(sf.queries).toEqual([]);
+  });
+
+  it('accepts a well-formed id that names no record, and resolves nothing', async () => {
+    const sf = installFakeSalesforce();
+    sf.on(/FROM Account WHERE Id IN/, []);
+    const result = await sf.adapter().getAccounts([sfRef('account', unresolvableSalesforceId('Account'))]);
+    expect(result.items).toEqual([]);
+    expect(sf.queries).toHaveLength(1);
+  });
+});
+
+describe('unresolvable Salesforce ids', () => {
+  it('computes the 18-character checksum', () => {
+    expect(salesforceIdChecksum('001A0000006Vm9r')).toBe('IAC');
+    expect(salesforceIdChecksum('001000000000000')).toBe('AAA');
+  });
+
+  it('builds a well-formed id per object, distinct by index', () => {
+    expect(unresolvableSalesforceId('Account')).toBe('001000000000000AAA');
+    expect(unresolvableSalesforceId('Contact')).toBe('003000000000000AAA');
+    expect(unresolvableSalesforceId('Opportunity')).toBe('006000000000000AAA');
+    expect(unresolvableSalesforceId('Task')).toBe('00T000000000000EAA');
+    expect(unresolvableSalesforceId('Event')).toBe('00U000000000000EAA');
+    expect(unresolvableSalesforceId('Account', 12)).toBe('001000000000012AAA');
   });
 });

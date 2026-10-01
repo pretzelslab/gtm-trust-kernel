@@ -6,7 +6,8 @@
  *  - POST /services/oauth2/token: a fixed access token.
  *  - GET  /services/data/<v>/query?q=<soql>: the first registered handler
  *    whose pattern matches the decoded SOQL. A handler returns records, or
- *    a full SoqlResponse for paging, or an HTTP status to simulate errors.
+ *    a full SoqlResponse for paging, a COUNT() total, or an HTTP status to
+ *    simulate errors.
  *  - GET  a nextRecordsUrl the harness handed out: the queued next page.
  *  - GET  /services/data/<v>/limits/: an empty object (health()).
  *  - GET  /services/data/<v>/sobjects/ContentNote/<id>/Content: the body
@@ -42,6 +43,8 @@ export const API_VERSION = 'v62.0';
 export type QueryResult =
   | readonly Record<string, unknown>[]
   | { readonly pages: readonly (readonly Record<string, unknown>[])[] }
+  /** A SELECT COUNT() answer as Salesforce sends it: totalSize n, no records. */
+  | { readonly count: number }
   | { readonly status: number; readonly body?: string; readonly headers?: Record<string, string> };
 
 export type QueryHandler = (soql: string) => QueryResult;
@@ -138,6 +141,7 @@ export function installFakeSalesforce(): FakeSalesforce {
       const [first = [], ...rest] = result.pages;
       return page(first, rest);
     }
+    if ('count' in result) return json({ totalSize: result.count, done: true, records: [] });
     const r = result as { status: number; body?: string; headers?: Record<string, string> };
     return new Response(r.body ?? '[{"errorCode":"FAKE","message":"fake error"}]', { status: r.status, headers: r.headers });
   }

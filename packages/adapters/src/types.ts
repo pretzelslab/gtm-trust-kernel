@@ -104,6 +104,12 @@ export interface AdapterCapabilities {
   readonly incrementalSync: boolean;
   /** Supports bulk read for backfill. */
   readonly bulkRead: boolean;
+  /**
+   * Optional: the smallest page a list call returns while more rows remain.
+   * A smaller requested limit is raised to this, so a page may hold more
+   * items than asked for. Default 1 (every limit is honoured exactly).
+   */
+  readonly minPageSize?: number;
   /** Write granularity the vendor supports. */
   readonly writeGranularity: 'field' | 'record' | 'none';
   /** Vendor enforces optimistic concurrency natively (else we compare tokens). */

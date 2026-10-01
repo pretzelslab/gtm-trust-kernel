@@ -125,6 +125,12 @@ export class MockAdapter implements CrmAdapter {
     return { ok: true };
   }
 
+  /** A list call's page size: the limit, raised to capabilities().minPageSize when one is set. */
+  private pageSize(limit: number): number {
+    const min = this.caps.minPageSize;
+    return min === undefined ? limit : Math.max(limit, min);
+  }
+
   private page<T extends { modifiedAt?: string; createdAt?: string; occurredAt?: string; changedAt?: string }>(
     items: readonly T[],
     w: SyncWindow,
@@ -139,8 +145,9 @@ export class MockAdapter implements CrmAdapter {
     const filtered = w.since ? items.filter((x) => ts(x) >= w.since!) : items.slice();
     const sorted = [...filtered].sort((a, b) => ts(a).localeCompare(ts(b)));
     const start = w.cursor ? Number(w.cursor) : 0;
-    const slice = sorted.slice(start, start + w.limit);
-    const next = start + w.limit < sorted.length ? String(start + w.limit) : undefined;
+    const size = this.pageSize(w.limit);
+    const slice = sorted.slice(start, start + size);
+    const next = start + size < sorted.length ? String(start + size) : undefined;
     const watermark = slice.length ? ts(slice[slice.length - 1]!) : (w.since ?? '1970-01-01T00:00:00Z');
     return { items: slice, nextCursor: next, watermark, apiCallsConsumed: 1 };
   }
@@ -159,8 +166,9 @@ export class MockAdapter implements CrmAdapter {
       .filter((o) => inSamplePopulation(o, w))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.ref.id.localeCompare(a.ref.id));
     const start = w.cursor ? Number(w.cursor) : 0;
-    const items = sorted.slice(start, start + w.limit);
-    const next = start + w.limit < sorted.length ? String(start + w.limit) : undefined;
+    const size = this.pageSize(w.limit);
+    const items = sorted.slice(start, start + size);
+    const next = start + size < sorted.length ? String(start + size) : undefined;
     return { items, nextCursor: next, apiCallsConsumed: 1 };
   }
 

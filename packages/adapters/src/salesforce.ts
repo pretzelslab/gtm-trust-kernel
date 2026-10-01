@@ -617,6 +617,10 @@ export class SalesforceAdapter implements CrmAdapter {
       stageMapHint: STAGE_MAP_HINT,
       accountBatchLimit: 200,
       contactBatchLimit: 200,
+      // Salesforce's documented minimum query batch size (the
+      // Sforce-Query-Options batchSize header accepts 200 to 2000), so a
+      // list call asking for fewer still gets up to 200 rows per page.
+      minPageSize: 200,
       childRecordBatchLimit: 200,
       notesPerOpportunityLimit: 200,
       activitiesPerOpportunityLimit: 200,
