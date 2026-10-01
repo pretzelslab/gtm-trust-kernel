@@ -14,6 +14,29 @@ repeated here.
 
 ---
 
+## Handoff, 2026-10-01 (Phase 3b, after batching)
+
+**HEAD and CI.** Last code commit `dd1e99d` (`apiCallEstimate` matched to
+the batched checks), pushed; GitHub CI green (run 36804231728).
+`npm run ci`: 648 tests.
+
+**Done this session:** detailed checks batched by id through parent-child
+subqueries (`4d18beb`, `b580c62`, `752c24e`); smoke run 132 -> 12 API
+calls (`2c5eb01`); `apiCallEstimate` 0 per deal, 5 per batch, planned
+line labelled a minimum (`dd1e99d`). Details in the next section.
+
+**Next, in order (rest of Phase 3b):**
+1. Salesforce contract tests.
+2. `--fail-on`: opt-in, default off.
+3. CI for the above.
+
+**Still open** (see the Open items list in the 2026-10-01 handoff below):
+stage-map notice blocked on a custom Stage value in the org; live
+child/outer pagination unobserved (planned opt-in live test, about 250
+Tasks on one dev-org deal, then cleanup); Enhanced Notes untested on the
+org; `untrusted_text_ratio` (Phase 4). Possible later optimisation: the
+four subqueries in one Opportunity query.
+
 ## Status as of 2026-09-30, Phase 3b: batched detailed checks
 
 All pushed; GitHub CI green after each commit. `npm run ci`: 646 tests.
