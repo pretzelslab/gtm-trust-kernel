@@ -138,8 +138,8 @@ describe('SalesforceAdapter (fake API)', () => {
 
   it('maps legacy Note records per opportunity and flags truncation past the limit', async () => {
     const sf = installFakeSalesforce();
-    sf.on(/FROM Note WHERE ParentId/, (soql) => {
-      const parent = /ParentId = '(\w+)'/.exec(soql)![1]!;
+    sf.subqueryRows('Notes', 'ParentId', (parentIds) => {
+      const parent = parentIds[0]!;
       return [
         { Id: sfId('002', 1), ParentId: parent, Title: 't', Body: 'Discussed pricing with the buyer.', OwnerId: sfId('005', 1), CreatedDate: '2026-09-01T00:00:00.000+0000', SystemModstamp: '2026-09-01T00:00:00.000+0000' },
       ];
@@ -187,7 +187,7 @@ describe('SalesforceAdapter (fake API)', () => {
 
     function withNotes(links: readonly Record<string, unknown>[]) {
       const sf = installFakeSalesforce();
-      sf.on(/FROM Note WHERE ParentId/, [legacy]);
+      sf.subqueryRows('Notes', 'ParentId', [legacy]);
       sf.on(/FROM ContentDocumentLink/, links);
       return sf;
     }
@@ -312,7 +312,7 @@ describe('SalesforceAdapter (fake API)', () => {
 
     it('merges legacy and Enhanced Notes per opportunity, newest kept, as user-authored text', async () => {
       const sf = installFakeSalesforce();
-      sf.on(/FROM Note WHERE ParentId/, [legacyNote(1, 3), legacyNote(2, 1)]);
+      sf.subqueryRows('Notes', 'ParentId', [legacyNote(1, 3), legacyNote(2, 1)]);
       sf.on(/FROM ContentDocumentLink/, [{ ContentDocumentId: sfId('069', 1), LinkedEntityId: OPP_1 }]);
       sf.on(/FROM ContentNote WHERE Id IN/, [contentNote(1, 2, 'enhanced short note')]);
       const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
@@ -330,7 +330,7 @@ describe('SalesforceAdapter (fake API)', () => {
 
     it('applies the per-opportunity limit to legacy and Enhanced Notes combined', async () => {
       const sf = installFakeSalesforce();
-      sf.on(/FROM Note WHERE ParentId/, Array.from({ length: 150 }, (_, i) => legacyNote(i + 1, 1)));
+      sf.subqueryRows('Notes', 'ParentId', Array.from({ length: 150 }, (_, i) => legacyNote(i + 1, 1)));
       sf.on(/FROM ContentDocumentLink/, Array.from({ length: 60 }, (_, i) => ({ ContentDocumentId: sfId('069', i + 1), LinkedEntityId: OPP_1 })));
       sf.on(/FROM ContentNote WHERE Id IN/, Array.from({ length: 60 }, (_, i) => contentNote(i + 1, 2, 'short')));
       const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
@@ -343,7 +343,7 @@ describe('SalesforceAdapter (fake API)', () => {
     it('fetches the full text only for a preview at the cap, as plain text', async () => {
       const sf = installFakeSalesforce();
       const capped = 'x'.repeat(ENHANCED_NOTE_PREVIEW_CAP);
-      sf.on(/FROM Note WHERE ParentId/, []);
+      sf.subqueryRows('Notes', 'ParentId', []);
       sf.on(/FROM ContentDocumentLink/, [
         { ContentDocumentId: sfId('069', 1), LinkedEntityId: OPP_1 },
         { ContentDocumentId: sfId('069', 2), LinkedEntityId: OPP_1 },
@@ -362,7 +362,7 @@ describe('SalesforceAdapter (fake API)', () => {
     it('stops fetching full text at the per-run budget and marks the rest bodyTruncated', async () => {
       const sf = installFakeSalesforce();
       const capped = 'y'.repeat(ENHANCED_NOTE_PREVIEW_CAP);
-      sf.on(/FROM Note WHERE ParentId/, []);
+      sf.subqueryRows('Notes', 'ParentId', []);
       sf.on(/FROM ContentDocumentLink/, (soql) => {
         const opp = /IN \('(\w+)'\)/.exec(soql)![1]!;
         return [{ ContentDocumentId: opp === OPP_1 ? sfId('069', 1) : sfId('069', 2), LinkedEntityId: opp }];
@@ -566,6 +566,78 @@ describe('SalesforceAdapter (fake API)', () => {
         ['evaluation', undefined],
         ['prospecting', 'unmapped'],
       ]);
+    });
+  });
+
+  describe('batched child queries (parent-child subqueries)', () => {
+    const at = (n: number) => new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString().replace('Z', '+0000');
+    const opps = (count: number) => Array.from({ length: count }, (_, i) => sfId('006', i + 1));
+    const subqueryFor = (rel: string) => (q: string) => q.includes(` FROM ${rel} `) && /\) FROM Opportunity WHERE Id IN \(/.test(q);
+    // Newest first, as the subquery's ORDER BY returns them.
+    const notesFor = (opp: string, count: number, base: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        Id: sfId('002', base + i), ParentId: opp, Title: 't', Body: `note ${opp} ${i}`, OwnerId: null,
+        CreatedDate: at(count - i), SystemModstamp: at(count - i),
+      }));
+
+    describe('legacy Notes', () => {
+      it('reads several deals in one query, with LIMIT limit+1 in the subquery', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Notes', 'ParentId', [...notesFor(OPP_1, 2, 1), ...notesFor(OPP_2, 1, 100)]);
+        sf.on(/FROM ContentDocumentLink/, []);
+        const adapter = sf.adapter();
+        const result = await adapter.getNotesByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
+
+        const noteQueries = sf.queries.filter(subqueryFor('Notes'));
+        expect(noteQueries).toHaveLength(1);
+        expect(noteQueries[0]).toContain(`LIMIT ${adapter.capabilities().notesPerOpportunityLimit + 1})`);
+        expect(result.items.map((n) => n.relatedTo[0]!.id).sort()).toEqual([OPP_1, OPP_1, OPP_2]);
+        expect(result.apiCallsConsumed).toBe(2); // Notes subquery + ContentDocumentLink
+      });
+
+      it('splits the ids into batches of childRecordBatchLimit', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Notes', 'ParentId', []);
+        sf.on(/FROM ContentDocumentLink/, []);
+        const result = await sf.adapter().getNotesByOpportunity(opps(450).map((id) => sfRef('opportunity', id)));
+
+        const sizes = sf.queries.filter(subqueryFor('Notes')).map((q) => (q.match(/'006/g) ?? []).length);
+        expect(sizes).toEqual([200, 200, 50]);
+        expect(result.apiCallsConsumed).toBe(6); // 3 Notes batches + 3 ContentDocumentLink batches
+      });
+
+      it('follows the outer nextRecordsUrl and counts each page', async () => {
+        const sf = installFakeSalesforce();
+        const ids = opps(5);
+        sf.subqueryRows('Notes', 'ParentId', ids.flatMap((id, i) => notesFor(id, 1, i * 10 + 1)), { parentPageSize: 2 });
+        sf.on(/FROM ContentDocumentLink/, []);
+        const result = await sf.adapter().getNotesByOpportunity(ids.map((id) => sfRef('opportunity', id)));
+
+        expect(result.items.map((n) => n.relatedTo[0]!.id).sort()).toEqual(ids);
+        expect(result.apiCallsConsumed).toBe(4); // 1 query + 2 outer pages + ContentDocumentLink
+      });
+
+      it("follows a child relationship's own nextRecordsUrl and counts each page", async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Notes', 'ParentId', notesFor(OPP_1, 5, 1), { childPageSize: 2 });
+        sf.on(/FROM ContentDocumentLink/, []);
+        const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1)]);
+
+        expect(result.items).toHaveLength(5);
+        expect(result.apiCallsConsumed).toBe(4); // 1 query + 2 child pages + ContentDocumentLink
+      });
+
+      it('caps each deal at the limit and flags only the deal with more than limit children', async () => {
+        const sf = installFakeSalesforce();
+        sf.subqueryRows('Notes', 'ParentId', [...notesFor(OPP_1, 250, 1), ...notesFor(OPP_2, 200, 1000)]);
+        sf.on(/FROM ContentDocumentLink/, []);
+        const result = await sf.adapter().getNotesByOpportunity([sfRef('opportunity', OPP_1), sfRef('opportunity', OPP_2)]);
+
+        const count = (opp: string) => result.items.filter((n) => n.relatedTo[0]!.id === opp).length;
+        expect([count(OPP_1), count(OPP_2)]).toEqual([200, 200]);
+        expect([...result.truncatedOpportunityIds]).toEqual([OPP_1]);
+        expect(result.apiCallsConsumed).toBe(2);
+      });
     });
   });
 });

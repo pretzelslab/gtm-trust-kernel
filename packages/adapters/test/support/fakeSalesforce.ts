@@ -14,6 +14,13 @@
  *  - GET  /services/data/<v>/sobjects/<name>/describe: the result
  *    registered with sobjectDescribe(name, result); unregistered fails.
  *    A thrown Error in the result simulates a network failure.
+ *  - A parent-child subquery, SELECT Id, (SELECT ... FROM <Rel> ... LIMIT n)
+ *    FROM Opportunity WHERE Id IN (...): the rows registered with
+ *    subqueryRows(<Rel>, ...), checked before the regex handlers. The
+ *    rows are grouped under each parent in the IN list by their parent
+ *    field and cut to the subquery's LIMIT, in the order given (so give
+ *    them in the query's ORDER BY order). Options split the parents, or a
+ *    parent's child rows, into pages served from nextRecordsUrl.
  *
  * Every SOQL string the adapter sends is recorded in `queries`, in order,
  * so tests can assert what was asked as well as what was mapped. A query
@@ -38,6 +45,16 @@ export type QueryResult =
 
 export type QueryHandler = (soql: string) => QueryResult;
 
+/** Child rows for subqueryRows, or a function of the parent ids in the IN list. */
+export type ChildRows = readonly Record<string, unknown>[] | ((parentIds: readonly string[]) => readonly Record<string, unknown>[]);
+
+export interface SubqueryOptions {
+  /** Parents per outer page; more come from the outer nextRecordsUrl. Default: all on one page. */
+  readonly parentPageSize?: number;
+  /** Child rows per page within a parent; more come from that child's nextRecordsUrl. Default: all on one page. */
+  readonly childPageSize?: number;
+}
+
 export interface FakeSalesforce {
   /** Answer any SOQL matching `pattern` (tested against the whole decoded query). */
   on(pattern: RegExp, result: QueryResult | QueryHandler): void;
@@ -45,6 +62,12 @@ export interface FakeSalesforce {
   noteContent(id: string, body: string): void;
   /** Answer sobjects/<name>/describe with a describe body, an HTTP error, or a network failure. */
   sobjectDescribe(name: string, result: Record<string, unknown> | { readonly status: number; readonly body?: string } | Error): void;
+  /**
+   * Answer the parent-child subquery on relationship `relationship` (e.g.
+   * 'Notes') from flat child rows, grouped under their parent by
+   * `parentField` (e.g. 'ParentId'). See the module docblock.
+   */
+  subqueryRows(relationship: string, parentField: string, rows: ChildRows, options?: SubqueryOptions): void;
   /** Every SOQL string sent, in order. */
   readonly queries: string[];
   /** Every URL fetched (token, query, queryMore, limits), in order. */
@@ -64,14 +87,48 @@ export function installFakeSalesforce(): FakeSalesforce {
   const contents = new Map<string, string>();
   const describes = new Map<string, Record<string, unknown> | { readonly status: number; readonly body?: string } | Error>();
   const pendingPages = new Map<string, { rest: readonly (readonly Record<string, unknown>[])[] }>();
+  const subqueries = new Map<string, { parentField: string; rows: ChildRows; options: SubqueryOptions }>();
   let locatorSeq = 0;
 
-  function page(records: readonly Record<string, unknown>[], rest: readonly (readonly Record<string, unknown>[])[]): Response {
-    if (rest.length === 0) return json({ totalSize: records.length, done: true, records });
+  function chunks<T>(items: readonly T[], size: number | undefined): T[][] {
+    if (!size || items.length <= size) return [items.slice()];
+    const out: T[][] = [];
+    for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+    return out;
+  }
+
+  function queue(rest: readonly (readonly Record<string, unknown>[])[]): string {
     locatorSeq += 1;
     const nextRecordsUrl = `/services/data/${API_VERSION}/query/01gFAKE-${locatorSeq}`;
     pendingPages.set(nextRecordsUrl, { rest });
-    return json({ totalSize: records.length, done: false, nextRecordsUrl, records });
+    return nextRecordsUrl;
+  }
+
+  /** The response to a parent-child subquery, or undefined if soql isn't one with a registered relationship. */
+  function answerSubquery(soql: string): Response | undefined {
+    const m = /^SELECT Id, \(SELECT .+ FROM (\w+) .*LIMIT (\d+)\) FROM Opportunity WHERE Id IN \(([^)]*)\)$/.exec(soql);
+    if (!m) return undefined;
+    const registered = subqueries.get(m[1]!);
+    if (!registered) return undefined;
+    const limit = Number(m[2]);
+    const parentIds = [...m[3]!.matchAll(/'(\w+)'/g)].map((x) => x[1]!);
+    const rows = typeof registered.rows === 'function' ? registered.rows(parentIds) : registered.rows;
+    const parents = parentIds.map((id) => {
+      const children = rows.filter((r) => r[registered.parentField] === id).slice(0, limit);
+      if (children.length === 0) return { Id: id, [m[1]!]: null };
+      const [first = [], ...rest] = chunks(children, registered.options.childPageSize);
+      const child = rest.length === 0
+        ? { totalSize: children.length, done: true, records: first }
+        : { totalSize: children.length, done: false, nextRecordsUrl: queue(rest), records: first };
+      return { Id: id, [m[1]!]: child };
+    });
+    const [first = [], ...rest] = chunks(parents, registered.options.parentPageSize);
+    return page(first, rest);
+  }
+
+  function page(records: readonly Record<string, unknown>[], rest: readonly (readonly Record<string, unknown>[])[]): Response {
+    if (rest.length === 0) return json({ totalSize: records.length, done: true, records });
+    return json({ totalSize: records.length, done: false, nextRecordsUrl: queue(rest), records });
   }
 
   function answer(result: QueryResult): Response {
@@ -118,6 +175,8 @@ export function installFakeSalesforce(): FakeSalesforce {
     if (url.pathname === `/services/data/${API_VERSION}/query`) {
       const soql = url.searchParams.get('q') ?? '';
       queries.push(soql);
+      const sub = answerSubquery(soql);
+      if (sub) return sub;
       const handler = handlers.find((h) => h.pattern.test(soql));
       if (!handler) throw new Error(`fakeSalesforce: no handler for SOQL: ${soql}`);
       const result = typeof handler.result === 'function' ? handler.result(soql) : handler.result;
@@ -138,6 +197,9 @@ export function installFakeSalesforce(): FakeSalesforce {
     },
     sobjectDescribe(name, result) {
       describes.set(name, result);
+    },
+    subqueryRows(relationship, parentField, rows, options = {}) {
+      subqueries.set(relationship, { parentField, rows, options });
     },
     queries,
     urls,

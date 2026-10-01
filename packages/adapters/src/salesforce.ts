@@ -395,6 +395,9 @@ interface SoqlResponse<T> {
   readonly records: readonly T[];
 }
 
+/** An Opportunity row from a parent-child subquery: Id plus the relationship's rows (null when it has none). */
+type RawParentWithChildren<T> = { readonly Id: string } & Readonly<Record<string, SoqlResponse<T> | string | null>>;
+
 interface RawAccount {
   Id: string;
   Name: string;
@@ -1059,8 +1062,53 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   /**
-   * Legacy Notes (per-opportunity SOQL, one call per distinct oppRef — SOQL
-   * has no per-group LIMIT) merged with Enhanced Notes (ContentNote, found
+   * Child rows per opportunity through a parent-child subquery,
+   * SELECT Id, (<subquery>) FROM Opportunity WHERE Id IN (...), in batches
+   * of childRecordBatchLimit ids. The subquery keeps its own ORDER BY and
+   * LIMIT, so each deal is capped exactly as a per-deal query would be
+   * (SOQL has no per-group LIMIT on a flat IN-list query). Salesforce may
+   * return fewer parents per page when a query has subqueries, and may
+   * split a parent's child rows; both nextRecordsUrl chains are followed
+   * and every page is counted. A parent missing from the result (not found
+   * or not visible) has no rows.
+   */
+  private async childRowsByOpportunity<T>(
+    opportunityIds: readonly string[],
+    relationship: string,
+    subquery: string,
+  ): Promise<{ rowsByOpportunity: Map<string, T[]>; apiCallsConsumed: number }> {
+    const rowsByOpportunity = new Map<string, T[]>();
+    let apiCallsConsumed = 0;
+    const batch = this.capabilities().childRecordBatchLimit;
+    for (let i = 0; i < opportunityIds.length; i += batch) {
+      const chunk = opportunityIds.slice(i, i + batch);
+      let page = await this.soqlQuery<RawParentWithChildren<T>>(
+        `SELECT Id, (${subquery}) FROM Opportunity WHERE Id IN (${soqlIdList(chunk)})`,
+      );
+      apiCallsConsumed += 1;
+      for (;;) {
+        for (const parent of page.records) {
+          let child = parent[relationship] as SoqlResponse<T> | null | undefined;
+          const rows: T[] = [];
+          while (child) {
+            rows.push(...child.records);
+            if (child.done || !child.nextRecordsUrl) break;
+            child = await this.soqlQueryMore<T>(child.nextRecordsUrl);
+            apiCallsConsumed += 1;
+          }
+          rowsByOpportunity.set(parent.Id, rows);
+        }
+        if (page.done || !page.nextRecordsUrl) break;
+        page = await this.soqlQueryMore<RawParentWithChildren<T>>(page.nextRecordsUrl);
+        apiCallsConsumed += 1;
+      }
+    }
+    return { rowsByOpportunity, apiCallsConsumed };
+  }
+
+  /**
+   * Legacy Notes (the Notes subquery, batched by id, see
+   * childRowsByOpportunity) merged with Enhanced Notes (ContentNote, found
    * through ContentDocumentLink in batched IN-list queries). The combined
    * list per opportunity is cut to notesPerOpportunityLimit, newest kept,
    * and the opportunity is marked truncated if either source had more.
@@ -1072,17 +1120,15 @@ export class SalesforceAdapter implements CrmAdapter {
     const ids = dedupeIds(oppRefs);
     ids.forEach(assertValidSalesforceId);
     const truncatedOpportunityIds = new Set<string>();
-    let apiCallsConsumed = 0;
 
+    const legacy = await this.childRowsByOpportunity<RawNote>(
+      ids,
+      'Notes',
+      `SELECT ${NOTE_FIELDS.join(', ')} FROM Notes ORDER BY CreatedDate DESC NULLS LAST LIMIT ${limit + 1}`,
+    );
+    let apiCallsConsumed = legacy.apiCallsConsumed;
     const byOpp = new Map<string, Note[]>();
-    for (const oppId of ids) {
-      const soql =
-        `SELECT ${NOTE_FIELDS.join(', ')} FROM Note WHERE ParentId = '${oppId}' ` +
-        `ORDER BY CreatedDate DESC NULLS LAST LIMIT ${limit + 1}`;
-      const page = await this.soqlQuery<RawNote>(soql);
-      apiCallsConsumed += 1;
-      byOpp.set(oppId, page.records.map(this.mapNote));
-    }
+    for (const oppId of ids) byOpp.set(oppId, (legacy.rowsByOpportunity.get(oppId) ?? []).map(this.mapNote));
 
     const enhanced = await this.fetchEnhancedNotes(ids);
     apiCallsConsumed += enhanced.apiCallsConsumed;
