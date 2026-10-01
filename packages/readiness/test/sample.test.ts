@@ -185,7 +185,7 @@ describe('planSample full-run estimate', () => {
   it('prints each group and bases the quota on the total', () => {
     const text = formatSamplePlan(salesforceShapedPlan());
     expect(text).toContain('Planned scan API calls: up to 50 (25 pages of 200, plus 25 per-page reads; stops earlier when the population runs out)');
-    expect(text).toContain('Planned detailed-check API calls: up to 562 (4 per sampled deal across up to 140 deals, plus 2 batched reads)');
+    expect(text).toContain('Planned detailed-check API calls: at least 562 (4 per sampled deal across up to 140 deals, plus 2 batched reads; a minimum that excludes extra result pages)');
     expect(text).toContain('Planned fixed API calls: up to 203 (3 per run, plus up to 200 per-record fetches)');
     expect(text).toContain('Planned API calls in total: up to 816 (worst case)');
     expect(text).toContain('Quota: up to 5.4% of the daily quota of 15000');

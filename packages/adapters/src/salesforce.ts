@@ -592,15 +592,17 @@ export class SalesforceAdapter implements CrmAdapter {
       ...this.settingHints(),
       // Per run: the ContentNote probe, 2 population counts and the
       // org-wide stage-history read.
-      // Per listing page: its contact-role batch. Per sampled deal: legacy
-      // Notes, Tasks, Events and OpportunityHistory (one query each, see
-      // getNotesByOpportunity). Per batch of deals: ContentDocumentLink and
-      // ContentNote. Fetch cap: Enhanced Note full-text fetches.
+      // Per listing page: its contact-role batch. Per sampled deal: none.
+      // Per batch of deals: the Notes, Tasks, Events and
+      // OpportunityHistories subqueries (childRowsByOpportunity) and
+      // ContentDocumentLink. A minimum: extra result pages, and the
+      // ContentNote read for a batch with linked Enhanced Notes, aren't
+      // counted. Fetch cap: Enhanced Note full-text fetches.
       apiCallEstimate: {
         perRun: 4,
         perScanPage: 1,
-        perSampledOpportunity: 4,
-        perChildRecordBatch: 2,
+        perSampledOpportunity: 0,
+        perChildRecordBatch: 5,
         perRunFetchCap: this.config.noteFullTextFetchLimit ?? DEFAULT_NOTE_FULLTEXT_FETCH_LIMIT,
       },
       incrementalSync: true,

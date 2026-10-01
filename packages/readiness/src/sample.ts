@@ -210,7 +210,7 @@ export function formatSamplePlan(plan: SamplePlan): string {
   const estimateLines = estimate
     ? [
         `  Planned scan API calls: up to ${plan.plannedApiCalls + plan.plannedScanExtraApiCalls} (${plan.plannedApiCalls} pages of ${plan.effectivePageSize}, plus ${plan.plannedScanExtraApiCalls} per-page reads; stops earlier when the population runs out)`,
-        `  Planned detailed-check API calls: up to ${plan.plannedDetailApiCalls} (${estimate.perSampledOpportunity} per sampled deal across up to ${sampledDeals} deals, plus ${plan.plannedDetailApiCalls - sampledDeals * estimate.perSampledOpportunity} batched reads)`,
+        `  Planned detailed-check API calls: at least ${plan.plannedDetailApiCalls} (${estimate.perSampledOpportunity} per sampled deal across up to ${sampledDeals} deals, plus ${plan.plannedDetailApiCalls - sampledDeals * estimate.perSampledOpportunity} batched reads; a minimum that excludes extra result pages)`,
         `  Planned fixed API calls: up to ${plan.plannedFixedApiCalls} (${estimate.perRun} per run, plus up to ${estimate.perRunFetchCap} per-record fetches)`,
       ]
     : [

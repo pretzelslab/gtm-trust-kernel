@@ -44,14 +44,18 @@ previous live run (28 rows; only `median_days_since_modified` moved, with
 the clock): with `auto`, `stage_activity_contradiction_rate` 1.0 on 4
 deals and `activity_capture_rate` 0 of 13. No record text in any output.
 
+**`apiCallEstimate` reconciled** (approved): `perSampledOpportunity: 0`,
+`perChildRecordBatch: 5` (the 4 subqueries and `ContentDocumentLink`).
+The `ContentNote` read is sent only for a batch with linked Enhanced Notes,
+so it is left out, like extra pages; the planned detailed-check line now
+says "at least ..., a minimum that excludes extra result pages". Against
+the smoke run (35 deals): `perRun` 4 (`ContentNote` describe, 2 counts,
+org-wide `OpportunityHistory`) + 1 listing page + 1 contact-role batch
+(`perScanPage`) + 1 account (account hydration) + 5 (1 batch) = 12, the
+measured total. A unit test checks the estimate against the fake's
+`apiCallsConsumed` for 35 and 201 deals.
+
 **Open:**
-- `apiCallEstimate` still declares `perSampledOpportunity: 4,
-  perChildRecordBatch: 2` (`src/salesforce.ts`, pinned by
-  `salesforce.unit.test.ts`), so the planned-calls line overstates
-  detailed checks (562 planned at 140 deals). The batched shape is 0 per
-  deal and 6 per batch of 200 (4 subqueries, `ContentDocumentLink`,
-  `ContentNote`), plus extra pages. Changing it changes a tested value:
-  awaiting a decision.
 - Possible later optimisation: Tasks and Events (or all four
   relationships) as subqueries of one Opportunity query, 1 call per batch
   instead of 4. The dev org accepted all four in one query. Not done in
@@ -103,6 +107,8 @@ apply here.
 4. Then Phase 3b, as in the earlier handoffs.
 5. If stage_activity_contradiction_rate becomes a capability gate, null ->
    Blocked (src/rubric.ts:767-783). Intended; confirm before gating.
+6. Child/outer pagination not yet observed on real Salesforce. Plan:
+   opt-in live test seeding ~250 Tasks on one dev-org deal, then cleanup.
 
 ## Status as of 2026-09-30, top-up smoke run
 

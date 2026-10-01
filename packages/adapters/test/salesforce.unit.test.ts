@@ -265,11 +265,36 @@ describe('SalesforceAdapter (fake API)', () => {
       expect(sf.adapter().capabilities().apiCallEstimate).toEqual({
         perRun: 4,
         perScanPage: 1,
-        perSampledOpportunity: 4,
-        perChildRecordBatch: 2,
+        perSampledOpportunity: 0,
+        perChildRecordBatch: 5,
         perRunFetchCap: 200,
       });
       expect(sf.adapter({ noteFullTextFetchLimit: 0 }).capabilities().apiCallEstimate?.perRunFetchCap).toBe(0);
+    });
+
+    it.each([
+      [35, 1],
+      [201, 2],
+    ])('matches the detailed checks actually made for %i deals (%i batch(es), no extra pages)', async (deals, batches) => {
+      const sf = installFakeSalesforce();
+      sf.subqueryRows('Notes', 'ParentId', []);
+      sf.subqueryRows('Tasks', 'WhatId', []);
+      sf.subqueryRows('Events', 'WhatId', []);
+      sf.subqueryRows('OpportunityHistories', 'OpportunityId', []);
+      sf.on(/FROM ContentDocumentLink/, []);
+      const adapter = sf.adapter();
+      const refs = Array.from({ length: deals }, (_, i) => sfRef('opportunity', sfId('006', i + 1)));
+
+      const actual =
+        (await adapter.getNotesByOpportunity(refs)).apiCallsConsumed +
+        (await adapter.getActivitiesByOpportunity(refs)).apiCallsConsumed +
+        (await adapter.getStageHistoryByOpportunity(refs)).apiCallsConsumed;
+      const caps = adapter.capabilities();
+      const estimate = caps.apiCallEstimate!;
+      const planned =
+        deals * estimate.perSampledOpportunity + Math.ceil(deals / caps.childRecordBatchLimit) * estimate.perChildRecordBatch;
+      expect(Math.ceil(deals / caps.childRecordBatchLimit)).toBe(batches);
+      expect(actual).toBe(planned);
     });
   });
 
