@@ -19,6 +19,10 @@ human-approved writes with rollback and a tamper-evident audit trail.
 5. All deterministic signals stay pure functions. No model call may
    influence a computed number.
 6. Commit messages contain a subject and body only; no trailer lines.
+7. Ask before any command that uses org credentials or calls a live API:
+   `npm run test:live`, `npm run report -- --live`, the `sf` CLI, or
+   anything else that reads `.env` credentials or reaches a real org.
+   This covers read-only calls too. Approval covers that one run only.
 
 ## Conventions
 

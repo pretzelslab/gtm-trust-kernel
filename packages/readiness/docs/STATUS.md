@@ -9,8 +9,9 @@ where this log cites them, it says so.
 
 Governing rules: `CLAUDE.md` at the repo root (protected `rubric.ts`, no
 threshold guessing, plan-before-multi-file-change, pure deterministic
-signals, `npm run ci` before declaring anything done). Those rules are not
-repeated here.
+signals, `npm run ci` before declaring anything done, and ask before any
+command that uses org credentials or calls a live API, read-only included).
+Those rules are not repeated here.
 
 ---
 
