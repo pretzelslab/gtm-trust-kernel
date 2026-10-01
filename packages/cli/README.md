@@ -21,6 +21,7 @@ This runs against a bundled sample CRM, so it doesn't connect to any real CRM an
 
 - `--json` prints the report data as JSON to stdout (the plan and progress go to stderr, so you can pipe it).
 - `--narrative` adds an AI-written plain-English summary. It needs `ANTHROPIC_API_KEY` set, fails with an error if it isn't, and sends report data to Anthropic's API.
+- `--fail-on` makes the exit code reflect the verdicts, for CI: exit 2 if any capability is blocked (or whichever verdicts you list). Off by default.
 
 ## Reference
 
@@ -40,7 +41,7 @@ The bundled `healthy` mock CRM org is used, so no CRM credentials or CRM network
 ### Usage
 
 ```
-gtm-trust-kernel scan --demo [--narrative] [--json]
+gtm-trust-kernel scan --demo [--narrative] [--json] [--fail-on [<verdicts>]]
 gtm-trust-kernel --version
 gtm-trust-kernel --help
 ```
@@ -59,6 +60,30 @@ no API key is needed at all.
 ```bash
 ANTHROPIC_API_KEY=sk-ant-... npx gtm-trust-kernel scan --demo --narrative
 ```
+
+#### `--fail-on`
+
+Opt-in. Lets a script or CI job fail on the report's verdicts. The value is
+a comma-separated list of `blocked`, `degraded` and `not_measured`; a bare
+`--fail-on` means `blocked`. `not_measured` counts only when you list it.
+The report is always written first; then the exit code is 2 if any
+capability has a listed verdict, and the failing capabilities are named on
+stderr.
+
+```bash
+npx gtm-trust-kernel scan --demo --fail-on                    # fail on blocked
+npx gtm-trust-kernel scan --demo --fail-on blocked,degraded
+```
+
+Without `--fail-on`, a scan that finishes exits 0 whatever it found.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Report written; no capability matched `--fail-on`, or `--fail-on` is unset |
+| 1 | Error: the scan failed, or a flag value is invalid (including `--fail-on`) |
+| 2 | Report written; at least one capability matched `--fail-on` |
 
 ### More
 

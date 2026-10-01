@@ -17,6 +17,7 @@ import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters
 import { healthyFixture } from '@gtm-trust-kernel/readiness/fixtures/healthy.js';
 import { AnthropicNarrativeModelClient } from '@gtm-trust-kernel/readiness/report/anthropicNarrativeModelClient.js';
 import { buildReportData, type ReportData } from '@gtm-trust-kernel/readiness/report/buildReport.js';
+import { evaluateFailOn, type FailOnVerdict } from '@gtm-trust-kernel/readiness/report/failOn.js';
 import { buildNarrative, type NarrativeResult } from '@gtm-trust-kernel/readiness/report/narrative.js';
 import { renderPlainReportHtml } from '@gtm-trust-kernel/readiness/report/plainReport.js';
 import { renderReportHtml } from '@gtm-trust-kernel/readiness/report/render.js';
@@ -27,6 +28,12 @@ export interface ScanOptions {
   readonly useJson: boolean;
   /** Where the report JSON goes when `useJson` is set. Defaults to process.stdout. */
   readonly stdout?: (text: string) => void;
+  /**
+   * --fail-on verdicts (readiness's failOn.ts). Unset: the exit status
+   * never depends on verdicts. Set: after the report is written, exit
+   * code 2 if any capability has one of these verdicts.
+   */
+  readonly failOn?: ReadonlySet<FailOnVerdict>;
 }
 
 async function buildDemoReport(): Promise<ReportData> {
@@ -79,6 +86,12 @@ async function scan(options: ScanOptions): Promise<void> {
   if (options.useJson) {
     const write = options.stdout ?? ((text: string) => process.stdout.write(text));
     write(`${JSON.stringify(data, null, 2)}\n`);
+  }
+
+  const failOn = evaluateFailOn(data.capabilities, options.failOn);
+  if (failOn.message) {
+    console.error(failOn.message);
+    process.exitCode = failOn.exitCode;
   }
 }
 

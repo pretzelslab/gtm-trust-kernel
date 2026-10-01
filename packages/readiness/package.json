@@ -10,7 +10,8 @@
     "./report/render.js": "./src/report/render.ts",
     "./report/plainReport.js": "./src/report/plainReport.ts",
     "./report/narrative.js": "./src/report/narrative.ts",
-    "./report/anthropicNarrativeModelClient.js": "./src/report/anthropicNarrativeModelClient.ts"
+    "./report/anthropicNarrativeModelClient.js": "./src/report/anthropicNarrativeModelClient.ts",
+    "./report/failOn.js": "./src/report/failOn.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",

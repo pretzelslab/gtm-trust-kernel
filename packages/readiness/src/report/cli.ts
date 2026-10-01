@@ -17,6 +17,12 @@
  *   npm run report -- --narrative           # adds an LLM narrative (needs ANTHROPIC_API_KEY); not supported with --all
  *   npm run report -- --live --hydrate-per-stratum 10   # detailed checks on 10 deals per stage (default 20)
  *   npm run report -- --live --quick        # stop scanning once every stage's sample is full
+ *   npm run report -- --live --fail-on      # exit 2 if any capability is blocked
+ *   npm run report -- --fail-on blocked,degraded,not_measured
+ *
+ * --fail-on is opt-in (see failOn.ts). Unset, a finished report exits 0
+ * whatever its verdicts. Set, the report is still written, then the exit
+ * code is 2 if any capability has a listed verdict. Errors exit 1.
  */
 
 import { parseArgs } from 'node:util';
@@ -32,6 +38,7 @@ import { renderComparisonHtml, renderReportHtml } from './render.js';
 import { renderPlainReportHtml } from './plainReport.js';
 import { AnthropicNarrativeModelClient } from './anthropicNarrativeModelClient.js';
 import { buildNarrative, type NarrativeResult } from './narrative.js';
+import { evaluateFailOn, normalizeFailOnArgs, parseFailOn, type FailOnVerdict } from './failOn.js';
 
 function isFixtureName(name: string): name is FixtureName {
   return (FIXTURE_NAMES as readonly string[]).includes(name);
@@ -88,10 +95,22 @@ async function writeJson(outDir: string, filename: string, data: unknown): Promi
   console.log(`JSON written to:   ${filePath}`);
 }
 
+/** Report each org's --fail-on result on stderr and set exit code 2 if any capability failed. */
+function applyFailOn(datas: readonly ReportData[], failOn: ReadonlySet<FailOnVerdict> | undefined): void {
+  for (const data of datas) {
+    const result = evaluateFailOn(data.capabilities, failOn);
+    if (result.message) {
+      console.error(datas.length > 1 ? `${data.org.orgLabel}: ${result.message}` : result.message);
+      process.exitCode = result.exitCode;
+    }
+  }
+}
+
 async function main(): Promise<void> {
   await loadEnvFileIfPresent();
 
   const { values } = parseArgs({
+    args: normalizeFailOnArgs(process.argv.slice(2)),
     options: {
       fixture: { type: 'string' },
       all: { type: 'boolean', default: false },
@@ -100,9 +119,19 @@ async function main(): Promise<void> {
       narrative: { type: 'boolean', default: false },
       'hydrate-per-stratum': { type: 'string' },
       quick: { type: 'boolean', default: false },
+      'fail-on': { type: 'string' },
     },
     allowPositionals: false,
   });
+
+  let failOn: ReadonlySet<FailOnVerdict> | undefined;
+  try {
+    failOn = parseFailOn(values['fail-on']);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+    return;
+  }
 
   let sampling: ReturnType<typeof sampleOptionsFromFlags>;
   try {
@@ -142,6 +171,7 @@ async function main(): Promise<void> {
     if (values.json) {
       await writeJson(outDir, `report-live-${timestamp}.json`, data);
     }
+    applyFailOn([data], failOn);
     return;
   }
 
@@ -155,6 +185,7 @@ async function main(): Promise<void> {
     if (values.json) {
       await writeJson(outDir, `report-all-${timestamp}.json`, datas);
     }
+    applyFailOn(datas, failOn);
     return;
   }
 
@@ -175,6 +206,7 @@ async function main(): Promise<void> {
   if (values.json) {
     await writeJson(outDir, `report-${timestamp}.json`, data);
   }
+  applyFailOn([data], failOn);
 }
 
 main().catch((err: unknown) => {
