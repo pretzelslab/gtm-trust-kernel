@@ -292,8 +292,9 @@ the three `SF_*` credentials are unset.
 
 The child-pagination check needs one deal with more than 200 Tasks whose
 Subject contains `CONTRACT-PAGINATION` (about 250 is plenty). Seed them by
-hand (Data Loader or the `sf` CLI); the tests never write. Without them
-that check skips with a message.
+hand: `scripts/seed/contract-pagination.csv` has 250 rows, and
+`scripts/seed/README.md` gives the `sf data import bulk` command. The tests
+never write. Without them that check skips with a message.
 
 ## 7. What to expect
 

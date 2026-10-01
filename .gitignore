@@ -5,6 +5,7 @@ out/
 .env.local
 coverage/
 .cache/
+scripts/seed/*.local.csv
 .claude/scheduled_tasks.lock
 
 # local tooling (not tracked)
