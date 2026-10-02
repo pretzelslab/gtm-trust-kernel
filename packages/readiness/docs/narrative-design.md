@@ -47,7 +47,7 @@ byte-identical to pre-commit-4 output (confirmed no
 `<div class="narrative-fallback-notice">` appears and the "Plain-English
 summary" paragraph is unchanged).
 
-Motivated by Phase E (the internal scope notes (not published); `docs/STATUS.md`'s
+Motivated by Phase E (the internal scope notes (not published); `docs/dev-log.md`'s
 Known Gaps: "the LLM narrative pass, `report/narrative.ts` (Phase E), is
 still not built"). **Draft plan** — the decisions below are locked as in
 "agreed, to be built this way," but nothing is implemented: no code, no
@@ -416,7 +416,7 @@ recur. Still open.
     and deliberately not `target`/`floor` (the user's own suggested naming)
     since a row already has an unrelated `floor: boolean` (the
     truncation-floor flag from decision "applyTruncationFloor" in
-    `docs/STATUS.md`) and reusing that name on the same object would
+    `docs/dev-log.md`) and reusing that name on the same object would
     collide. `tier` itself is unchanged — citing a metric's or capability's
     own real tier is decision 6's legitimate case, not the leak.
     `buildNarrativePromptInput()` now maps `data.metrics` through this

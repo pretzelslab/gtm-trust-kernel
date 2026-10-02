@@ -24,7 +24,7 @@ Superseded by `redactionCanary.test.ts` for ongoing enforcement — see
 
 **Reasoning:** every metric function (`src/metrics/*.ts`) returns a `MetricResult` — `{ status, value, sampleSize, lowConfidence, note?, floor? }` — never source text. `report/render.ts`'s `renderReportHtml`/`renderComparisonHtml` and `report/plainReport.ts`'s `renderPlainReportHtml` all take only `ReportData` (`report/buildReport.ts`) as input, never a `CoverageSample` or `SecondSourceResolution`. There is therefore no codepath by which a raw note, activity, contact, or second-source field value can reach any output surface — not because a scrub step removes it, but because the data model never carries it that far. A `redact.ts` scrubbing already-absent text would be defense against a leak path that doesn't exist in this architecture.
 
-This was recorded as a Known Gap in `docs/STATUS.md` at the time (this session's earlier pass), but not backed by a regression test — the claim rested on code review, not a runnable check.
+This was recorded as a Known Gap in `docs/dev-log.md` at the time (an earlier pass), but not backed by a regression test — the claim rested on code review, not a runnable check.
 
 ## Decision
 

@@ -203,7 +203,7 @@ member, not just members beyond the first — the definition above is
 symmetric ("shares a domain with at least one other account"), so a
 group's first-created account satisfies it too. The alternate ("beyond
 first") count is derivable from the reported duplicate-group count without
-a second metric; see docs/STATUS.md for that as a v0.2 open question.
+a second metric; see docs/dev-log.md for that as a v0.2 open question.
 **Gate:** requires `CoverageSample.accountsHydrated` to be true (a
 build-order precondition, not an adapter capability) — returns
 `not_instrumented` otherwise, same as an `AdapterCapabilities`-gated metric.

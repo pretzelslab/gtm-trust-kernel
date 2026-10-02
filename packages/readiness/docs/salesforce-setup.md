@@ -7,7 +7,7 @@ from Salesforce; the adapter has no write path (`writeGranularity: 'none'`).
 Anything marked **unverified** is written from Salesforce's documentation
 or from the adapter's code, and has not yet been checked against a live
 org. Items checked on the 2026-09-30 Developer Edition smoke run are
-marked **confirmed** or **partly confirmed** (see `STATUS.md`, "Developer
+marked **confirmed** or **partly confirmed** (see `dev-log.md`, "Developer
 Edition smoke run").
 
 ## 1. Get a Developer Edition org
