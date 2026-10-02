@@ -1,13 +1,13 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { runScan } from '../src/scan.js';
 
 describe('runScan --json', () => {
   let outDir: string;
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<typeof console.log>;
+  let errSpy: MockInstance<typeof console.error>;
 
   beforeEach(async () => {
     outDir = await mkdtemp(path.join(os.tmpdir(), 'gtm-cli-test-'));
