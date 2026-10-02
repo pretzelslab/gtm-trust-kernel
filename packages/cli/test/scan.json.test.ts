@@ -21,13 +21,13 @@ describe('runScan --json', () => {
     await rm(outDir, { recursive: true, force: true });
   });
 
-  it('writes only parseable report JSON to stdout, and plan/progress lines to stderr', async () => {
+  it('writes only parseable report JSON to stdout, and the plan (--verbose) and summary to stderr', async () => {
     const stdoutChunks: string[] = [];
     // Capture the real console.log at call time: the mock installed in
     // beforeEach is what runScan swaps out and restores.
     const logBefore = console.log;
 
-    await runScan({ outDir, useNarrative: false, useJson: true, stdout: (t) => stdoutChunks.push(t) });
+    await runScan({ outDir, useNarrative: false, useJson: true, verbose: true, stdout: (t) => stdoutChunks.push(t) });
 
     const stdout = stdoutChunks.join('');
     const parsed: unknown = JSON.parse(stdout);
@@ -39,7 +39,8 @@ describe('runScan --json', () => {
     expect(logSpy).not.toHaveBeenCalled();
     const stderrText = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
     expect(stderrText).toContain('Stratified sample plan');
-    expect(stderrText).toContain('Report written to:');
+    expect(stderrText).toContain('4 ready, 4 use with caution, 0 not ready');
+    expect(stderrText).toContain('latest-plain.html for the plain-English report');
 
     // console.log is restored afterwards.
     expect(console.log).toBe(logBefore);
@@ -74,7 +75,10 @@ describe('runScan without --json', () => {
       await runScan({ outDir, useNarrative: false, useJson: false, stdout: (t) => stdoutChunks.push(t) });
       expect(stdoutChunks).toEqual([]);
       const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-      expect(logged).toContain('Report written to:');
+      expect(logged).toContain('Demo scan of sample CRM data ("Healthy"): 4 ready, 4 use with caution, 0 not ready.');
+      expect(logged).toContain('latest-plain.html for the plain-English report');
+      // The sampling plan is shown only with --verbose.
+      expect(logged).not.toContain('Stratified sample plan');
     } finally {
       vi.restoreAllMocks();
       await rm(outDir, { recursive: true, force: true });

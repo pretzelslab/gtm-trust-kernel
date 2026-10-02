@@ -5,10 +5,12 @@
  * `MOCK_ORG_FIXTURES` or `buildFromFixture`, which would pull the other
  * three fixtures' data into this package's bundle).
  *
- * With `useJson`, stdout carries only the report JSON: the sampling plan
- * (printed by readiness's runSample via console.log) and the "Report
- * written" lines are routed to stderr instead. HTML reports are still
- * written to `outDir` either way.
+ * Output: after the reports are written, a short verdict summary and which
+ * file to open. The sampling plan (printed by readiness's runSample via
+ * console.log) and the full file paths appear only with `verbose`.
+ *
+ * With `useJson`, stdout carries only the report JSON; everything else goes
+ * to stderr. HTML reports are still written to `outDir` either way.
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -26,6 +28,8 @@ export interface ScanOptions {
   readonly outDir: string;
   readonly useNarrative: boolean;
   readonly useJson: boolean;
+  /** --verbose: also print the sampling plan and every file written. */
+  readonly verbose?: boolean;
   /** Where the report JSON goes when `useJson` is set. Defaults to process.stdout. */
   readonly stdout?: (text: string) => void;
   /**
@@ -48,6 +52,17 @@ async function buildDemoReport(): Promise<ReportData> {
   });
 }
 
+/** Runs fn with console.log silenced (restored even if fn throws). */
+async function withoutConsoleLog<T>(fn: () => Promise<T>): Promise<T> {
+  const original = console.log;
+  console.log = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.log = original;
+  }
+}
+
 /** Mirrors readiness's own cli.ts resolveNarrative: opt-in, loud failure on a missing key, never silently skipped. */
 async function resolveNarrative(data: ReportData, useNarrative: boolean): Promise<NarrativeResult | undefined | 'exit'> {
   if (!useNarrative) return undefined;
@@ -61,31 +76,53 @@ async function resolveNarrative(data: ReportData, useNarrative: boolean): Promis
   }
 }
 
-async function writeHtml(outDir: string, filename: string, latestFilename: string, html: string): Promise<void> {
+async function writeHtml(outDir: string, filename: string, latestFilename: string, html: string): Promise<string[]> {
   const filePath = path.join(outDir, filename);
   const latestPath = path.join(outDir, latestFilename);
   await writeFile(filePath, html, 'utf8');
   await writeFile(latestPath, html, 'utf8');
-  console.log(`Report written to: ${filePath}`);
-  console.log(`Also updated:      ${latestPath}`);
+  return [filePath, latestPath];
+}
+
+/** A path as the user would type it: relative when inside the working directory. */
+function displayPath(file: string): string {
+  const rel = path.relative(process.cwd(), file);
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file;
+}
+
+/** "4 ready, 4 use with caution, 0 not ready" (plus "N not measured" when any). */
+export function verdictSummary(data: ReportData): string {
+  const counts = data.org.capabilityVerdictCounts;
+  const parts = [`${counts.viable} ready`, `${counts.degraded} use with caution`, `${counts.blocked} not ready`];
+  if (counts.not_measured > 0) parts.push(`${counts.not_measured} not measured`);
+  return parts.join(', ');
 }
 
 async function scan(options: ScanOptions): Promise<void> {
   await mkdir(options.outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
-  const data = await buildDemoReport();
+  const data = options.verbose ? await buildDemoReport() : await withoutConsoleLog(buildDemoReport);
   const narrative = await resolveNarrative(data, options.useNarrative);
   if (narrative === 'exit') return;
 
-  const html = renderReportHtml(data, { narrative });
-  await writeHtml(options.outDir, `report-${timestamp}.html`, 'latest.html', html);
-  const plainHtml = renderPlainReportHtml(data);
-  await writeHtml(options.outDir, `report-${timestamp}-plain.html`, 'latest-plain.html', plainHtml);
+  const written = [
+    ...(await writeHtml(options.outDir, `report-${timestamp}.html`, 'latest.html', renderReportHtml(data, { narrative }))),
+    ...(await writeHtml(options.outDir, `report-${timestamp}-plain.html`, 'latest-plain.html', renderPlainReportHtml(data))),
+  ];
 
   if (options.useJson) {
     const write = options.stdout ?? ((text: string) => process.stdout.write(text));
     write(`${JSON.stringify(data, null, 2)}\n`);
+  }
+
+  console.log(`Demo scan of sample CRM data ("${data.org.orgLabel}"): ${verdictSummary(data)}.`);
+  console.log(
+    `Open ${displayPath(path.join(options.outDir, 'latest-plain.html'))} for the plain-English report ` +
+      `(full detail: ${displayPath(path.join(options.outDir, 'latest.html'))}).`,
+  );
+  if (options.verbose) {
+    for (const file of written) console.log(`Wrote ${file}`);
   }
 
   const failOn = evaluateFailOn(data.capabilities, options.failOn);
@@ -100,9 +137,9 @@ export async function runScan(options: ScanOptions): Promise<void> {
     await scan(options);
     return;
   }
-  // Readiness prints the sampling plan with console.log, and the helpers
-  // above print progress the same way. Send all of it to stderr so stdout
-  // stays parseable JSON; restore console.log even if the scan throws.
+  // With --json, stdout carries only the report JSON: send every human line
+  // (the summary, and with --verbose the plan and file list) to stderr.
+  // Restore console.log even if the scan throws.
   const originalLog = console.log;
   console.log = (...args: unknown[]) => console.error(...args);
   try {
