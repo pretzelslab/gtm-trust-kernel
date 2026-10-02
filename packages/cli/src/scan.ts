@@ -21,6 +21,7 @@ import { buildReportData, type ReportData } from '@gtm-trust-kernel/readiness/re
 import { evaluateFailOn, type FailOnVerdict } from '@gtm-trust-kernel/readiness/report/failOn.js';
 import { buildNarrative, type NarrativeResult } from '@gtm-trust-kernel/readiness/report/narrative.js';
 import { renderPlainReportHtml } from '@gtm-trust-kernel/readiness/report/plainReport.js';
+import { buildFullNarrative } from '@gtm-trust-kernel/readiness/report/plainSummary.js';
 import { renderReportHtml } from '@gtm-trust-kernel/readiness/report/render.js';
 
 export interface ScanOptions {
@@ -95,11 +96,17 @@ function displayPath(file: string): string {
   return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file;
 }
 
-/** "4 ready, 4 use with caution, 0 not ready" (plus "N not measured" when any). */
+/**
+ * "4 ready, 3 use with caution, 1 not ready" (plus "N not measured" when
+ * any): the same buckets as the plain-English report the summary points to
+ * (buildFullNarrative), not raw verdict counts. They differ where a use
+ * case needs more than "degraded" to be usable at all (autonomous
+ * write-back), which the plain report lists as not ready.
+ */
 export function verdictSummary(data: ReportData): string {
-  const counts = data.org.capabilityVerdictCounts;
-  const parts = [`${counts.viable} ready`, `${counts.degraded} use with caution`, `${counts.blocked} not ready`];
-  if (counts.not_measured > 0) parts.push(`${counts.not_measured} not measured`);
+  const b = buildFullNarrative(data);
+  const parts = [`${b.ready.length} ready`, `${b.caution.length} use with caution`, `${b.notReady.length} not ready`];
+  if (b.notMeasured.length > 0) parts.push(`${b.notMeasured.length} not measured`);
   return parts.join(', ');
 }
 

@@ -1,85 +1,155 @@
 # @gtm-trust-kernel/adapters
 
-## What is this
+[![npm](https://img.shields.io/npm/v/@gtm-trust-kernel/adapters)](https://www.npmjs.com/package/@gtm-trust-kernel/adapters)
+[![ci](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/pretzelslab/gtm-trust-kernel/blob/master/LICENSE)
 
-A CRM adapter is a small piece of code that lets the trust kernel read from, and safely write to, one particular CRM. This package defines the shared rules every adapter must follow, plus a fake in-memory CRM for testing. Every adapter is meant to pass the same tests, so the health check works the same way whichever CRM sits underneath. A read-only Salesforce adapter is included (experimental: unit-tested against a fake Salesforce API, not yet validated on a live org), and other CRMs can be added via adapters.
+**One interface for reading CRM data, with a contract test suite that
+proves an adapter behaves the same as every other.**
+
+This package is the CRM layer of the
+[GTM trust kernel](https://github.com/pretzelslab/gtm-trust-kernel): the
+`CrmAdapter` interface, a canonical record model (accounts, deals,
+contacts, activities, notes, stage history), a trust envelope for
+free-text fields, an in-memory mock CRM, a **read-only** Salesforce
+adapter, and the shared contract suites every adapter must pass.
 
 ## Who it's for
 
-- **Developers** adding support for a new CRM, or testing against the mock one.
-- **Non-developers**: this is a building block. To just check your CRM's health, use the [`gtm-trust-kernel` CLI](https://www.npmjs.com/package/gtm-trust-kernel).
+- **Developers adding a CRM** (HubSpot, Dynamics, ...): implement
+  `CrmAdapter`, then run the contract suite against it.
+- **Developers testing CRM-reading code** without a real org: use the mock.
+- **Anyone who just wants a CRM health report:** you don't need this
+  package directly. Use the [`gtm-trust-kernel`](https://www.npmjs.com/package/gtm-trust-kernel) CLI.
 
-## Try it in 1 minute
-
-You don't install this package to see it work. It powers the CLI's demo (Node.js 22 or newer required):
+## Install
 
 ```bash
-npx gtm-trust-kernel scan --demo
+npm install @gtm-trust-kernel/adapters
 ```
 
-It uses a built-in sample CRM, so it doesn't connect to any real CRM. You'll see a sampling plan in the terminal, and the health report is written to `./out` (open `out/latest.html`). Add `--json` to print the report data to stdout, or `--narrative` (needs `ANTHROPIC_API_KEY`; sends report data to Anthropic's API) for an AI-written summary.
+Node.js 22 or newer. **ESM only:** use `import`, not `require()`. From
+CommonJS, use a dynamic `import()`.
 
-## Reference
+## Quickstart (60 seconds, no CRM needed)
 
-CRM adapter contract, canonical model and trust envelope, and the mock
-adapter — the CRM-agnostic layer of the
-[GTM trust kernel](https://github.com/pretzelslab/gtm-trust-kernel).
+```js
+// quickstart.mjs
+import { makeMockAdapter } from '@gtm-trust-kernel/adapters/fixtures';
 
-### What it exports
+const adapter = makeMockAdapter();
+const caps = adapter.capabilities();
+console.log(`writes: ${caps.writeGranularity}, stage history: ${caps.stageHistory}`);
 
-The bare `@gtm-trust-kernel/adapters` import resolves to `types.js` only (types and interfaces, no runtime code, and no contract suites); everything else is a subpath:
+const page = await adapter.listOpportunities({ limit: 3 });
+for (const o of page.items) console.log(o.ref.id, o.stage, o.name);
+```
+
+```text
+$ node quickstart.mjs
+writes: field, stage history: true
+opp-1 negotiation Quillfeather — Platform expansion
+opp-2 discovery Quillfeather — Pilot
+```
+
+Every adapter answers the same calls with the same canonical records, so
+code written against the mock runs unchanged against Salesforce.
+
+## Salesforce (read-only)
+
+```js
+import { SalesforceAdapter, loadSalesforceConfigFromEnv } from '@gtm-trust-kernel/adapters/salesforce.js';
+
+const sf = new SalesforceAdapter(loadSalesforceConfigFromEnv());
+const page = await sf.listOpportunitiesForSample({ asOf: new Date().toISOString(), closedWithinMonths: 12, limit: 200 });
+```
+
+**It never writes to Salesforce.** `capabilities().writeGranularity` is
+`'none'`, and `applyFieldWrite()` always returns `rejected` without
+calling the API. It signs in with a connected app (OAuth 2.0 client
+credentials) and reads opportunities, contact roles, accounts, contacts,
+Tasks, Events, Notes, Enhanced Notes and stage history. It passes the
+shared contract suite against a live Developer Edition org.
+
+Settings (environment variables):
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `SF_CLIENT_ID`, `SF_CLIENT_SECRET` | yes | The connected app's consumer key and secret |
+| `SF_INSTANCE_URL` | yes | Your org's My Domain URL, e.g. `https://acme.my.salesforce.com` |
+| `SF_API_VERSION` | no | Default `v62.0` |
+| `SF_TOKEN_CACHE_PATH` | no | Where the access token is cached |
+| `SF_ACTIVITY_CAPTURE` | no | `auto` if email/calendar sync logs activity; unset means `manual` |
+| `SF_NOTE_FULLTEXT_FETCH_LIMIT` | no | Enhanced Note bodies fetched in full per run (default 200) |
+| `SF_STAGE_MAP_PATH` | no | JSON file mapping your stage labels to the canonical stages |
+
+Step-by-step org setup (connected app, Run As user permissions, seed
+data): [Salesforce setup](https://github.com/pretzelslab/gtm-trust-kernel/blob/master/packages/readiness/docs/salesforce-setup.md).
+
+## What it exports
+
+The bare import resolves to types only; everything else is a subpath.
 
 | Subpath | Contents |
 |---|---|
-| `@gtm-trust-kernel/adapters` (and `/types.js`) | `CrmAdapter`, `SecondSourceAdapter` interfaces and their supporting types (`AdapterCapabilities`, `FieldWrite`, `SecondSourceCapabilities`, etc.) |
-| `@gtm-trust-kernel/adapters/mock.js` | `MockAdapter`, `MockSecondSourceAdapter` — in-memory reference implementations, useful for testing against the contract without a real CRM |
-| `@gtm-trust-kernel/adapters/salesforce.js` | `SalesforceAdapter`, `loadSalesforceConfigFromEnv`, `loadStageMapFile` (reads the `SF_STAGE_MAP_PATH` file) |
-| `@gtm-trust-kernel/adapters/model/canonical.js` | The canonical CRM record model (`Account`, `Contact`, `Opportunity`, `Activity`, `Note`, stage history types, `CANONICAL_STAGE_ORDER`) |
-| `@gtm-trust-kernel/adapters/model/trust.js` | `TrustTier`, `tag()` — the trust-envelope wrapper every free-text field is carried in |
-| `@gtm-trust-kernel/adapters/fixtures` | Shared mock-data builders (`makeMockAdapter`, `makeMockSecondSourceAdapter`, `makeOrgData`, `makeSecondSourceOrgData`, `makeEvidenceSet`) |
-| `@gtm-trust-kernel/adapters/contract/adapter` | The `CrmAdapter` contract suite. **Requires `vitest`** (optional peer dependency) |
-| `@gtm-trust-kernel/adapters/contract/secondSource` | The `SecondSourceAdapter` contract suite. **Requires `vitest`** (optional peer dependency) |
+| `@gtm-trust-kernel/adapters` (and `/types.js`) | `CrmAdapter`, `SecondSourceAdapter`, `AdapterCapabilities`, `AdapterError` and the supporting types |
+| `/mock.js` | `MockAdapter`, `MockSecondSourceAdapter`: in-memory reference implementations |
+| `/salesforce.js` | `SalesforceAdapter`, `loadSalesforceConfigFromEnv`, `loadStageMapFile` |
+| `/model/canonical.js` | The canonical record model and `CANONICAL_STAGE_ORDER` |
+| `/model/trust.js` | `TrustTier`, `tag()`: the trust envelope every free-text field is carried in |
+| `/fixtures` | Mock data builders for tests (`makeMockAdapter`, `makeOrgData`, ...) |
+| `/contract/adapter` | The `CrmAdapter` contract suite (**for adapter authors; needs `vitest`**) |
+| `/contract/secondSource` | The `SecondSourceAdapter` contract suite (same) |
 
-### The adapter contract
+## For adapter authors: the contract suite
 
-"CRM-agnostic" is a property this package proves, not just claims. Anyone
-implementing a new `CrmAdapter` (or `SecondSourceAdapter`) runs their
-implementation through the same shared vitest suite every existing adapter
-passes:
+"CRM-agnostic" is something each adapter proves, not just claims. Run your
+adapter through the same vitest suite the mock and Salesforce pass:
 
 ```ts
 import { describe } from 'vitest';
 import { runAdapterContract } from '@gtm-trust-kernel/adapters/contract/adapter';
 import { makeMyAdapter } from './myAdapter.js';
 
-describe('my-crm', () => runAdapterContract(() => makeMyAdapter()));
+describe('my-crm', () =>
+  runAdapterContract(() => ({
+    adapter: makeMyAdapter(),
+    knownOpportunityId: '...', // ids that exist in your test org
+    knownAccountId: '...',
+    knownContactId: '...',
+  })),
+);
 ```
 
-`runAdapterContract` takes a factory returning a `ContractHarness` (your
-adapter instance plus known record ids from your fixture org) and registers
-`describe`/`it` blocks — it must be called from inside a vitest test file,
-not run standalone. `runSecondSourceContract`
-(`@gtm-trust-kernel/adapters/contract/secondSource`) is the equivalent suite for
-`SecondSourceAdapter` implementations, taking a `SecondSourceContractHarness`.
+The suite deliberately tests the unhappy paths where adapters diverge:
+pagination determinism, empty-not-throw for missing records and
+undeclared capabilities, batch limits, quota accounting, concurrency and
+idempotency of writes (skipped when `writeGranularity` is `'none'`).
 
-`vitest` is an optional peer dependency: it is only needed if you import
-`./contract/*`. The runtime entries (`.`, `types.js`, `mock.js`, `salesforce.js`,
-`model/*`, `fixtures`) never import it.
+Two optional knobs for CRMs with their own rules:
 
-Both suites deliberately test the *unhappy* paths — concurrency, idempotency,
-capability degradation, pagination determinism, quota accounting — since
-that's where adapters silently diverge.
+- `ContractHarness.unresolvableId(objectType, index?)`: return a
+  well-formed id that names no record, if your adapter rejects ids not in
+  its own format (Salesforce passes ids like `001000000000000AAA`).
+- `AdapterCapabilities.minPageSize`: declare it if your CRM returns at
+  least N rows per page whatever limit is asked (Salesforce: 200).
 
-#### `vitest` peer dependency
+`vitest` (2.1.3 or later, below 6) is an optional peer dependency, needed
+only for the `/contract/*` subpaths.
 
-The contract-suite subpaths (`./contract/*`) import `describe`/
-`expect`/`it` from `vitest`, declared as an **optional peer dependency**.
-You only need `vitest` installed if you actually import one of those two
-subpaths to run the contract suite against your own adapter — importing
-`mock.js`, `types.js`, or any of the other subpaths never requires it.
+## Limitations
 
-### More
+- Salesforce is the only real CRM so far, and it is read-only.
+- Activity capture on Salesforce is declared (`SF_ACTIVITY_CAPTURE`), not
+  detected.
+- Activities logged only against a deal's contacts aren't counted yet.
 
-Part of the gtm-trust-kernel monorepo — see
-<https://github.com/pretzelslab/gtm-trust-kernel> for the full readiness
-methodology and the `gtm-trust-kernel` CLI built on top of this package.
+## More
+
+- [Changelog](https://github.com/pretzelslab/gtm-trust-kernel/blob/master/packages/adapters/CHANGELOG.md)
+- [Security policy](https://github.com/pretzelslab/gtm-trust-kernel/blob/master/SECURITY.md)
+- [The GTM trust kernel](https://github.com/pretzelslab/gtm-trust-kernel): the readiness report and the proposal kernel built on this package
+
+## License
+
+MIT

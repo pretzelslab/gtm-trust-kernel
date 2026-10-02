@@ -58,7 +58,7 @@ describe.concurrent('bad usage', { timeout: 60_000 }, () => {
   it('prints the summary and the file to open, without the plan, by default', () => {
     const r = cli('scan', '--demo');
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain('Demo scan of sample CRM data ("Healthy"): 4 ready, 4 use with caution, 0 not ready.');
+    expect(r.stdout).toContain('Demo scan of sample CRM data ("Healthy"): 4 ready, 3 use with caution, 1 not ready.');
     expect(r.stdout).toContain(`Open ${path.join('out', 'latest-plain.html')} for the plain-English report`);
     expect(r.stdout).not.toContain('Stratified sample plan');
   });
@@ -72,7 +72,7 @@ describe('runScan --verbose', () => {
       await runScan({ outDir, useNarrative: false, useJson: false, verbose: true });
       const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
       expect(logged).toContain('Stratified sample plan');
-      expect(logged).toContain('4 ready, 4 use with caution, 0 not ready');
+      expect(logged).toContain('4 ready, 3 use with caution, 1 not ready');
       expect(logged.match(/^Wrote /gm)).toHaveLength(4);
     } finally {
       vi.restoreAllMocks();
