@@ -14,7 +14,8 @@ evidence and a person approves it. Every step is logged and can be undone.
 built-in sample data; live Salesforce scanning is not in the CLI yet.
 
 [![ci](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/gtm-trust-kernel)](https://www.npmjs.com/package/gtm-trust-kernel)
+[![npm: cli](https://img.shields.io/npm/v/gtm-trust-kernel?label=gtm-trust-kernel)](https://www.npmjs.com/package/gtm-trust-kernel)
+[![npm: adapters](https://img.shields.io/npm/v/@gtm-trust-kernel/adapters?label=%40gtm-trust-kernel%2Fadapters)](https://www.npmjs.com/package/@gtm-trust-kernel/adapters)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ## The problem
@@ -56,6 +57,8 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 |---|---|
 | `--json` | Also print the report data as JSON |
 | `--narrative` | Add an AI-written summary (needs `ANTHROPIC_API_KEY`; sends report data to Anthropic's API) |
+| `--verbose` | Also print the sampling plan and every file written |
+| `--fail-on [<verdicts>]` | For CI: exit 2 if any use case has a listed verdict (a bare `--fail-on` means `blocked`) |
 
 ## How to read the report
 
@@ -106,7 +109,7 @@ npm run ci
 - The injection guard is a short list of phrases plus a canary token. There is no injection test corpus or red-team report yet.
 - The audit ledger is in memory only and is not anchored outside itself, so rewriting the whole chain would go undetected.
 - Writes are per field today, not atomic per record. If a later field fails, the earlier ones are rolled back; if that rollback can't complete, the proposal can't be retried and the unrestored field is logged.
-- The Salesforce adapter is read-only and experimental. It is unit-tested against an in-memory copy of the Salesforce API, but not yet validated against the contract suite on a live org.
+- The Salesforce adapter is read-only and early. It passes the shared contract suite against a live Developer Edition org (re-run weekly in CI), but hasn't been run against large production orgs yet.
 - On Salesforce, activity capture is something you declare (`SF_ACTIVITY_CAPTURE=auto`), not something the scan detects. Until you set it, activity-based use cases read **not measured**.
 - Activities logged only against a deal's contacts (not the deal itself) aren't counted yet, so activity coverage can read lower than it is.
 - Enhanced Note text is read from Salesforce's preview; long notes are fetched in full up to 200 per run (`SF_NOTE_FULLTEXT_FETCH_LIMIT`). Past that, note length is shown as a floor.
@@ -118,13 +121,13 @@ npm run ci
 | done | Canonical model, adapter contract, mock adapter, CI |
 | done | Proposal kernel, audit ledger, deterministic signals |
 | done | Readiness Scan: seven dimensions, HTML report, optional AI summary |
-| done | npm packages 0.1.0 |
-| done | Salesforce adapter (read-only, experimental, not yet validated against the contract suite) |
+| done | npm packages: `@gtm-trust-kernel/adapters`, `gtm-trust-kernel` |
+| done | Salesforce adapter (read-only; passes the contract suite on a live org, weekly in CI) |
 | done | Salesforce: contact roles, Enhanced Notes and meetings, custom stage map, declared activity capture, newest-first sampling of eligible deals |
 | done | "Not measured" verdict for data the scan can't see |
-| next | `--out` flag to choose the report folder (0.1.1) |
+| next | `--out` flag to choose the report folder |
 | next | Approver role check for I2 |
-| next | Per-record atomic writes via a multi-field adapter call (0.2) |
+| next | Per-record atomic writes via a multi-field adapter call |
 | next | Live scan in the published CLI |
 | next | Injection test corpus and red-team report |
 | next | Evaluation harness with labelled ground truth |
@@ -133,4 +136,4 @@ npm run ci
 
 ## License
 
-MIT
+MIT. See also [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md).

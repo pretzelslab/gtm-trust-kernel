@@ -2,7 +2,7 @@
   "name": "@gtm-trust-kernel/adapters",
   "version": "0.2.0",
   "type": "module",
-  "description": "CRM adapter contract, canonical model and trust envelope, and the mock adapter.",
+  "description": "One CRM-reading interface with a contract test suite: canonical model, trust envelope, in-memory mock and a read-only Salesforce adapter.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
   "bugs": {
     "url": "https://github.com/pretzelslab/gtm-trust-kernel/issues"
   },
-  "keywords": ["crm", "adapter", "salesforce", "canonical-model", "trust-envelope", "gtm"],
+  "keywords": ["crm", "adapter", "salesforce", "read-only", "contract-testing", "canonical-model", "trust-envelope", "gtm"],
   "files": ["dist", "CHANGELOG.md"],
   "engines": { "node": ">=22" },
   "publishConfig": {

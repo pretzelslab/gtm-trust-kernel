@@ -2,7 +2,7 @@
   "name": "gtm-trust-kernel",
   "version": "0.1.0",
   "type": "module",
-  "description": "CLI for the GTM trust kernel readiness report.",
+  "description": "Check whether your CRM data is ready for AI: a scored, evidence-backed readiness report in one command.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,11 +13,11 @@
   "bugs": {
     "url": "https://github.com/pretzelslab/gtm-trust-kernel/issues"
   },
-  "keywords": ["cli", "readiness", "crm", "gtm", "npx", "audit"],
+  "keywords": ["cli", "crm", "data-quality", "ai-readiness", "salesforce", "revops", "gtm", "audit"],
   "bin": {
     "gtm-trust-kernel": "dist/cli.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "CHANGELOG.md"],
   "engines": { "node": ">=22" },
   "publishConfig": {
     "access": "public"
