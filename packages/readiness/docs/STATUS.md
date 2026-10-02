@@ -15,6 +15,39 @@ Those rules are not repeated here.
 
 ---
 
+## Live child-pagination check, 2026-10-02
+
+**Seed.** 250 Tasks (`CONTRACT-PAGINATION 1`..`250`, Status Completed)
+on Opportunity `<pagination-deal-id>`, owned by the connected app's Run As
+user `<run-as-user-id>`, inserted by the user through the sObject
+Collections API with a one-off script they ran themselves (post-check
+COUNT() 250, 0 errors). That script and its matching cleanup script were
+kept in the session scratchpad, not this repo; the repo's route is still
+`scripts/seed/` (CSV + `sf data import bulk`). An earlier `sf` import
+was not visible to the tests; the cause wasn't confirmed, but owning the
+Tasks as the Run As user fixed it.
+
+**Run** (`npm run test:live`, read-only, approved once): **43 passed, 0
+skipped, 0 failed.**
+- Tasks for the deal: **1 child page of 201 rows** (the subquery's
+  `LIMIT 201`, cap 200 + 1), **no `nextRecordsUrl` on the child**.
+  Events: 1 page, 0 rows. The adapter returned 200 activities and flagged
+  the deal truncated, as asserted.
+- So Salesforce did not page a 201-row child result. Child paging is
+  still unobserved on a real org, and its handling is still covered by
+  the doc-based fake tests only. Because the subquery is capped at
+  limit + 1, a deal never needs more than 201 child rows.
+- API calls: the readiness-shaped read pass **12 of the 25 budget**
+  (unchanged; the seeded deal's 201 Tasks came back inline). The
+  pagination test's `getActivitiesByOpportunity` used 2 calls (Tasks and
+  Events subqueries); it is a separate test, not in the budgeted pass
+  (12 + 2 = 14 would still be under 25). Its Task discovery listing was
+  not counted.
+
+**Cleanup** of the 250 Tasks is the user's call (scratchpad cleanup
+script, or the `scripts/seed/README.md` commands). The weekly live job
+reads them while they exist.
+
 ## Handoff, 2026-10-01 (Phase 3b done)
 
 **HEAD and CI.** Last code commit `df16a4f`, pushed; GitHub CI green (run
