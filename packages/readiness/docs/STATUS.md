@@ -59,14 +59,23 @@ against the doc-based fake; no real org has exercised it yet.
 passed; same results as above (read pass 12 of 25 calls; Tasks 1 page of
 201 rows, no child `nextRecordsUrl`).
 
-**Adapters 0.2.0: publish pending, blocked on npm auth.** Prepared in
-`077f258` (version, CHANGELOG, `npm pack --dry-run` checked), not
-published or tagged: `npm login` for `pretzelslabs_org` falls back to an
-email OTP that doesn't arrive. 0.1.0 (adapters, and the CLI as
-`gtm-trust-kernel`) was published by hand from the maintainer's machine as
-`pretzelslabs_org` on 2026-09-29, with no provenance attestation. The
-repo has no publish workflow, no `NPM_TOKEN` secret and no trusted
-publishing. Tag `adapters-v0.2.0` only after it is on the registry.
+**Adapters 0.2.0 published 2026-10-02** (registry time 15:00:12 UTC, by
+`pretzelslabs_org`; now `latest`). Route: `npm login` was blocked (its
+email OTP never arrived), so the maintainer created a one-day granular
+token (read/write on `@gtm-trust-kernel/adapters` only) on npmjs.com,
+published from `packages/adapters` with a temporary `--userconfig` file
+outside the repo (deleted afterwards), then revoked the token. Verified:
+registry `dist.shasum` `5c6698092d30811a55f0eeebc7ff7ffa9493927f` and
+`gitHead` `b8304ce` both match the pre-publish `npm pack --dry-run`.
+Tagged `adapters-v0.2.0` on `b8304ce` and pushed. A clean-room install
+outside the repo imports it (`minPageSize`: mock honours it, Salesforce
+declares 200; contract types include `unresolvableId`).
+
+**Follow-up before the next CLI release:** set up npm trusted publishing
+(a `publish.yml` workflow with `id-token: write`, enabled once in the
+package settings on npmjs.com), so releases need no token and carry
+provenance. The CLI's next release depends on adapters `^0.2.0`, which
+is now on the registry.
 
 ## Handoff, 2026-10-01 (Phase 3b done)
 
