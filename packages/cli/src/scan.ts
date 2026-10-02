@@ -17,7 +17,6 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
 import { healthyFixture } from '@gtm-trust-kernel/readiness/fixtures/healthy.js';
-import { AnthropicNarrativeModelClient } from '@gtm-trust-kernel/readiness/report/anthropicNarrativeModelClient.js';
 import { buildReportData, type ReportData } from '@gtm-trust-kernel/readiness/report/buildReport.js';
 import { evaluateFailOn, type FailOnVerdict } from '@gtm-trust-kernel/readiness/report/failOn.js';
 import { buildNarrative, type NarrativeResult } from '@gtm-trust-kernel/readiness/report/narrative.js';
@@ -63,10 +62,16 @@ async function withoutConsoleLog<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Mirrors readiness's own cli.ts resolveNarrative: opt-in, loud failure on a missing key, never silently skipped. */
+/**
+ * Mirrors readiness's own cli.ts resolveNarrative: opt-in, loud failure on a
+ * missing key, never silently skipped. The narrative client (the only code
+ * that imports @anthropic-ai/sdk) is loaded here, so a scan without
+ * --narrative never loads the SDK.
+ */
 async function resolveNarrative(data: ReportData, useNarrative: boolean): Promise<NarrativeResult | undefined | 'exit'> {
   if (!useNarrative) return undefined;
   try {
+    const { AnthropicNarrativeModelClient } = await import('@gtm-trust-kernel/readiness/report/anthropicNarrativeModelClient.js');
     const client = new AnthropicNarrativeModelClient();
     return await buildNarrative(data, client);
   } catch (err) {

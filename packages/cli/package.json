@@ -24,8 +24,8 @@
   },
   "dependencies": {
     "@gtm-trust-kernel/adapters": "^0.2.0",
-    "@anthropic-ai/sdk": "0.128.0",
-    "tldts": "7.4.13"
+    "@anthropic-ai/sdk": "^0.128.0",
+    "tldts": "^7.4.13"
   },
   "devDependencies": {
     "tsup": "^8.3.0"
