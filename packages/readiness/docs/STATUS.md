@@ -77,11 +77,13 @@ declares 200; contract types include `unresolvableId`).
 `npm ci`, `npm run ci`, then `npm publish -w <package> --provenance`).
 It publishes the code at the release tag and refuses if the tag is
 missing, the tag's version differs, or the version is already on npm.
-The release flow is in `RELEASING.md`. **Pending on the maintainer:**
-the one-time Trusted Publisher setting on npmjs.com for both
+The release flow is in `RELEASING.md`. **npm side configured
+2026-10-02:** the maintainer set Trusted Publisher on npmjs.com for both
 `@gtm-trust-kernel/adapters` and `gtm-trust-kernel` (GitHub Actions,
-`pretzelslab/gtm-trust-kernel`, `publish.yml`). The workflow has not been
-dispatched. The CLI's next release depends on adapters `^0.2.0`, which is
+`pretzelslab/gtm-trust-kernel`, `publish.yml`, npm publish allowed). Token
+publishing stays allowed until the first successful workflow release;
+after that, the maintainer may disallow tokens. The workflow has not been
+dispatched yet. The CLI's next release depends on adapters `^0.2.0`, which is
 on the registry.
 
 ## Handoff, 2026-10-01 (Phase 3b done)
