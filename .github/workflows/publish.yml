@@ -1,0 +1,117 @@
+name: publish
+
+# Publishes one package to npm with trusted publishing (OIDC): no npm token,
+# no interactive login, and a provenance attestation on the release. See
+# RELEASING.md for the release flow and the one-time npmjs.com setup.
+#
+# Manual only. It publishes exactly the code at the package's release tag
+# (adapters-v<version> or cli-v<version>, the version in that package's
+# package.json at the dispatched ref), and refuses to run if the tag is
+# missing, if the tag's package.json has another version, or if that
+# version is already on the registry.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        type: choice
+        options:
+          - adapters
+          - cli
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_DIR: packages/${{ inputs.package }}
+      TAG_PREFIX: ${{ inputs.package }}-v
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the package, version and tag
+        id: pkg
+        run: |
+          name=$(node -p "require('./$PACKAGE_DIR/package.json').name")
+          version=$(node -p "require('./$PACKAGE_DIR/package.json').version")
+          tag="$TAG_PREFIX$version"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Package $name, version $version, tag $tag"
+
+      - name: Refuse if the release tag doesn't exist
+        env:
+          TAG: ${{ steps.pkg.outputs.tag }}
+        run: |
+          if ! git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            echo "::error::Tag $TAG does not exist. Tag the release commit and push the tag first (RELEASING.md)."
+            exit 1
+          fi
+
+      - name: Check out the release tag
+        env:
+          TAG: ${{ steps.pkg.outputs.tag }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          git checkout --detach "refs/tags/$TAG"
+          tagged=$(node -p "require('./$PACKAGE_DIR/package.json').version")
+          if [ "$tagged" != "$VERSION" ]; then
+            echo "::error::$TAG has version $tagged in $PACKAGE_DIR/package.json, not $VERSION."
+            exit 1
+          fi
+          echo "Publishing from $TAG ($(git rev-parse --short HEAD))"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - name: Install npm 11
+        run: |
+          npm install -g npm@11
+          node -e "
+            const [a, b, c] = process.argv[1].split('.').map(Number);
+            const ok = a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1)));
+            if (!ok) { console.error('npm ' + process.argv[1] + ' is older than 11.5.1'); process.exit(1); }
+            console.log('npm ' + process.argv[1]);
+          " "$(npm --version)"
+
+      - name: Refuse if the version is already on the registry
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          set +e
+          out=$(npm view "$NAME@$VERSION" version 2>&1)
+          status=$?
+          set -e
+          if [ $status -eq 0 ] && [ -n "$out" ]; then
+            echo "::error::$NAME@$VERSION is already on the registry."
+            exit 1
+          fi
+          if [ $status -ne 0 ] && ! echo "$out" | grep -q E404; then
+            echo "::error::Could not check the registry: $out"
+            exit 1
+          fi
+          echo "$NAME@$VERSION is not on the registry yet."
+
+      - run: npm ci
+
+      - name: Typecheck and tests
+        run: npm run ci
+
+      - name: Publish with provenance
+        run: npm publish -w "$PACKAGE_DIR" --provenance

@@ -71,11 +71,18 @@ Tagged `adapters-v0.2.0` on `b8304ce` and pushed. A clean-room install
 outside the repo imports it (`minPageSize`: mock honours it, Salesforce
 declares 200; contract types include `unresolvableId`).
 
-**Follow-up before the next CLI release:** set up npm trusted publishing
-(a `publish.yml` workflow with `id-token: write`, enabled once in the
-package settings on npmjs.com), so releases need no token and carry
-provenance. The CLI's next release depends on adapters `^0.2.0`, which
-is now on the registry.
+**Trusted publishing: set up in the repo, npm side pending.** Added
+`.github/workflows/publish.yml` (manual dispatch with a package input,
+`adapters` or `cli`; `id-token: write`, `contents: read`; npm 11.5.1+;
+`npm ci`, `npm run ci`, then `npm publish -w <package> --provenance`).
+It publishes the code at the release tag and refuses if the tag is
+missing, the tag's version differs, or the version is already on npm.
+The release flow is in `RELEASING.md`. **Pending on the maintainer:**
+the one-time Trusted Publisher setting on npmjs.com for both
+`@gtm-trust-kernel/adapters` and `gtm-trust-kernel` (GitHub Actions,
+`pretzelslab/gtm-trust-kernel`, `publish.yml`). The workflow has not been
+dispatched. The CLI's next release depends on adapters `^0.2.0`, which is
+on the registry.
 
 ## Handoff, 2026-10-01 (Phase 3b done)
 
