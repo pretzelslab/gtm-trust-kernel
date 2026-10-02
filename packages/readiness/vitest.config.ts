@@ -1,11 +1,20 @@
+import { defaultClientConditions, defaultServerConditions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
-// Vite 5 (installed here via vitest ^2.1.3): resolve.conditions is additive
-// to Vite's built-in defaults, so this only adds the "source" condition
-// rather than replacing anything. It's what makes @gtm-trust-kernel/adapters
-// resolve straight to its .ts source during tests, with no build step.
+// Adds the "source" export condition so workspace packages
+// (@gtm-trust-kernel/adapters, /readiness) resolve to their .ts source in
+// tests, with no build step. Vite 6+ (vitest 3+) replaces the default
+// conditions rather than adding to them, and resolves Node-side imports
+// with ssr.resolve.conditions, so both lists are set, each keeping Vite's
+// defaults. Without the ssr list, tests silently fall back to dist/ (and
+// fail where there is no build, as in CI).
 export default defineConfig({
   resolve: {
-    conditions: ['source'],
+    conditions: ['source', ...defaultClientConditions],
+  },
+  ssr: {
+    resolve: {
+      conditions: ['source', ...defaultServerConditions],
+    },
   },
 });
