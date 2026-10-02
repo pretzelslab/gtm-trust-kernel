@@ -25,5 +25,20 @@ jobs:
       - name: Report runs from source, without a build
         run: npm run report -w @gtm-trust-kernel/readiness
 
+  # Packs both published packages and lints the tarballs as npm would ship
+  # them (publint --strict, @arethetypeswrong/cli --profile esm-only); see
+  # scripts/lint-pack.mjs. Fails on any error or publint warning.
+  package-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Pack and lint both packages
+        run: npm run lint:pack
+
 # The Salesforce live contract run is in live-contract.yml (schedule and
 # manual dispatch only, never on a pull request).

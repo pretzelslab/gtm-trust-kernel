@@ -1,6 +1,7 @@
 node_modules/
 dist/
 out/
+.pack/
 .env
 .env.local
 coverage/
