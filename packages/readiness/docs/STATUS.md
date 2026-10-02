@@ -44,9 +44,29 @@ skipped, 0 failed.**
   (12 + 2 = 14 would still be under 25). Its Task discovery listing was
   not counted.
 
-**Cleanup** of the 250 Tasks is the user's call (scratchpad cleanup
-script, or the `scripts/seed/README.md` commands). The weekly live job
-reads them while they exist.
+**Seeded Tasks kept on purpose**, so the weekly live job keeps
+exercising the 201-row cap. To remove them later: the
+`scripts/seed/README.md` commands.
+
+**Known unobserved path: child pagination.** The subquery caps each
+deal's child rows at limit + 1 (201), and Salesforce returned all 201
+inline. The adapter's code for a child `nextRecordsUrl` is tested only
+against the doc-based fake; no real org has exercised it yet.
+
+**Weekly CI live job switched on.** The user added the `SF_CLIENT_ID`,
+`SF_CLIENT_SECRET` and `SF_INSTANCE_URL` repo secrets. One manual dispatch
+(run 37017382036): `secrets-check` success, `live-contract` success, 43
+passed; same results as above (read pass 12 of 25 calls; Tasks 1 page of
+201 rows, no child `nextRecordsUrl`).
+
+**Adapters 0.2.0: publish pending, blocked on npm auth.** Prepared in
+`077f258` (version, CHANGELOG, `npm pack --dry-run` checked), not
+published or tagged: `npm login` for `pretzelslabs_org` falls back to an
+email OTP that doesn't arrive. 0.1.0 (adapters, and the CLI as
+`gtm-trust-kernel`) was published by hand from the maintainer's machine as
+`pretzelslabs_org` on 2026-09-29, with no provenance attestation. The
+repo has no publish workflow, no `NPM_TOKEN` secret and no trusted
+publishing. Tag `adapters-v0.2.0` only after it is on the registry.
 
 ## Handoff, 2026-10-01 (Phase 3b done)
 
