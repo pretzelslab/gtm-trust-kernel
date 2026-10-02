@@ -21,6 +21,7 @@ import type {
   RecordRef,
   StageHistoryEntry,
 } from './model/canonical.js';
+import { AdapterError } from './types.js';
 import type {
   AdapterCapabilities,
   CrmAdapter,
@@ -138,7 +139,6 @@ export class MockAdapter implements CrmAdapter {
     this.listCalls += 1;
     const f = this.faults.failListOnCall;
     if (f && f.n === this.listCalls) {
-      const { AdapterError } = require('./types.js') as typeof import('./types.js');
       throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
     }
     const ts = (x: T) => x.modifiedAt ?? x.occurredAt ?? x.changedAt ?? x.createdAt ?? '';
@@ -159,7 +159,6 @@ export class MockAdapter implements CrmAdapter {
     this.listCalls += 1;
     const f = this.faults.failListOnCall;
     if (f && f.n === this.listCalls) {
-      const { AdapterError } = require('./types.js') as typeof import('./types.js');
       throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
     }
     const sorted = this.data.opportunities
@@ -189,7 +188,6 @@ export class MockAdapter implements CrmAdapter {
     this.getAccountsCalls += 1;
     const f = this.faults.failGetAccountsOnCall;
     if (f && f.n === this.getAccountsCalls) {
-      const { AdapterError } = require('./types.js') as typeof import('./types.js');
       throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
     }
 
@@ -207,7 +205,6 @@ export class MockAdapter implements CrmAdapter {
     this.getContactsCalls += 1;
     const f = this.faults.failGetContactsOnCall;
     if (f && f.n === this.getContactsCalls) {
-      const { AdapterError } = require('./types.js') as typeof import('./types.js');
       throw new AdapterError(`mock fault: ${f.kind}`, f.kind, f.kind !== 'auth', 1000);
     }
 

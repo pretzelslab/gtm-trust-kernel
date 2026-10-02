@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MockAdapter, type MockFaults, type MockOrgData } from '@gtm-trust-kernel/adapters/mock.js';
-import type { AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
+import { AdapterError, type AdapterCapabilities } from '@gtm-trust-kernel/adapters/types.js';
 import type {
   Account,
   Activity,
@@ -294,7 +294,9 @@ describe('hydrateAccounts', () => {
     const adapter = makeAdapter(accounts, { accountBatchLimit: 2 }, { failGetAccountsOnCall: { n: 2, kind: 'network' } });
     const sample = buildCoverageSample(result, adapter.capabilities());
 
-    await expect(hydrateAccounts(sample, adapter)).rejects.toThrow();
+    const err = await hydrateAccounts(sample, adapter).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AdapterError);
+    expect((err as AdapterError).kind).toBe('network');
   });
 });
 
@@ -358,7 +360,9 @@ describe('hydrateContacts', () => {
     const adapter = makeAdapter([], { contactBatchLimit: 2 }, { failGetContactsOnCall: { n: 2, kind: 'network' } }, [], [], [], contacts);
     const sample = buildCoverageSample(result, adapter.capabilities());
 
-    await expect(hydrateContacts(sample, adapter)).rejects.toThrow();
+    const err = await hydrateContacts(sample, adapter).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AdapterError);
+    expect((err as AdapterError).kind).toBe('network');
   });
 });
 
