@@ -15,6 +15,10 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      # A fresh checkout has no dist/, but clean anyway so this job tests
+      # exactly what npm run ci tests locally.
+      - name: Remove any dist/
+        run: npm run clean
       - name: Typecheck
         run: npm run typecheck
       - name: Unit and contract tests
