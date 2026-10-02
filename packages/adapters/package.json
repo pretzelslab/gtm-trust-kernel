@@ -1,6 +1,6 @@
 {
   "name": "@gtm-trust-kernel/adapters",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "One CRM-reading interface with a contract test suite: canonical model, trust envelope, in-memory mock and a read-only Salesforce adapter.",
   "license": "MIT",

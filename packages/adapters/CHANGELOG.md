@@ -4,7 +4,25 @@ All notable changes to `@gtm-trust-kernel/adapters`. Versions follow
 semver; before 1.0, a minor version may include changes that break
 adapter authors, and each one is listed under "Breaking".
 
-## 0.2.0 (unreleased)
+## 0.2.1 (unreleased)
+
+### Fixed
+
+- `MockAdapter` fault injection (`failListOnCall`, `failGetAccountsOnCall`,
+  `failGetContactsOnCall`) threw `ReferenceError: require is not defined`
+  under Node's ESM loader instead of the intended `AdapterError`. It now
+  throws `AdapterError` with the requested `kind`.
+
+### Changed
+
+- The optional `vitest` peer dependency (for the `/contract/*` suites) is
+  widened from `^2.1.3` to `>=2.1.3 <6`, so adapter authors on vitest 3, 4
+  or 5 no longer get a peer conflict.
+- README rewritten: install, a runnable quickstart, Salesforce settings,
+  the contract suite for adapter authors, ESM-only, limitations. Sharper
+  package description and keywords.
+
+## 0.2.0 (2026-10-02)
 
 ### Added: contract support for adapters with their own id or page rules (optional, additive)
 

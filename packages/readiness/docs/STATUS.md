@@ -15,6 +15,50 @@ Those rules are not repeated here.
 
 ---
 
+## Release prep, 2026-10-02: adapters 0.2.1 and CLI 0.2.0 (not published)
+
+Audit fixes, each pushed with CI green: `b97af2c` (mock fault paths threw
+ReferenceError: static AdapterError import, class/kind tests), `5c31c7a`
+(`npm run lint:pack`: publint --strict + attw esm-only on both tarballs, a
+CI job; proven to catch that bug), `ab0d66b` + `2f28526` (vitest 5 / vite
+8, adapters' vitest peer `>=2.1.3 <6`, npm audit 0 incl. dev; the second
+commit fixed the `source` condition under Vite 6+), `81aff4f` (`npm run
+ci` deletes every `dist/` first), `8e0ff01` + `6f8e032` (CLI: one-line
+usage errors, a verdict summary in the plain report's buckets,
+`--verbose`), `300088f` (SDK loaded only for `--narrative`; caret ranges),
+`9728e8f` (docs: package READMEs, SECURITY, CONTRIBUTING, CLI changelog,
+issue templates, Dependabot).
+
+**Versions:** `@gtm-trust-kernel/adapters` 0.2.1 (fix + wider peer + README),
+`gtm-trust-kernel` 0.2.0 (`--fail-on`, `--verbose`, summary, usage errors,
+lazy SDK, adapters `^0.2.1`). Changelogs updated.
+
+**Local tarballs** (`npm pack` at this commit's package contents):
+
+| Package | Files | shasum |
+|---|---|---|
+| `@gtm-trust-kernel/adapters@0.2.1` | 20 | `1393045e2578cebbcf08f75d4c06d7e112c92ce5` |
+| `gtm-trust-kernel@0.2.0` | 7 | `c34f62472d87f299e1185e650b056156056e10c3` |
+
+Clean-room install of both local tarballs outside the repo: the CLI
+resolves to the local adapters 0.2.1; `--version` 0.2.0; `scan --demo`
+prints "4 ready, 3 use with caution, 1 not ready" and exits 0; an unknown
+flag prints one line, no stack trace, exit 1; a bare `--fail-on` exits 0
+and `--fail-on degraded` exits 2; the installed mock throws AdapterError;
+the SDK is only in the lazy narrative chunk.
+
+**Live run under vitest 5** (approved once, read-only): 43 passed, 0
+skipped, 0 failed, so the read pass stayed within the 25-call budget (the
+assertion passed). The call count and child-page lines were not printed:
+vitest 5 hides console output from passing tests by default. Fixed in
+`vitest.live.config.ts` (`silent: false`, checked offline); the next live
+run will print them again.
+
+**Before publishing:** the GitHub repo is private. Its links in the npm
+READMEs 404 for outsiders, and `npm publish --provenance` (publish.yml) is
+expected to fail from a private repo. Make the repo public, or drop
+`--provenance`, before dispatching publish.yml.
+
 ## Live child-pagination check, 2026-10-02
 
 **Seed.** 250 Tasks (`CONTRACT-PAGINATION 1`..`250`, Status Completed)

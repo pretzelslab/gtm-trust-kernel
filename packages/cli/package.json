@@ -1,6 +1,6 @@
 {
   "name": "gtm-trust-kernel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Check whether your CRM data is ready for AI: a scored, evidence-backed readiness report in one command.",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@gtm-trust-kernel/adapters": "^0.2.0",
+    "@gtm-trust-kernel/adapters": "^0.2.1",
     "@anthropic-ai/sdk": "^0.128.0",
     "tldts": "^7.4.13"
   },

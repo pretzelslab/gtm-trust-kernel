@@ -8,5 +8,9 @@ export default defineConfig({
     include: ['test/**/*.live.test.ts'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    // The live tests report their findings (API calls used, child pages)
+    // with console.info from passing tests; vitest 5 hides that output by
+    // default, so keep it visible here and in the weekly CI log.
+    silent: false,
   },
 });
