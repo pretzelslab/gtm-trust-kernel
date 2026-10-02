@@ -31,7 +31,9 @@
  *
  * Not part of any package and never imported: the packages keep no CRM
  * write path (CLAUDE.md rule 1). It writes only to the org in .env, and
- * aborts unless that org's hostname starts with <dev-org-host-prefix>.
+ * aborts unless that org's hostname starts with SEED_REQUIRED_HOST_PREFIX
+ * (required; set it in .env to the start of your Developer Edition org's
+ * hostname, so the script can't run against any other org).
  *
  * Every record it creates has a Name, Subject, Title or LastName starting
  * with "SEED-" (a contact role has no name: it belongs to a SEED-
@@ -55,7 +57,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const REQUIRED_HOST_PREFIX = '<dev-org-host-prefix>';
 const PREFIX = 'SEED-';
 
 const args = new Set(process.argv.slice(2));
@@ -85,11 +86,11 @@ function loadEnv() {
     if (m) env[m[1]] = m[2].replace(/^"(.*)"$/, '$1');
   }
   // A variable set in the shell wins, as for the report.
-  for (const key of ['SF_CLIENT_ID', 'SF_CLIENT_SECRET', 'SF_INSTANCE_URL', 'SF_API_VERSION', 'SEED_CUSTOM_STAGE']) {
+  for (const key of ['SF_CLIENT_ID', 'SF_CLIENT_SECRET', 'SF_INSTANCE_URL', 'SF_API_VERSION', 'SEED_CUSTOM_STAGE', 'SEED_REQUIRED_HOST_PREFIX']) {
     if (process.env[key]) env[key] = process.env[key];
   }
-  for (const key of ['SF_CLIENT_ID', 'SF_CLIENT_SECRET', 'SF_INSTANCE_URL']) {
-    if (!env[key]) fail(`${key} is not set in .env.`);
+  for (const key of ['SF_CLIENT_ID', 'SF_CLIENT_SECRET', 'SF_INSTANCE_URL', 'SEED_REQUIRED_HOST_PREFIX']) {
+    if (!env[key]?.trim()) fail(`${key} is not set in .env.`);
   }
   return {
     clientId: env.SF_CLIENT_ID,
@@ -97,13 +98,14 @@ function loadEnv() {
     instanceUrl: env.SF_INSTANCE_URL.replace(/\/$/, ''),
     apiVersion: env.SF_API_VERSION || 'v62.0',
     customStage: env.SEED_CUSTOM_STAGE?.trim() || null,
+    requiredHostPrefix: env.SEED_REQUIRED_HOST_PREFIX.trim(),
   };
 }
 
 const config = loadEnv();
 const host = new URL(config.instanceUrl).host;
-if (!host.startsWith(REQUIRED_HOST_PREFIX)) {
-  fail(`Refusing to run: the org in .env is not the Developer Edition org this script is for (hostname must start with ${REQUIRED_HOST_PREFIX}).`);
+if (!host.startsWith(config.requiredHostPrefix)) {
+  fail('Refusing to run: the org in .env is not the Developer Edition org this script is for (its hostname does not start with SEED_REQUIRED_HOST_PREFIX).');
 }
 
 // -- REST ---------------------------------------------------------------

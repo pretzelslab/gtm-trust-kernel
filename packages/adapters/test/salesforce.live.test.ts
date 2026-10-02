@@ -173,7 +173,12 @@ describe.skipIf(missing.length > 0)('SalesforceAdapter (live org)', () => {
     const deals = new Map(marked.flatMap((a) => a.relatedTo.filter((r) => r.id.startsWith('006'))).map((r) => [r.id, r]));
     if (deals.size === 0) {
       console.warn(`Child pagination check skipped: no Task has "${PAGINATION_MARKER}" in its Subject. Seed about 250 on one deal by hand to run it.`);
-      console.warn(`Looked in org ${adapter.orgId} as Run As user ${await runAsUsername()} (Tasks must be in this org and visible to this user).`);
+      // CI logs can be public: there, never name the org or the Run As user.
+      console.warn(
+        process.env.CI
+          ? 'Seed not visible to the Run As user.'
+          : `Looked in org ${adapter.orgId} as Run As user ${await runAsUsername()} (Tasks must be in this org and visible to this user).`,
+      );
       ctx.skip();
     }
     expect(deals.size, `Tasks marked ${PAGINATION_MARKER} should all be on one deal`).toBe(1);

@@ -2,11 +2,13 @@ node_modules/
 dist/
 out/
 .pack/
-.env
-.env.local
+.env*
+!.env.example
+.npmrc
+*.tgz
 coverage/
 .cache/
-scripts/seed/*.local.csv
+*.local.csv
 .claude/scheduled_tasks.lock
 
 # local tooling (not tracked)
