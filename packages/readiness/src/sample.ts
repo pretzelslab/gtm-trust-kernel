@@ -201,6 +201,13 @@ function formatRateLimit(plan: SamplePlan): string {
     return 'Quota: adapter reports no rate limit';
   }
   const ceilingApiCalls = plannedTotalApiCalls - plannedDetailApiCalls;
+  const available = availableDailyCalls(rateLimit);
+  if (available !== undefined) {
+    const planned = plan.apiCallEstimate
+      ? `${plannedTotalApiCalls} calls planned (up to ${ceilingApiCalls} + at least ${plannedDetailApiCalls})`
+      : `up to ${plannedTotalApiCalls} calls planned`;
+    return `Quota: ${planned}; your org has ${rateLimit.remaining} of its ${rateLimit.value} daily calls left and this tool keeps ${rateLimit.reserve ?? 0} in reserve, so ${available} are free for this run`;
+  }
   if (rateLimit.kind === 'daily_quota') {
     const pct = (calls: number) => ((100 * calls) / rateLimit.value).toFixed(1);
     if (!plan.apiCallEstimate) {
@@ -213,6 +220,38 @@ function formatRateLimit(plan: SamplePlan): string {
     return `Quota: at least ~${seconds(plannedTotalApiCalls)}s at ${rateLimit.value} calls/sec`;
   }
   return `Quota: ~${seconds(plannedTotalApiCalls)}s at ${rateLimit.value} calls/sec = up to ~${seconds(ceilingApiCalls)}s (scan, account hydration, fixed) + at least ~${seconds(plannedDetailApiCalls)}s (detailed checks)`;
+}
+
+/**
+ * Daily calls this run may use: the calls left today minus the reserve the
+ * adapter keeps for the org's other tools. Undefined unless the adapter
+ * reports a daily quota with the calls left (rateLimit.remaining).
+ */
+function availableDailyCalls(rateLimit: SamplePlan['rateLimit']): number | undefined {
+  if (rateLimit.kind !== 'daily_quota' || rateLimit.remaining === undefined) return undefined;
+  return Math.max(0, rateLimit.remaining - (rateLimit.reserve ?? 0));
+}
+
+/** A run whose plan needs more daily API calls than the org has free; thrown before any read. */
+export class QuotaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QuotaError';
+  }
+}
+
+/**
+ * Pure. Null when the plan fits the org's free daily calls (or the calls
+ * left aren't known); otherwise the message a refused run prints.
+ */
+export function quotaShortfall(plan: SamplePlan): string | null {
+  const available = availableDailyCalls(plan.rateLimit);
+  if (available === undefined || plan.plannedTotalApiCalls <= available) return null;
+  return (
+    `Not starting: this run plans ${plan.plannedTotalApiCalls} API calls, but your org has ${plan.rateLimit.remaining} of its ` +
+    `${plan.rateLimit.value} daily calls left and this tool keeps ${plan.rateLimit.reserve ?? 0} in reserve, so only ${available} are free. ` +
+    'Nothing was read. Try again once the daily limit frees up.'
+  );
 }
 
 /** Pure. Renders the plan for the confirmation prompt. */
@@ -371,7 +410,9 @@ function allStrataFull(reservoirs: ReadonlyMap<SampleStratum, Reservoir<Opportun
 
 /**
  * Orchestrates: plan -> print (via console.log(formatSamplePlan(plan))) ->
- * confirm -> scan. Returns { cancelled: true } without calling the adapter
+ * quota check -> confirm -> scan. Throws QuotaError, before confirm() or
+ * any adapter call, when the plan needs more daily calls than the org has
+ * free (quotaShortfall). Returns { cancelled: true } without calling the adapter
  * if confirm() resolves false.
  */
 export async function runSample(
@@ -381,6 +422,8 @@ export async function runSample(
 ): Promise<SampleRunResult | { readonly cancelled: true }> {
   const plan = planSample(adapter, config);
   console.log(formatSamplePlan(plan));
+  const shortfall = quotaShortfall(plan);
+  if (shortfall) throw new QuotaError(shortfall);
 
   const proceed = await confirm(plan);
   if (!proceed) {
