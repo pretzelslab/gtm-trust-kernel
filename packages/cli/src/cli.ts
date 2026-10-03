@@ -16,6 +16,7 @@
  *   npx gtm-trust-kernel scan --demo
  *   npx gtm-trust-kernel scan --demo --json > report.json
  *   npx gtm-trust-kernel scan --demo --narrative   # needs ANTHROPIC_API_KEY
+ *   npx gtm-trust-kernel scan --demo --narrative-preview   # print what --narrative would send
  *   npx gtm-trust-kernel scan --demo --fail-on degraded   # exit 2 on a degraded capability
  *   npx gtm-trust-kernel --version
  *   npx gtm-trust-kernel --help
@@ -29,12 +30,18 @@ import { runScan } from './scan.js';
 
 const USAGE = `Usage:
   gtm-trust-kernel scan --demo [--narrative] [--json] [--verbose] [--fail-on [<verdicts>]]
+  gtm-trust-kernel scan --demo --narrative-preview
   gtm-trust-kernel --version
   gtm-trust-kernel --help
 
 Only "scan --demo" is supported right now (runs the readiness report
 against a bundled mock org, no CRM credentials needed).
 
+--narrative           Add an AI-written summary. Sends metric names, values,
+                      sample sizes and ratings (no record text) to
+                      Anthropic's API. Needs ANTHROPIC_API_KEY.
+--narrative-preview   Print the exact request --narrative would send, then
+                      exit. Sends nothing, writes no report, needs no key.
 --verbose             Also print the sampling plan and every file written.
 --fail-on <verdicts>  Comma list of blocked, degraded, not_measured. After
                       the report is written, exit 2 if any capability has
@@ -67,6 +74,7 @@ function parseCli() {
     options: {
       demo: { type: 'boolean', default: false },
       narrative: { type: 'boolean', default: false },
+      'narrative-preview': { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       version: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
@@ -102,6 +110,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (values['narrative-preview'] && (values.narrative || values.json || values['fail-on'] !== undefined)) {
+    usageError("--narrative-preview prints the request only; it can't be combined with --narrative, --json or --fail-on.");
+    return;
+  }
+
   let failOn: ReturnType<typeof parseFailOn>;
   try {
     failOn = parseFailOn(values['fail-on']);
@@ -113,6 +126,7 @@ async function main(): Promise<void> {
   await runScan({
     outDir: path.resolve(process.cwd(), 'out'),
     useNarrative: values.narrative,
+    narrativePreview: values['narrative-preview'],
     useJson: values.json,
     verbose: values.verbose,
     ...(failOn ? { failOn } : {}),

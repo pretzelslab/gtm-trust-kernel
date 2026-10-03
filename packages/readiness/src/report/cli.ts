@@ -15,6 +15,7 @@
  *   npm run report -- --fixture fresh --json
  *   npm run report -- --live --json         # real Salesforce org, from .env
  *   npm run report -- --narrative           # adds an LLM narrative (needs ANTHROPIC_API_KEY); not supported with --all
+ *   npm run report -- --narrative-preview   # print the request --narrative would send; sends nothing, writes no report
  *   npm run report -- --live --hydrate-per-stratum 10   # detailed checks on 10 deals per stage (default 20)
  *   npm run report -- --live --quick        # stop scanning once every stage's sample is full
  *   npm run report -- --live --fail-on      # exit 2 if any capability is blocked
@@ -23,6 +24,10 @@
  * --fail-on is opt-in (see failOn.ts). Unset, a finished report exits 0
  * whatever its verdicts. Set, the report is still written, then the exit
  * code is 2 if any capability has a listed verdict. Errors exit 1.
+ *
+ * --narrative-preview builds the report data (from a fixture, or the org
+ * with --live), prints the exact Anthropic request on stdout and exits 0.
+ * It needs no API key, sends nothing and writes no files.
  */
 
 import { parseArgs } from 'node:util';
@@ -38,6 +43,7 @@ import { renderComparisonHtml, renderReportHtml } from './render.js';
 import { renderPlainReportHtml } from './plainReport.js';
 import { AnthropicNarrativeModelClient } from './anthropicNarrativeModelClient.js';
 import { buildNarrative, type NarrativeResult } from './narrative.js';
+import { formatNarrativePreview, NARRATIVE_PREVIEW_NOTICE } from './narrativeRequest.js';
 import { evaluateFailOn, normalizeFailOnArgs, parseFailOn, type FailOnVerdict } from './failOn.js';
 
 function isFixtureName(name: string): name is FixtureName {
@@ -95,6 +101,11 @@ async function writeJson(outDir: string, filename: string, data: unknown): Promi
   console.log(`JSON written to:   ${filePath}`);
 }
 
+function printNarrativePreview(data: ReportData): void {
+  process.stdout.write(formatNarrativePreview(data));
+  console.error(NARRATIVE_PREVIEW_NOTICE);
+}
+
 /** Report each org's --fail-on result on stderr and set exit code 2 if any capability failed. */
 function applyFailOn(datas: readonly ReportData[], failOn: ReadonlySet<FailOnVerdict> | undefined): void {
   for (const data of datas) {
@@ -117,6 +128,7 @@ async function main(): Promise<void> {
       json: { type: 'boolean', default: false },
       live: { type: 'boolean', default: false },
       narrative: { type: 'boolean', default: false },
+      'narrative-preview': { type: 'boolean', default: false },
       'hydrate-per-stratum': { type: 'string' },
       quick: { type: 'boolean', default: false },
       'fail-on': { type: 'string' },
@@ -149,8 +161,19 @@ async function main(): Promise<void> {
     return;
   }
 
+  const preview = values['narrative-preview'];
+  if (preview && (values.all || values.narrative || values.json || values['fail-on'] !== undefined)) {
+    console.error("--narrative-preview prints the request only; it can't be combined with --all, --narrative, --json or --fail-on.");
+    process.exitCode = 1;
+    return;
+  }
+  if (preview) {
+    // stdout carries only the request JSON: progress lines (the sampling plan) go to stderr.
+    console.log = (...args: unknown[]) => console.error(...args);
+  }
+
   const outDir = path.resolve(process.cwd(), 'out');
-  await mkdir(outDir, { recursive: true });
+  if (!preview) await mkdir(outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
   if (values.live) {
@@ -160,6 +183,10 @@ async function main(): Promise<void> {
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
+      return;
+    }
+    if (preview) {
+      printNarrativePreview(data);
       return;
     }
     const narrative = await resolveNarrative(data, values.narrative);
@@ -197,6 +224,10 @@ async function main(): Promise<void> {
   }
 
   const data = await buildFromFixture(fixtureArg, sampling);
+  if (preview) {
+    printNarrativePreview(data);
+    return;
+  }
   const narrative = await resolveNarrative(data, values.narrative);
   if (narrative === 'exit') return;
   const html = renderReportHtml(data, { narrative });

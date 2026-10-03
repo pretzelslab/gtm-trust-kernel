@@ -11,6 +11,7 @@
     "./report/plainReport.js": "./src/report/plainReport.ts",
     "./report/narrative.js": "./src/report/narrative.ts",
     "./report/anthropicNarrativeModelClient.js": "./src/report/anthropicNarrativeModelClient.ts",
+    "./report/narrativeRequest.js": "./src/report/narrativeRequest.ts",
     "./report/failOn.js": "./src/report/failOn.ts",
     "./report/plainSummary.js": "./src/report/plainSummary.ts"
   },

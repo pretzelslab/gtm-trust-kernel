@@ -173,3 +173,13 @@ export function buildNarrativeRequestFromInput(input: NarrativePromptInput, mode
 export function buildNarrativeRequest(data: ReportData, env: NodeJS.ProcessEnv = process.env): NarrativeRequest {
   return buildNarrativeRequestFromInput(buildNarrativePromptInput(data), resolveNarrativeModel(env));
 }
+
+/** --narrative-preview's stdout: the request JSON and nothing else. */
+export function formatNarrativePreview(data: ReportData, env: NodeJS.ProcessEnv = process.env): string {
+  return `${JSON.stringify(buildNarrativeRequest(data, env), null, 2)}\n`;
+}
+
+/** --narrative-preview's stderr line, printed after the request. */
+export const NARRATIVE_PREVIEW_NOTICE =
+  "Narrative preview: stdout has the exact request --narrative would send to Anthropic's API " +
+  '(the API key goes separately, in a header). Nothing was sent and no report was written.';

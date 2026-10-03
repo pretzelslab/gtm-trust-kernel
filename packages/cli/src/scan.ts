@@ -11,6 +11,10 @@
  *
  * With `useJson`, stdout carries only the report JSON; everything else goes
  * to stderr. HTML reports are still written to `outDir` either way.
+ *
+ * With `narrativePreview`, stdout carries only the request --narrative would
+ * send (readiness's narrativeRequest.ts, which never loads the SDK); nothing
+ * is sent and nothing is written.
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -20,6 +24,7 @@ import { healthyFixture } from '@gtm-trust-kernel/readiness/fixtures/healthy.js'
 import { buildReportData, type ReportData } from '@gtm-trust-kernel/readiness/report/buildReport.js';
 import { evaluateFailOn, type FailOnVerdict } from '@gtm-trust-kernel/readiness/report/failOn.js';
 import { buildNarrative, type NarrativeResult } from '@gtm-trust-kernel/readiness/report/narrative.js';
+import { formatNarrativePreview, NARRATIVE_PREVIEW_NOTICE } from '@gtm-trust-kernel/readiness/report/narrativeRequest.js';
 import { renderPlainReportHtml } from '@gtm-trust-kernel/readiness/report/plainReport.js';
 import { buildFullNarrative } from '@gtm-trust-kernel/readiness/report/plainSummary.js';
 import { renderReportHtml } from '@gtm-trust-kernel/readiness/report/render.js';
@@ -28,9 +33,11 @@ export interface ScanOptions {
   readonly outDir: string;
   readonly useNarrative: boolean;
   readonly useJson: boolean;
+  /** --narrative-preview: print the narrative request to `stdout` and stop; no files, no network. */
+  readonly narrativePreview?: boolean;
   /** --verbose: also print the sampling plan and every file written. */
   readonly verbose?: boolean;
-  /** Where the report JSON goes when `useJson` is set. Defaults to process.stdout. */
+  /** Where the report JSON (or the narrative preview) goes. Defaults to process.stdout. */
   readonly stdout?: (text: string) => void;
   /**
    * --fail-on verdicts (readiness's failOn.ts). Unset: the exit status
@@ -111,10 +118,17 @@ export function verdictSummary(data: ReportData): string {
 }
 
 async function scan(options: ScanOptions): Promise<void> {
+  const write = options.stdout ?? ((text: string) => process.stdout.write(text));
+  const data = options.verbose ? await buildDemoReport() : await withoutConsoleLog(buildDemoReport);
+
+  if (options.narrativePreview) {
+    write(formatNarrativePreview(data));
+    console.error(NARRATIVE_PREVIEW_NOTICE);
+    return;
+  }
+
   await mkdir(options.outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-  const data = options.verbose ? await buildDemoReport() : await withoutConsoleLog(buildDemoReport);
   const narrative = await resolveNarrative(data, options.useNarrative);
   if (narrative === 'exit') return;
 
@@ -124,7 +138,6 @@ async function scan(options: ScanOptions): Promise<void> {
   ];
 
   if (options.useJson) {
-    const write = options.stdout ?? ((text: string) => process.stdout.write(text));
     write(`${JSON.stringify(data, null, 2)}\n`);
   }
 
@@ -145,11 +158,11 @@ async function scan(options: ScanOptions): Promise<void> {
 }
 
 export async function runScan(options: ScanOptions): Promise<void> {
-  if (!options.useJson) {
+  if (!options.useJson && !options.narrativePreview) {
     await scan(options);
     return;
   }
-  // With --json, stdout carries only the report JSON: send every human line
+  // With --json or --narrative-preview, stdout carries only JSON: send every human line
   // (the summary, and with --verbose the plan and file list) to stderr.
   // Restore console.log even if the scan throws.
   const originalLog = console.log;

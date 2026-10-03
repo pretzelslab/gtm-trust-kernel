@@ -13,6 +13,9 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   ready", the same groups as the plain-English report) and which file to
   open.
 - `--verbose`: also print the sampling plan and every file written.
+- `--narrative-preview`: print the exact request `--narrative` would send
+  to Anthropic's API, then exit. Sends nothing, writes no report and needs
+  no API key.
 
 ### Changed
 
