@@ -1,0 +1,268 @@
+# Every field is a dropdown or checkbox, so the form itself has no free-text
+# box that could carry record data. GitHub still allows free text in the
+# issue title and in later comments; the checkbox below asks people not to.
+name: Share calibration scores
+description: Share your scan's anonymised verdicts and value ranges to help calibrate the thresholds. Scores only, never data.
+title: "Calibration scores"
+labels: ["calibration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. This form only takes fixed choices: verdicts and value ranges.
+        **Share anonymised scores, never data.** Don't paste report files, record text,
+        names, emails, record ids or your org's hostname anywhere in this issue,
+        including the title and comments.
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Before you submit
+      options:
+        - label: This issue contains no record data, names, emails, record ids or org hostname.
+          required: true
+        - label: I have permission from my company to share these anonymised scores publicly.
+          required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Data scanned
+      options:
+        - Live Salesforce org
+        - Demo data only
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deals_scanned
+    attributes:
+      label: Deals scanned (from the report's "Scanned X of Y eligible deals" line)
+      options:
+        - Under 100
+        - 100 to 999
+        - 1,000 to 4,999
+        - 5,000 (the scan's maximum)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: industry
+    attributes:
+      label: Industry (optional)
+      options:
+        - Software / SaaS
+        - Financial services
+        - Healthcare / life sciences
+        - Manufacturing
+        - Professional services
+        - Other
+        - Prefer not to say
+
+  - type: dropdown
+    id: activity_capture
+    attributes:
+      label: How are activities captured?
+      options:
+        - Automatic email/calendar sync (SF_ACTIVITY_CAPTURE=auto)
+        - Logged by hand
+        - Mixed
+        - Not sure
+
+  # One verdict per use case, using the plain report's words.
+  - type: dropdown
+    id: v_account_briefs
+    attributes:
+      label: "Verdict: AI-generated account briefs"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+    validations:
+      required: true
+  - type: dropdown
+    id: v_forecast
+    attributes:
+      label: "Verdict: Forecast support"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+    validations:
+      required: true
+  - type: dropdown
+    id: v_pipeline_risk
+    attributes:
+      label: "Verdict: Pipeline risk alerts"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+  - type: dropdown
+    id: v_close_date
+    attributes:
+      label: "Verdict: Close-date reality checks"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+  - type: dropdown
+    id: v_next_step
+    attributes:
+      label: "Verdict: Next-step suggestions on deals"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+  - type: dropdown
+    id: v_pitch_answers
+    attributes:
+      label: "Verdict: Pitch and objection-handling answers"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+  - type: dropdown
+    id: v_bulk_cleanup
+    attributes:
+      label: "Verdict: Bulk data clean-up suggestions"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+  - type: dropdown
+    id: v_full_automation
+    attributes:
+      label: "Verdict: Fully automatic CRM updates with no human check"
+      options:
+        - Ready to use
+        - Usable with caution
+        - Not ready yet
+        - Can't tell yet
+
+  # The calibration signal: does the verdict match what you see in practice?
+  - type: dropdown
+    id: fit_account_briefs
+    attributes:
+      label: Does the account briefs verdict match your experience?
+      options:
+        - "Yes"
+        - Too strict (our data is better than the verdict says)
+        - Too lenient (our data is worse than the verdict says)
+        - Not sure
+  - type: dropdown
+    id: fit_forecast
+    attributes:
+      label: Does the forecast support verdict match your experience?
+      options:
+        - "Yes"
+        - Too strict (our data is better than the verdict says)
+        - Too lenient (our data is worse than the verdict says)
+        - Not sure
+
+  # Value ranges for the metrics behind the two lead use cases. Ranges, not
+  # exact values. These bands are neutral ranges for collecting data; they
+  # are not thresholds and don't touch rubric.ts.
+  - type: dropdown
+    id: r_note_coverage
+    attributes:
+      label: Note coverage (open deals with at least one note)
+      options:
+        - 0 to 10%
+        - 10 to 20%
+        - 20 to 30%
+        - 30 to 40%
+        - 40 to 50%
+        - 50 to 60%
+        - 60 to 70%
+        - 70 to 80%
+        - 80 to 90%
+        - 90 to 100%
+        - Not measured
+  - type: dropdown
+    id: r_substantive_notes
+    attributes:
+      label: Notes with real content
+      options:
+        - 0 to 10%
+        - 10 to 20%
+        - 20 to 30%
+        - 30 to 40%
+        - 40 to 50%
+        - 50 to 60%
+        - 60 to 70%
+        - 70 to 80%
+        - 80 to 90%
+        - 90 to 100%
+        - Not measured
+  - type: dropdown
+    id: r_duplicate_accounts
+    attributes:
+      label: Duplicate account rate
+      options:
+        - 0 to 10%
+        - 10 to 20%
+        - 20 to 30%
+        - 30 to 40%
+        - 40 to 50%
+        - 50 to 60%
+        - 60 to 70%
+        - 70 to 80%
+        - 80 to 90%
+        - 90 to 100%
+        - Not measured
+  - type: dropdown
+    id: r_amount_fill
+    attributes:
+      label: Amount filled in
+      options:
+        - 0 to 10%
+        - 10 to 20%
+        - 20 to 30%
+        - 30 to 40%
+        - 40 to 50%
+        - 50 to 60%
+        - 60 to 70%
+        - 70 to 80%
+        - 80 to 90%
+        - 90 to 100%
+        - Not measured
+  - type: dropdown
+    id: r_stage_mapping
+    attributes:
+      label: Stage mapping coverage
+      options:
+        - 0 to 10%
+        - 10 to 20%
+        - 20 to 30%
+        - 30 to 40%
+        - 40 to 50%
+        - 50 to 60%
+        - 60 to 70%
+        - 70 to 80%
+        - 80 to 90%
+        - 90 to 100%
+        - Not measured
+  - type: dropdown
+    id: r_past_due
+    attributes:
+      label: Past-due close dates
+      options:
+        - 0 to 10%
+        - 10 to 20%
+        - 20 to 30%
+        - 30 to 40%
+        - 40 to 50%
+        - 50 to 60%
+        - 60 to 70%
+        - 70 to 80%
+        - 80 to 90%
+        - 90 to 100%
+        - Not measured
