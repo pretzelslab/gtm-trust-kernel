@@ -32,6 +32,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # The GitHub environment named after the package; npm's Trusted
+    # Publisher for each package names the same environment.
+    environment: ${{ inputs.package }}
     env:
       PACKAGE_DIR: packages/${{ inputs.package }}
       TAG_PREFIX: ${{ inputs.package }}-v

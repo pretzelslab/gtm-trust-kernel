@@ -20,7 +20,10 @@ Do this once for **each** package, `@gtm-trust-kernel/adapters` and
 1. Open the package on npmjs.com, then **Settings**.
 2. Under **Trusted Publisher**, choose **GitHub Actions**.
 3. Organization or user: `pretzelslab`. Repository: `gtm-trust-kernel`.
-   Workflow filename: `publish.yml`. Leave the environment empty.
+   Workflow filename: `publish.yml`. Environment: the package's input
+   name, `adapters` or `cli`. It must match the GitHub environment that
+   `publish.yml` runs in (`environment: ${{ inputs.package }}`), or npm
+   rejects the publish.
 4. Save.
 
 Until this is done for a package, the workflow's publish step fails for
