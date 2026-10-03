@@ -234,7 +234,7 @@ async function main(): Promise<void> {
     const narrative = await resolveNarrative(data, narrativeClient);
     const html = renderReportHtml(data, { mode: 'live', narrative });
     await writeHtml(outDir, `report-live-${timestamp}.html`, 'live-latest.html', html);
-    const plainHtml = renderPlainReportHtml(data, { mode: 'live' });
+    const plainHtml = renderPlainReportHtml(data, { mode: 'live', narrativeSent: narrative !== undefined });
     await writeHtml(outDir, `report-live-${timestamp}-plain.html`, 'live-latest-plain.html', plainHtml);
     if (values.json) {
       await writeJson(outDir, `report-live-${timestamp}.json`, data);
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
   const narrative = await resolveNarrative(data, narrativeClient);
   const html = renderReportHtml(data, { narrative });
   await writeHtml(outDir, `report-${timestamp}.html`, 'latest.html', html);
-  const plainHtml = renderPlainReportHtml(data);
+  const plainHtml = renderPlainReportHtml(data, { narrativeSent: narrative !== undefined });
   await writeHtml(outDir, `report-${timestamp}-plain.html`, 'latest-plain.html', plainHtml);
   if (values.json) {
     await writeJson(outDir, `report-${timestamp}.json`, data);

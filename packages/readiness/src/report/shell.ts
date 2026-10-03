@@ -82,16 +82,24 @@ ${body}
 </html>`;
 }
 
+/** What the banner says left the machine when the AI summary was requested. */
+export const NARRATIVE_EGRESS_TEXT = 'metric values (no record text) were sent to Anthropic for the AI summary';
+
 /**
  * Single source of truth for both single-org report banners (render.ts's
  * renderReportHtml, plainReport.ts's renderPlainReportHtml) so they can
- * never disagree about whether a given run's data came from a live CRM.
- * Not used by renderComparisonHtml (--all), which is fixture-only and
- * keeps its own banner markup unchanged.
+ * never disagree about whether a given run's data came from a live CRM, or
+ * about what left the machine. `narrativeSent`: this run sent (or tried to
+ * send) the narrative request to Anthropic. Not used by
+ * renderComparisonHtml (--all), which is fixture-only, never sends a
+ * narrative and keeps its own banner markup unchanged.
  */
-export function renderBanner(mode: 'fixture' | 'live', orgLabel: string): string {
+export function renderBanner(mode: 'fixture' | 'live', orgLabel: string, egress?: { readonly narrativeSent?: boolean }): string {
+  const sent = egress?.narrativeSent ?? false;
   if (mode === 'live') {
-    return `<div class="banner-live">LIVE DATA · read-only</div>`;
+    const left = sent ? NARRATIVE_EGRESS_TEXT : 'nothing else left this machine';
+    return `<div class="banner-live">LIVE DATA · read-only. Read from your Salesforce org; ${left}.</div>`;
   }
-  return `<div class="banner">MOCK DATA — fixture: ${escapeHtml(orgLabel)}. No real CRM was contacted; nothing leaves this machine.</div>`;
+  const left = sent ? NARRATIVE_EGRESS_TEXT : 'nothing leaves this machine';
+  return `<div class="banner">MOCK DATA — fixture: ${escapeHtml(orgLabel)}. No real CRM was contacted; ${left}.</div>`;
 }

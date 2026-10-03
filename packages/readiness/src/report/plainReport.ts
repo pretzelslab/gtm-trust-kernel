@@ -31,9 +31,17 @@ function renderBucket(heading: string, outcomes: readonly CapabilityOutcome[]): 
   </ul>`;
 }
 
-export function renderPlainReportHtml(data: ReportData, options?: { readonly mode?: 'fixture' | 'live' }): string {
+/**
+ * `narrativeSent`: the same run sent the narrative request (the AI summary
+ * appears only in the detailed report, but the banner states the run's
+ * egress, so both files agree).
+ */
+export function renderPlainReportHtml(
+  data: ReportData,
+  options?: { readonly mode?: 'fixture' | 'live'; readonly narrativeSent?: boolean },
+): string {
   const { org } = data;
-  const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel);
+  const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel, { narrativeSent: options?.narrativeSent ?? false });
   const narrative = buildFullNarrative(data);
 
   const body = `

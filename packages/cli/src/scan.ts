@@ -182,7 +182,7 @@ async function scan(options: ScanOptions): Promise<void> {
 
   const written = [
     ...(await writeHtml(options.outDir, `report-${timestamp}.html`, 'latest.html', renderReportHtml(data, { narrative }))),
-    ...(await writeHtml(options.outDir, `report-${timestamp}-plain.html`, 'latest-plain.html', renderPlainReportHtml(data))),
+    ...(await writeHtml(options.outDir, `report-${timestamp}-plain.html`, 'latest-plain.html', renderPlainReportHtml(data, { narrativeSent: narrative !== undefined }))),
   ];
 
   if (options.useJson) {
