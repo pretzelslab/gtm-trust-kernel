@@ -74,6 +74,15 @@ the steps are in [RELEASING.md](../../../RELEASING.md). Adapters 0.2.1
 repository becoming public (`publish.yml` publishes with `--provenance`,
 which npm accepts only from a public repository, as far as is known).
 
+**Backup repositories.** The repository's history was rewritten on
+2026-10-03. Two private backup repositories,
+`pretzelslab/gtm-trust-kernel-pre-rewrite` and
+`pretzelslab/gtm-trust-kernel-old`, still hold history from before the
+rewrite. They must stay private: never make them public, transfer them,
+or publish from them. The same applies to the local mirror and bundle
+backups. Published 0.1.0 and adapters 0.2.0 `gitHead` values point at
+pre-rewrite commits and don't resolve in this repository.
+
 ## Next
 
 1. Make the repository public; publish adapters 0.2.1, then CLI 0.2.0.

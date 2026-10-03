@@ -69,3 +69,11 @@ it with an authentication error; nothing else changes.
 0.1.0 (both packages) and adapters 0.2.0 were published by hand from the
 maintainer's machine; 0.2.0 used a one-day granular token, since revoked.
 Those releases have no provenance attestation.
+
+## Backup repositories
+
+`pretzelslab/gtm-trust-kernel-pre-rewrite` and
+`pretzelslab/gtm-trust-kernel-old` are private backups that hold history
+from before the 2026-10-03 rewrite. Keep both private. Never make them
+public, transfer them, or point a Trusted Publisher or release at them.
+Releases come only from `pretzelslab/gtm-trust-kernel`.
