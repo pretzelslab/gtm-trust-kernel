@@ -107,8 +107,15 @@ missing and the note metrics are scored as usual.
 ## 4. Settings (`.env`)
 
 Copy `.env.example` at the repo root to `.env` and fill it in. The report
-reads `.env` from the repo root, and a variable already set in your shell
-wins over the file.
+looks for `.env` in two places and reads only the first it finds:
+
+1. the folder you ran the command from (under `npm run`, the folder you
+   typed it in, not the package folder npm switches to);
+2. the repo root.
+
+It prints which one it used on stderr ("Settings from .env in the current
+folder." or "…in the repo root."), without the full path. A variable
+already set in your shell wins over the file.
 
 | Variable | Required | Meaning | Default |
 |---|---|---|---|

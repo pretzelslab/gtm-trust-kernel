@@ -43,7 +43,7 @@ import path from 'node:path';
 import { loadSalesforceConfigFromEnv, SalesforceAdapter } from '@gtm-trust-kernel/adapters/salesforce.js';
 import { FIXTURE_NAMES, type FixtureName } from '../fixtures/mockOrgs.js';
 import { buildFromFixture } from './buildFromFixture.js';
-import { loadEnvFileIfPresent } from './envFile.js';
+import { envFileNotice, loadEnvFileIfPresent } from './envFile.js';
 import { type BuildReportOptions, type ReportData } from './buildReport.js';
 import { buildLiveReportData, formatRetry, runPreflight } from './liveReport.js';
 import { sampleOptionsFromFlags } from './sampleFlags.js';
@@ -149,7 +149,8 @@ function applyFailOn(datas: readonly ReportData[], failOn: ReadonlySet<FailOnVer
 }
 
 async function main(): Promise<void> {
-  await loadEnvFileIfPresent();
+  const envSource = await loadEnvFileIfPresent();
+  if (envSource) console.error(envFileNotice(envSource));
 
   const { values } = parseArgs({
     args: normalizeFailOnArgs(process.argv.slice(2)),
