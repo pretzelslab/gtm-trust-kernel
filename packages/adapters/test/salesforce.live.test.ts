@@ -9,10 +9,13 @@
  * never writes to Salesforce (applyFieldWrite always rejects), and nothing
  * here seeds data: the pagination check reads a deal seeded by hand.
  *
- * Three parts:
+ * Four parts:
  *  - the shared CRM adapter contract (contract/adapter.contract.ts);
  *  - a readiness-shaped read pass: every response must have the shape the
  *    adapter reads (contract/salesforceShapes.ts), within an API call budget;
+ *  - preflight() and health(): the version list, global and per-object
+ *    describes and limits in the shape the adapter reads, and the
+ *    Sforce-Limit-Info header's format (logged, not asserted);
  *  - child pagination on a deal with more Tasks than the per-deal cap,
  *    found by CONTRACT-PAGINATION in their Subject (skipped if absent).
  */
@@ -159,6 +162,29 @@ describe.skipIf(missing.length > 0)('SalesforceAdapter (live org)', () => {
     console.info(`Live read pass: ${rec.requests.length} API calls (budget ${LIVE_RUN_API_CALL_BUDGET}).`);
     expect(checkSalesforceShapes(rec.responses).violations).toEqual([]);
     expect(rec.requests.length).toBeLessThanOrEqual(LIVE_RUN_API_CALL_BUDGET);
+  });
+
+  it('passes preflight, with every preflight and limits response in the shape the adapter reads', async () => {
+    const adapter = newAdapter();
+    const rec = recordSalesforceResponses();
+    let result: Awaited<ReturnType<SalesforceAdapter['preflight']>>;
+    try {
+      result = await adapter.preflight({ contacts: true });
+      await adapter.health();
+    } finally {
+      rec.restore();
+    }
+    const report = checkSalesforceShapes(rec.responses);
+    const headerFormat = rec.limitInfo.length === 0 ? 'absent' : rec.limitInfo.every((h) => /api-usage=\d+\/\d+/.test(h)) ? 'api-usage=<used>/<max>' : 'unexpected';
+    console.info(
+      `Live preflight: ${result.failures.length} failures, ${result.warnings.length} warnings, ${result.apiCallsConsumed} calls; ` +
+        `shapes seen: ${[...report.seen].sort().join(', ')}; Sforce-Limit-Info on ${rec.limitInfo.length} of ${rec.requests.length} responses, format ${headerFormat}.`,
+    );
+    expect(report.violations).toEqual([]);
+    for (const shape of ['versions', 'global-describe', 'describe-fields', 'limits'] as const) {
+      expect(report.seen.has(shape), shape).toBe(true);
+    }
+    expect(result.failures).toEqual([]);
   });
 
   it('reads a deal with more Tasks than the per-deal cap: capped, flagged, in the documented shape', async (ctx) => {

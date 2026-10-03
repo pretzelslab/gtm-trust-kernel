@@ -7,7 +7,9 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkSalesforceShapes, parseSelect, recordSalesforceResponses, type RecordedResponse } from './contract/salesforceShapes.js';
+import { SALESFORCE_READS } from '../src/salesforce.js';
 import { installFakeSalesforce, sfId, sfRef, type FakeSalesforce } from './support/fakeSalesforce.js';
+import { registerPreflightOrg } from './support/preflightOrg.js';
 
 const OPP_1 = sfId('006', 1);
 const OPP_2 = sfId('006', 2);
@@ -122,6 +124,50 @@ describe('Salesforce response contract (fake API)', () => {
     expect(rec.requests).toHaveLength(2);
     expect(rec.requests.every((r) => r.includes('/query?q='))).toBe(true);
   });
+
+  it('answers preflight and health() in the shape the adapter reads', async () => {
+    const sf = installFakeSalesforce();
+    registerPreflightOrg(sf);
+    const rec = recordSalesforceResponses();
+    const adapter = sf.adapter();
+    await adapter.preflight({ contacts: true });
+    await adapter.health();
+    const report = checkSalesforceShapes(rec.responses);
+    expect(report.violations).toEqual([]);
+    expect([...report.seen].sort()).toEqual(['describe', 'describe-fields', 'global-describe', 'limits', 'versions']);
+  });
+});
+
+/** Subquery relationship -> the object it reads. */
+const RELATIONSHIP_OBJECT: Readonly<Record<string, string>> = {
+  Notes: 'Note',
+  Tasks: 'Task',
+  Events: 'Event',
+  OpportunityHistories: 'OpportunityHistory',
+};
+
+describe('preflight field lists', () => {
+  it('cover every field a read pass queries, so preflight checks what the scan reads', async () => {
+    const sf = installFakeSalesforce();
+    registerOrg(sf, 2);
+    await readPass(sf);
+    const reads = new Map(SALESFORCE_READS.map((r) => [r.object, new Set(r.fields)]));
+    const unchecked: string[] = [];
+    const check = (object: string, fields: readonly string[]) => {
+      for (const field of fields) {
+        if (field === 'COUNT()' || field.includes('.')) continue;
+        if (!reads.get(object)?.has(field)) unchecked.push(`${object}.${field}`);
+      }
+    };
+    for (const soql of sf.queries) {
+      const parsed = parseSelect(soql);
+      const outer = /\sFROM\s+(\w+)/i.exec(soql.replace(/\(SELECT[^)]*\)/g, ''))?.[1] ?? '?';
+      check(outer, parsed.fields);
+      for (const sub of parsed.subqueries) check(RELATIONSHIP_OBJECT[sub.relationship] ?? sub.relationship, sub.fields);
+    }
+    expect(sf.queries.length).toBeGreaterThan(10);
+    expect(unchecked).toEqual([]);
+  });
 });
 
 describe('Salesforce shape checks catch drift', () => {
@@ -166,6 +212,23 @@ describe('Salesforce shape checks catch drift', () => {
     expect(checkSalesforceShapes([count, describe]).violations).toEqual([
       'p: COUNT() records is not an empty array',
       'd: describe has no boolean queryable',
+    ]);
+  });
+
+  it('flags malformed preflight and limits answers', () => {
+    const r = (kind: RecordedResponse['kind'], body: unknown): RecordedResponse => ({ path: kind, kind, body });
+    expect(
+      checkSalesforceShapes([
+        r('describe', { queryable: true, fields: [{ label: 'no name' }] }),
+        r('versions', [{ version: 62 }]),
+        r('global-describe', { sobjects: [{ name: 'Task', queryable: 'yes' }] }),
+        r('limits', { DailyApiRequests: { Max: '15000', Remaining: 1 } }),
+      ]).violations,
+    ).toEqual([
+      'describe: describe fields is not an array of objects with a string name',
+      'versions: versions is not an array of objects with a string version like "62.0"',
+      'global-describe: sobjects is not an array of objects with a string name and a boolean queryable',
+      'limits: DailyApiRequests has no numeric Max and Remaining',
     ]);
   });
 

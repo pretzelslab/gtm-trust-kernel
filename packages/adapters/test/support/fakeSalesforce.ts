@@ -10,7 +10,12 @@
  *    a full SoqlResponse for paging, a COUNT() total, or an HTTP status to
  *    simulate errors.
  *  - GET  a nextRecordsUrl the harness handed out: the queued next page.
- *  - GET  /services/data/<v>/limits/: an empty object (health()).
+ *  - GET  /services/data/: the API version list (v61.0 and v62.0 unless
+ *    set with apiVersions()).
+ *  - GET  /services/data/<v>/sobjects/: the global describe registered
+ *    with globalDescribe(); unregistered fails.
+ *  - GET  /services/data/<v>/limits/: DailyApiRequests, Max 15000 and
+ *    Remaining 14990 (health()).
  *  - GET  /services/data/<v>/sobjects/ContentNote/<id>/Content: the body
  *    registered with noteContent(id, body).
  *  - GET  /services/data/<v>/sobjects/<name>/describe: the result
@@ -77,6 +82,10 @@ export interface FakeSalesforce {
    * `parentField` (e.g. 'ParentId'). See the module docblock.
    */
   subqueryRows(relationship: string, parentField: string, rows: ChildRows, options?: SubqueryOptions): void;
+  /** The versions /services/data/ lists, e.g. ['61.0', '62.0']. */
+  apiVersions(versions: readonly string[]): void;
+  /** Answer the global describe (sobjects/) with these objects, or an HTTP error. */
+  globalDescribe(result: readonly { readonly name: string; readonly queryable: boolean }[] | { readonly status: number; readonly body?: string }): void;
   /** Error answers for the token endpoint, served in order before the token. */
   tokenAnswers(...answers: readonly { readonly status: number; readonly body?: string; readonly headers?: Record<string, string> }[]): void;
   /** Every SOQL string sent, in order. */
@@ -100,6 +109,8 @@ export function installFakeSalesforce(): FakeSalesforce {
   const pendingPages = new Map<string, { rest: readonly (readonly Record<string, unknown>[])[] }>();
   const subqueries = new Map<string, { parentField: string; rows: ChildRows; options: SubqueryOptions }>();
   const tokenQueue: { status: number; body?: string; headers?: Record<string, string> }[] = [];
+  let versionList: readonly string[] = ['61.0', '62.0'];
+  let globalResult: readonly { name: string; queryable: boolean }[] | { status: number; body?: string } | undefined;
   let locatorSeq = 0;
 
   function chunks<T>(items: readonly T[], size: number | undefined): T[][] {
@@ -163,7 +174,17 @@ export function installFakeSalesforce(): FakeSalesforce {
       if (queuedAnswer) return answer(queuedAnswer);
       return json({ access_token: 'FAKE_TOKEN', instance_url: INSTANCE_URL });
     }
-    if (url.pathname === `/services/data/${API_VERSION}/limits/`) return json({});
+    if (url.pathname === `/services/data/${API_VERSION}/limits/`) {
+      return json({ DailyApiRequests: { Max: 15000, Remaining: 14990 } });
+    }
+    if (url.pathname === '/services/data/') {
+      return json(versionList.map((version) => ({ label: `v${version}`, url: `/services/data/v${version}`, version })));
+    }
+    if (url.pathname === `/services/data/${API_VERSION}/sobjects/`) {
+      if (globalResult === undefined) throw new Error('fakeSalesforce: no global describe registered');
+      if ('status' in globalResult) return answer(globalResult);
+      return json({ encoding: 'UTF-8', maxBatchSize: 200, sobjects: globalResult });
+    }
     const content = new RegExp(`^/services/data/${API_VERSION}/sobjects/ContentNote/([A-Za-z0-9]+)/Content$`).exec(url.pathname);
     if (content) {
       const body = contents.get(content[1]!);
@@ -215,6 +236,12 @@ export function installFakeSalesforce(): FakeSalesforce {
     },
     subqueryRows(relationship, parentField, rows, options = {}) {
       subqueries.set(relationship, { parentField, rows, options });
+    },
+    apiVersions(versions) {
+      versionList = versions;
+    },
+    globalDescribe(result) {
+      globalResult = result;
     },
     tokenAnswers(...answers) {
       tokenQueue.push(...answers);

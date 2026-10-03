@@ -16,13 +16,20 @@
  *    relationship, and its value is null (no child rows) or a query page
  *    whose rows have the subquery's fields. Not {} and not missing.
  *  - SELECT COUNT(): totalSize is a whole number and records is empty.
- *  - sobjects/<name>/describe: `queryable` is a boolean.
+ *  - sobjects/<name>/describe: `queryable` is a boolean; `fields`, when
+ *    present (preflight() reads it), is an array of objects with a string
+ *    `name`.
+ *  - /services/data/ (preflight): an array of objects with a string
+ *    `version` such as "62.0".
+ *  - sobjects/ global describe (preflight): `sobjects` is an array of
+ *    objects with a string `name` and a boolean `queryable`.
+ *  - limits/ (health()): DailyApiRequests has numeric Max and Remaining.
  */
 
 export interface RecordedResponse {
   /** Path and query string, for messages. */
   readonly path: string;
-  readonly kind: 'query' | 'describe';
+  readonly kind: 'query' | 'describe' | 'versions' | 'global-describe' | 'limits';
   /** query: the SOQL this page answers; for a nextRecordsUrl page, the query it continues. */
   readonly soql?: string;
   /** query: 'child' for a nextRecordsUrl page of one parent's subquery rows. */
@@ -37,6 +44,8 @@ export interface ResponseRecorder {
   readonly responses: RecordedResponse[];
   /** Every request except the OAuth token request, in order: the API calls a run spent. */
   readonly requests: string[];
+  /** Every Sforce-Limit-Info response header seen (e.g. "api-usage=18/15000"), in order. */
+  readonly limitInfo: string[];
   /** Put back the fetch that was in place before recording started. */
   restore(): void;
 }
@@ -49,6 +58,7 @@ export function recordSalesforceResponses(): ResponseRecorder {
   const inner = globalThis.fetch;
   const responses: RecordedResponse[] = [];
   const requests: string[] = [];
+  const limitInfo: string[] = [];
   const continuations = new Map<string, { soql: string; role: 'outer' | 'child' }>();
 
   const wrapped = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -57,6 +67,8 @@ export function recordSalesforceResponses(): ResponseRecorder {
     if (url.pathname === '/services/oauth2/token') return res;
     const where = url.pathname + url.search;
     requests.push(where);
+    const info = res.headers.get('Sforce-Limit-Info');
+    if (info !== null) limitInfo.push(info);
     if (!res.ok || !(res.headers.get('Content-Type') ?? '').includes('application/json')) return res;
     const body: unknown = await res.clone().json();
 
@@ -70,6 +82,12 @@ export function recordSalesforceResponses(): ResponseRecorder {
       noteContinuations(continued.soql, continued.role, body);
     } else if (/\/sobjects\/\w+\/describe$/.test(url.pathname)) {
       responses.push({ path: where, kind: 'describe', body });
+    } else if (url.pathname === '/services/data/') {
+      responses.push({ path: where, kind: 'versions', body });
+    } else if (/\/sobjects\/$/.test(url.pathname)) {
+      responses.push({ path: where, kind: 'global-describe', body });
+    } else if (/\/limits\/?$/.test(url.pathname)) {
+      responses.push({ path: where, kind: 'limits', body });
     }
     return res;
   };
@@ -95,6 +113,7 @@ export function recordSalesforceResponses(): ResponseRecorder {
   return {
     responses,
     requests,
+    limitInfo,
     restore() {
       globalThis.fetch = inner;
     },
@@ -168,6 +187,10 @@ export type ShapeSeen =
   | 'flat-query'
   | 'count'
   | 'describe'
+  | 'describe-fields'
+  | 'versions'
+  | 'global-describe'
+  | 'limits'
   | 'outer-paged'
   | 'next-page'
   | 'child-null'
@@ -238,6 +261,35 @@ export function checkSalesforceShapes(responses: readonly RecordedResponse[]): S
       out.seen.add('describe');
       if (!isObject(r.body) || typeof r.body.queryable !== 'boolean') {
         out.violations.push(`${r.path}: describe has no boolean queryable`);
+      }
+      if (isObject(r.body) && r.body.fields !== undefined) {
+        out.seen.add('describe-fields');
+        if (!Array.isArray(r.body.fields) || !r.body.fields.every((f) => isObject(f) && typeof f.name === 'string')) {
+          out.violations.push(`${r.path}: describe fields is not an array of objects with a string name`);
+        }
+      }
+      continue;
+    }
+    if (r.kind === 'versions') {
+      out.seen.add('versions');
+      if (!Array.isArray(r.body) || !r.body.every((v) => isObject(v) && typeof v.version === 'string' && /^\d+\.\d+$/.test(v.version))) {
+        out.violations.push(`${r.path}: versions is not an array of objects with a string version like "62.0"`);
+      }
+      continue;
+    }
+    if (r.kind === 'global-describe') {
+      out.seen.add('global-describe');
+      const sobjects = isObject(r.body) ? r.body.sobjects : undefined;
+      if (!Array.isArray(sobjects) || !sobjects.every((o) => isObject(o) && typeof o.name === 'string' && typeof o.queryable === 'boolean')) {
+        out.violations.push(`${r.path}: sobjects is not an array of objects with a string name and a boolean queryable`);
+      }
+      continue;
+    }
+    if (r.kind === 'limits') {
+      out.seen.add('limits');
+      const daily = isObject(r.body) ? r.body.DailyApiRequests : undefined;
+      if (!isObject(daily) || typeof daily.Max !== 'number' || typeof daily.Remaining !== 'number') {
+        out.violations.push(`${r.path}: DailyApiRequests has no numeric Max and Remaining`);
       }
       continue;
     }

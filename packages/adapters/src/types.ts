@@ -69,7 +69,9 @@ export interface AdapterCapabilities {
   /**
    * Optional: false when the org holds notes this adapter found but could
    * not read (on Salesforce, Enhanced Notes linked to sampled deals when
-   * ContentNote isn't queryable for the Run As user). Absent means true.
+   * ContentNote isn't queryable for the Run As user), or when preflight()
+   * found it can't look for notes at all (on Salesforce, Note or
+   * ContentDocumentLink not readable). Absent means true.
    * Unlike the other fields, it can change during a run: the adapter only
    * knows once getNotesByOpportunity has looked, so callers re-read it
    * after reading notes.
@@ -322,6 +324,16 @@ export interface CrmAdapter {
    */
   probe?(): Promise<void>;
 
+  /**
+   * Optional checks before any read: credentials, API version, and access
+   * to the objects and fields a scan reads. Reads no records. Reports
+   * every problem it finds rather than throwing; a failure means a scan
+   * can't run, a warning that it runs with some metrics not measured
+   * (the adapter adjusts its capabilities, e.g. notesComplete, to match).
+   * Its calls are not part of capabilities().apiCallEstimate.
+   */
+  preflight?(options?: PreflightOptions): Promise<PreflightResult>;
+
   /** Cheap liveness and auth check. Must not consume meaningful quota. */
   health(): Promise<{ ok: boolean; detail?: string }>;
 
@@ -564,6 +576,25 @@ export interface SecondSourceAdapter {
    * throwing) when capabilities().hasActivities is false.
    */
   getActivitiesByRef(refs: readonly SecondSourceRef[]): Promise<GetSecondSourceRecordsResult<SecondSourceActivity>>;
+}
+
+export interface PreflightOptions {
+  /** Contacts will be read too (a second source is connected), so contact access is required. */
+  readonly contacts?: boolean;
+}
+
+/** One problem a preflight found: one plain-English sentence saying what to change. */
+export interface PreflightIssue {
+  readonly check: 'auth' | 'api_version' | 'object_access' | 'field_access';
+  readonly message: string;
+}
+
+export interface PreflightResult {
+  /** Problems that stop a scan; empty when it can run. */
+  readonly failures: readonly PreflightIssue[];
+  /** Problems a scan runs with: the metrics that need what's missing are marked not measured. */
+  readonly warnings: readonly PreflightIssue[];
+  readonly apiCallsConsumed: number;
 }
 
 export class AdapterError extends Error {

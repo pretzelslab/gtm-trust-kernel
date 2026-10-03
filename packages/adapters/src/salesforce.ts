@@ -62,6 +62,9 @@ import {
   type GetAccountsResult,
   type GetChildRecordsResult,
   type GetContactsResult,
+  type PreflightIssue,
+  type PreflightOptions,
+  type PreflightResult,
   type SamplePage,
   type SamplePopulation,
   type SamplePopulationCount,
@@ -584,6 +587,98 @@ const EVENT_FIELDS = ['Id', 'WhoId', 'WhatId', 'Subject', 'Description', 'Activi
 // ContentDocumentLink) are read separately by getNotesByOpportunity.
 const NOTE_FIELDS = ['Id', 'ParentId', 'Title', 'Body', 'OwnerId', 'CreatedDate', 'SystemModstamp'];
 const OPPORTUNITY_HISTORY_FIELDS = ['Id', 'OpportunityId', 'StageName', 'CloseDate', 'CreatedById', 'CreatedDate'];
+const OPPORTUNITY_CONTACT_ROLE_FIELDS = ['OpportunityId', 'ContactId', 'Role', 'IsPrimary'];
+const CONTENT_DOCUMENT_LINK_FIELDS = ['ContentDocumentId', 'LinkedEntityId'];
+const CONTENT_NOTE_FIELDS = ['Id', 'Title', 'TextPreview', 'OwnerId', 'CreatedDate'];
+
+/** One object the adapter reads, the fields it reads, and how much a scan needs it. */
+export interface SalesforceObjectRead {
+  readonly object: string;
+  readonly fields: readonly string[];
+  /**
+   * 'required': a scan can't run without it. 'contacts': required only
+   * when contacts are read (a second source is connected). 'notes':
+   * without it the scan runs and the note metrics are marked not measured
+   * (capabilities().notesComplete false).
+   */
+  readonly need: 'required' | 'contacts' | 'notes';
+}
+
+/**
+ * Everything the adapter reads, for preflight() and for a least-privilege
+ * permission set. The queries use these same field lists.
+ *
+ * Event and OpportunityHistory stay required: unlike the note objects, no
+ * metric that needs them is marked not measured without them. Missing
+ * Events would undercount activity; missing OpportunityHistory would
+ * report close-date history as not enabled rather than not measured
+ * (maintainer decision D3, 2026-10-03).
+ */
+export const SALESFORCE_READS: readonly SalesforceObjectRead[] = [
+  { object: 'Opportunity', fields: OPPORTUNITY_FIELDS, need: 'required' },
+  { object: 'Account', fields: ACCOUNT_FIELDS, need: 'required' },
+  { object: 'OpportunityContactRole', fields: OPPORTUNITY_CONTACT_ROLE_FIELDS, need: 'required' },
+  { object: 'Task', fields: TASK_FIELDS, need: 'required' },
+  { object: 'Event', fields: EVENT_FIELDS, need: 'required' },
+  { object: 'OpportunityHistory', fields: OPPORTUNITY_HISTORY_FIELDS, need: 'required' },
+  { object: 'Contact', fields: CONTACT_FIELDS, need: 'contacts' },
+  { object: 'Note', fields: NOTE_FIELDS, need: 'notes' },
+  { object: 'ContentDocumentLink', fields: CONTENT_DOCUMENT_LINK_FIELDS, need: 'notes' },
+  { object: 'ContentNote', fields: CONTENT_NOTE_FIELDS, need: 'notes' },
+];
+
+/** Shown when preflight() found Note or ContentDocumentLink unreadable. */
+export const NOTE_OBJECTS_ACCESS_HINT =
+  'Give the Run As user read access to Notes (Note, ContentDocumentLink and ContentNote), so notes can be read.';
+
+/** The OAuth `error` code (and description) in a failed token request's message, if any. */
+function tokenErrorOf(err: unknown): { code: string; description: string } | undefined {
+  if (!(err instanceof AdapterError) || !err.message.startsWith('Salesforce token request failed')) return undefined;
+  const code = /"error"\s*:\s*"([a-z_]+)"/.exec(err.message)?.[1] ?? '';
+  const description = /"error_description"\s*:\s*"([^"]*)"/.exec(err.message)?.[1] ?? '';
+  return { code, description };
+}
+
+/** The Salesforce errorCode in an error's message, if any; never the free text around it. */
+function errorCodeOf(err: unknown): string {
+  if (!(err instanceof Error)) return 'unexpected error';
+  const code = /"errorCode"\s*:\s*"([A-Z_]+)"/.exec(err.message)?.[1];
+  if (code) return code;
+  const status = /\((\d{3})\)/.exec(err.message)?.[1];
+  return status ? `HTTP ${status}` : err instanceof AdapterError ? err.kind : 'unexpected error';
+}
+
+/** One sentence for a failure to get a token or reach the org; undefined for other errors. */
+function authProblem(err: unknown): string | undefined {
+  if (err instanceof AdapterError && err.message.startsWith('Network error requesting Salesforce access token')) {
+    return "Couldn't reach Salesforce at SF_INSTANCE_URL. Check the URL and your network connection.";
+  }
+  const token = tokenErrorOf(err);
+  if (token) {
+    if (token.code === 'invalid_client_id') {
+      return "Salesforce doesn't recognise SF_CLIENT_ID. Use the connected app's Consumer Key (salesforce-setup.md).";
+    }
+    if (token.code === 'invalid_client') {
+      return "Salesforce rejected SF_CLIENT_SECRET. Use the connected app's Consumer Secret (salesforce-setup.md).";
+    }
+    if (/domain/i.test(token.description)) {
+      return "SF_INSTANCE_URL must be your org's My Domain URL, such as https://yourcompany.my.salesforce.com.";
+    }
+    if (token.code === 'invalid_grant' || token.code === 'unsupported_grant_type') {
+      return "The connected app can't use the client credentials flow: turn on Enable Client Credentials Flow and set a Run As user (salesforce-setup.md).";
+    }
+    return `Salesforce refused the token request (${token.code || errorCodeOf(err)}). Check SF_CLIENT_ID, SF_CLIENT_SECRET and SF_INSTANCE_URL (salesforce-setup.md).`;
+  }
+  if (err instanceof AdapterError && err.kind === 'auth') {
+    return 'Salesforce rejected the access token for this org. Check that the connected app and its Run As user are active (salesforce-setup.md).';
+  }
+  return undefined;
+}
+
+/** Numeric order for API version strings such as '62.0'. */
+function versionNumber(v: string): number {
+  return Number(v.replace(/^v/, ''));
+}
 
 // ---------------------------------------------------------------------------
 // Adapter
@@ -617,6 +712,10 @@ export class SalesforceAdapter implements CrmAdapter {
   private contentNoteQueryable: boolean | null = null;
   /** Set once Enhanced Notes were found linked to a deal but couldn't be read (capabilities().notesComplete). */
   private enhancedNotesUnread = false;
+  /** From preflight(): note objects the Run As user can't read; their queries are skipped (capabilities().notesComplete). */
+  private readonly unreadableNoteObjects = new Set<'Note' | 'ContentDocumentLink'>();
+  /** Set when preflight() decided contentNoteQueryable, so probe() needn't ask again. */
+  private contentNoteCheckedByPreflight = false;
   /** opportunityId -> last-seen toStage, for deriving fromStage across listStageHistory pages/calls on this instance. */
   private readonly lastKnownStage = new Map<string, CanonicalStage>();
 
@@ -661,7 +760,7 @@ export class SalesforceAdapter implements CrmAdapter {
       // Complete unless Enhanced Notes were found that ContentNote couldn't
       // read (see fetchEnhancedNotes); no linked Enhanced Notes means
       // nothing is missing, queryable or not.
-      notesComplete: !this.enhancedNotesUnread,
+      notesComplete: !this.enhancedNotesUnread && this.unreadableNoteObjects.size === 0,
       ...this.settingHints(),
       // Per run: the ContentNote probe, 2 population counts and the
       // org-wide stage-history read.
@@ -704,7 +803,11 @@ export class SalesforceAdapter implements CrmAdapter {
   private settingHints(): Pick<AdapterCapabilities, 'settingHints'> {
     const hints = {
       ...(this.config.activityCapture === 'auto' ? {} : { activitySync: ACTIVITY_CAPTURE_HINT }),
-      ...(this.enhancedNotesUnread ? { notesComplete: NOTES_ACCESS_HINT } : {}),
+      ...(this.unreadableNoteObjects.size > 0
+        ? { notesComplete: NOTE_OBJECTS_ACCESS_HINT }
+        : this.enhancedNotesUnread
+          ? { notesComplete: NOTES_ACCESS_HINT }
+          : {}),
     };
     return Object.keys(hints).length > 0 ? { settingHints: hints } : {};
   }
@@ -713,9 +816,11 @@ export class SalesforceAdapter implements CrmAdapter {
    * One describe call: is ContentNote queryable for the Run As user? It
    * isn't when Notes are off in the org or the user lacks access (the
    * describe answers 404 NOT_FOUND). Any failure counts as not queryable;
-   * this never throws.
+   * this never throws. Makes no call when preflight() already checked
+   * ContentNote.
    */
   async probe(): Promise<void> {
+    if (this.contentNoteCheckedByPreflight) return;
     try {
       const describe = await this.request<{ queryable?: boolean }>(
         `/services/data/${this.config.apiVersion}/sobjects/ContentNote/describe`,
@@ -724,6 +829,120 @@ export class SalesforceAdapter implements CrmAdapter {
     } catch {
       this.contentNoteQueryable = false;
     }
+  }
+
+  /**
+   * Before any read: credentials (a token), the API version (the org's
+   * version list), then object access (one global describe) and field
+   * access (one describe per object) for SALESFORCE_READS. Reads no
+   * records; at most 12 calls. A credentials or version problem stops the
+   * checks there. A 'notes' object that can't be read is a warning: its
+   * queries are skipped and notesComplete is false. Messages carry
+   * Salesforce error codes, never response text.
+   */
+  async preflight(options: PreflightOptions = {}): Promise<PreflightResult> {
+    const failures: PreflightIssue[] = [];
+    const warnings: PreflightIssue[] = [];
+    let apiCallsConsumed = 0;
+    const result = (): PreflightResult => ({ failures, warnings, apiCallsConsumed });
+    const call = async <T>(path: string): Promise<T> => {
+      apiCallsConsumed += 1;
+      return this.request<T>(path);
+    };
+
+    let versions: unknown;
+    try {
+      versions = await call<unknown>('/services/data/');
+    } catch (err) {
+      const auth = authProblem(err);
+      failures.push(
+        auth
+          ? { check: 'auth', message: auth }
+          : { check: 'api_version', message: `Couldn't list this org's API versions (${errorCodeOf(err)}).` },
+      );
+      return result();
+    }
+    const offered = (Array.isArray(versions) ? (versions as { version?: unknown }[]) : [])
+      .map((v) => v?.version)
+      .filter((v): v is string => typeof v === 'string');
+    if (!offered.includes(this.config.apiVersion.replace(/^v/, ''))) {
+      const newest = offered.slice().sort((a, b) => versionNumber(b) - versionNumber(a))[0];
+      failures.push({
+        check: 'api_version',
+        message: newest
+          ? `This org doesn't offer API version ${this.config.apiVersion}; the newest it offers is v${newest}. Set SF_API_VERSION=v${newest}.`
+          : `This org didn't list any API versions, so ${this.config.apiVersion} can't be checked.`,
+      });
+      return result();
+    }
+
+    const base = `/services/data/${this.config.apiVersion}/sobjects`;
+    let sobjects: readonly { name?: unknown; queryable?: unknown }[];
+    try {
+      const global = await call<{ sobjects?: unknown }>(`${base}/`);
+      sobjects = Array.isArray(global.sobjects) ? (global.sobjects as { name?: unknown; queryable?: unknown }[]) : [];
+    } catch (err) {
+      const auth = authProblem(err);
+      failures.push(
+        auth
+          ? { check: 'auth', message: auth }
+          : {
+              check: 'object_access',
+              message: `The Run As user can't list Salesforce objects (${errorCodeOf(err)}). Check that it has the API Enabled permission.`,
+            },
+      );
+      return result();
+    }
+    const queryable = new Set(sobjects.filter((s) => s?.queryable === true).map((s) => s.name));
+
+    for (const read of SALESFORCE_READS) {
+      if (read.need === 'contacts' && !options.contacts) continue;
+      let problem: PreflightIssue | undefined;
+      if (!queryable.has(read.object)) {
+        problem = {
+          check: 'object_access',
+          message: `The Run As user can't read ${read.object} records. Give it Read access to ${read.object} in a permission set.`,
+        };
+      } else {
+        try {
+          const describe = await call<{ fields?: unknown }>(`${base}/${read.object}/describe`);
+          const visible = new Set(
+            (Array.isArray(describe.fields) ? (describe.fields as { name?: unknown }[]) : []).map((f) => f?.name),
+          );
+          const missing = read.fields.filter((f) => !visible.has(f));
+          if (missing.length > 0) {
+            problem = {
+              check: 'field_access',
+              message: `The Run As user can't read ${missing.map((f) => `${read.object}.${f}`).join(', ')}. Give it Read access to ${missing.length === 1 ? 'that field' : 'those fields'} (field-level security).`,
+            };
+          }
+        } catch (err) {
+          const auth = authProblem(err);
+          if (auth) {
+            failures.push({ check: 'auth', message: auth });
+            return result();
+          }
+          problem = { check: 'object_access', message: `Couldn't check access to ${read.object} (${errorCodeOf(err)}).` };
+        }
+      }
+
+      if (read.object === 'ContentNote') {
+        this.contentNoteQueryable = problem === undefined;
+        this.contentNoteCheckedByPreflight = true;
+      }
+      if (!problem) continue;
+      if (read.need !== 'notes') {
+        failures.push(problem);
+        continue;
+      }
+      const consequence =
+        read.object === 'ContentNote'
+          ? 'Until then, Enhanced Notes are not read, and if the scan finds any, note metrics are marked not measured.'
+          : 'Until then, note metrics are marked not measured.';
+      if (read.object === 'Note' || read.object === 'ContentDocumentLink') this.unreadableNoteObjects.add(read.object);
+      warnings.push({ ...problem, message: `${problem.message} ${consequence}` });
+    }
+    return result();
   }
 
   async health(): Promise<{ ok: boolean; detail?: string }> {
@@ -1148,7 +1367,7 @@ export class SalesforceAdapter implements CrmAdapter {
     for (let i = 0; i < ids.length; i += batch) {
       const chunk = ids.slice(i, i + batch);
       const soql =
-        `SELECT OpportunityId, ContactId, Role, IsPrimary FROM OpportunityContactRole ` +
+        `SELECT ${OPPORTUNITY_CONTACT_ROLE_FIELDS.join(', ')} FROM OpportunityContactRole ` +
         `WHERE OpportunityId IN (${soqlIdList(chunk)}) ORDER BY OpportunityId, Id`;
       let page = await this.soqlQuery<RawOpportunityContactRole>(soql);
       apiCallsConsumed += 1;
@@ -1226,11 +1445,14 @@ export class SalesforceAdapter implements CrmAdapter {
     ids.forEach(assertValidSalesforceId);
     const truncatedOpportunityIds = new Set<string>();
 
-    const legacy = await this.childRowsByOpportunity<RawNote>(
-      ids,
-      'Notes',
-      `SELECT ${NOTE_FIELDS.join(', ')} FROM Notes ORDER BY CreatedDate DESC NULLS LAST LIMIT ${limit + 1}`,
-    );
+    // Skipped when preflight() found Note unreadable (notesComplete is then false).
+    const legacy = this.unreadableNoteObjects.has('Note')
+      ? { rowsByOpportunity: new Map<string, RawNote[]>(), apiCallsConsumed: 0 }
+      : await this.childRowsByOpportunity<RawNote>(
+          ids,
+          'Notes',
+          `SELECT ${NOTE_FIELDS.join(', ')} FROM Notes ORDER BY CreatedDate DESC NULLS LAST LIMIT ${limit + 1}`,
+        );
     let apiCallsConsumed = legacy.apiCallsConsumed;
     const byOpp = new Map<string, Note[]>();
     for (const oppId of ids) byOpp.set(oppId, (legacy.rowsByOpportunity.get(oppId) ?? []).map(this.mapNote));
@@ -1266,12 +1488,14 @@ export class SalesforceAdapter implements CrmAdapter {
     let apiCallsConsumed = 0;
     const batch = this.capabilities().childRecordBatchLimit;
     const fetchLimit = this.config.noteFullTextFetchLimit ?? DEFAULT_NOTE_FULLTEXT_FETCH_LIMIT;
+    // preflight() found ContentDocumentLink unreadable: Enhanced Notes can't be found (notesComplete is then false).
+    if (this.unreadableNoteObjects.has('ContentDocumentLink')) return { notesByOpportunity, apiCallsConsumed };
 
     for (let i = 0; i < opportunityIds.length; i += batch) {
       const chunk = opportunityIds.slice(i, i + batch);
       const links: RawContentDocumentLink[] = [];
       let page = await this.soqlQuery<RawContentDocumentLink>(
-        `SELECT ContentDocumentId, LinkedEntityId FROM ContentDocumentLink ` +
+        `SELECT ${CONTENT_DOCUMENT_LINK_FIELDS.join(', ')} FROM ContentDocumentLink ` +
           `WHERE LinkedEntityId IN (${soqlIdList(chunk)}) AND ContentDocument.FileType = 'SNOTE'`,
       );
       apiCallsConsumed += 1;
@@ -1294,7 +1518,7 @@ export class SalesforceAdapter implements CrmAdapter {
         let notePage: SoqlResponse<RawContentNote>;
         try {
           notePage = await this.soqlQuery<RawContentNote>(
-            `SELECT Id, Title, TextPreview, OwnerId, CreatedDate FROM ContentNote WHERE Id IN (${soqlIdList(docChunk)})`,
+            `SELECT ${CONTENT_NOTE_FIELDS.join(', ')} FROM ContentNote WHERE Id IN (${soqlIdList(docChunk)})`,
           );
         } catch (err) {
           apiCallsConsumed += 1;
