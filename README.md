@@ -77,6 +77,7 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 - `--narrative` is optional. It sends metric names, values, sample sizes and ratings to Anthropic's API. It never sends record text such as notes, emails or names. It asks before sending (answering no runs the report without it), or needs `--narrative-consent` when there's no terminal, and `--narrative-preview` shows the exact request without sending it.
 - The Salesforce adapter is read-only. It cannot write to your CRM.
 - Reports from a live Salesforce org leave out your org's hostname by default, since reports get shared. `--show-org` includes it, and the report then says so.
+- [docs/DATA-FLOW.md](docs/DATA-FLOW.md) lists everything the tool reads, stores and sends, and for how long.
 
 ## For developers
 

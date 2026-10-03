@@ -45,6 +45,9 @@ Only the latest published version of each package
   guard is basic (a phrase list plus a canary token); see "Known gaps" in
   the README.
 
+What is read, stored and sent, and for how long, is set out in
+[docs/DATA-FLOW.md](docs/DATA-FLOW.md).
+
 ## Releases
 
 Packages are published from GitHub Actions with npm trusted publishing;
