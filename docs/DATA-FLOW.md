@@ -1,7 +1,7 @@
 # Data flow
 
 What the tool reads, what it stores, what leaves your machine, and for how
-long. Current as of 2026-10-03 (CLI 0.2.0 and adapters 0.2.1, not yet
+long. Current as of 2026-10-03 (CLI 0.2.0 and adapters 0.3.0, not yet
 published). This page describes the tool's behaviour. It is not legal
 advice.
 
@@ -23,7 +23,7 @@ reads a real org.
 | Source | What | Where it goes |
 |---|---|---|
 | Salesforce API (your org) | Deals (opportunities), contact roles, accounts, contacts, Tasks, Events, Notes, Enhanced Notes, stage history. This includes free text such as deal names, next steps, note bodies and activity subjects, and contact names and emails | Memory only, for the length of the run. Reports carry only computed counts, rates, booleans and verdicts |
-| Your environment or a `.env` file you create | `SF_CLIENT_ID`, `SF_CLIENT_SECRET`, `SF_INSTANCE_URL`, `ANTHROPIC_API_KEY` and optional settings | Used to authenticate. Never logged, never written to a report |
+| Your environment or a `.env` file you create (the first found: the folder you run the report from, then the repo root; your shell's variables win) | `SF_CLIENT_ID`, `SF_CLIENT_SECRET`, `SF_INSTANCE_URL`, `ANTHROPIC_API_KEY` and optional settings | Used to authenticate. Never logged, never written to a report. The run prints which folder's `.env` it used, not the path |
 
 Emails used for cross-system matching are trimmed, lowercased and hashed
 with a salt generated once per run; the salt and hashes stay in memory
@@ -31,8 +31,16 @@ with a salt generated once per run; the salt and hashes stay in memory
 D5).
 
 What goes **to** Salesforce: the client id and secret (to its token
-endpoint), the access token, and SOQL queries that contain record ids. The
-adapter has no write path.
+endpoint), the access token, and SOQL queries that contain record ids.
+Before a live scan, a preflight also asks for the org's API versions, its
+object list, the field list of each object the report reads, and, only
+if no response has reported the org's daily API usage, `/limits`. These
+return metadata, not records. The adapter has no write path.
+
+What comes back besides records: the org's daily API usage, from the
+`Sforce-Limit-Info` header on each response. It stays in memory and
+appears only in terminal output (the sampling plan and quota messages),
+never in a report.
 
 ## What is stored on disk
 
@@ -105,6 +113,7 @@ leaves this machine" (sample data) or "nothing else left this machine"
 
 - Error messages printed to the terminal can include the body of a
   Salesforce error response, which may echo query fragments or record ids.
-  They are not written to the reports.
+  They are not written to the reports. Preflight and rate-limit messages
+  are the exception: they carry Salesforce error codes only.
 - The proposal kernel's audit ledger (actor ids, field names, record ids)
   exists only in memory and isn't reachable from any command yet.

@@ -20,8 +20,16 @@ Only the latest published version of each package
   Salesforce: `capabilities().writeGranularity` is `'none'` and
   `applyFieldWrite()` always returns `rejected` without calling the API.
   The readiness report and the CLI only read.
+- **Least privilege.** The Run As user needs Read access only. Every
+  object and field the adapter reads is listed in `SALESFORCE_READS`
+  (adapters `salesforce.ts`), and a live run checks that access first,
+  reading no records, then stops with one line per missing permission.
+  It also keeps 10% of the org's daily API limit for your other tools.
+  See [salesforce-setup.md](packages/readiness/docs/salesforce-setup.md),
+  section 3.
 - **Credentials stay where you put them.** Salesforce credentials are read
-  from environment variables (or a local `.env` you create); they are never
+  from environment variables (or a local `.env` you create, read from the
+  folder you run the report from or else the repo root); they are never
   logged, written to the reports, or included in the published packages.
   The access token is cached on disk in your user config folder
   (`%LOCALAPPDATA%\gtm-trust-kernel` on Windows, `~/Library/Application

@@ -17,6 +17,83 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Reliability batch, 2026-10-03
+
+From the go-public gate (gap audit L3, L5, L6, L10). Each commit pushed
+with `npm run ci` and GitHub CI green.
+
+| Commit | What |
+|---|---|
+| `426c896` | L6: retry with backoff in `SalesforceAdapter` (`retry.ts`); daily `REQUEST_LIMIT_EXCEEDED` becomes `rate_limit` |
+| `97c7c1c` | L5: `CrmAdapter.preflight?()`; Salesforce checks token, API version, object and field access against `SALESFORCE_READS` |
+| `475ae0f` | L5: `npm run report -- --live` runs the preflight first (`runPreflight`, `PreflightError`); one stderr line per retry wait |
+| `832ae7d` | L10: the org's daily usage from `Sforce-Limit-Info` (or `/limits`); `rateLimit.remaining/reserve/source`; stop at the reserve |
+| `ee8d12b` | L10: the plan's quota line uses the calls left; a run that doesn't fit stops before any read (`QuotaError`) |
+| `148796b` | L3: `.env` from the folder the command ran in (`INIT_CWD`), then the repo root; stderr names which |
+| this entry | Docs: STATUS, this log, adapters and CLI changelogs, SECURITY, DATA-FLOW, salesforce-setup |
+
+**Decisions (approved by the maintainer):**
+- **D1, retry:** 4 attempts, 1 s base, 30 s per wait, 60 s in total, full
+  jitter. `Retry-After` is honoured exactly; one longer than a single
+  wait or the time left gives up at once. Retried: 429, 503, and 403
+  `REQUEST_LIMIT_EXCEEDED` whose message starts "Concurrent". Never: 400,
+  401 (beyond the one token refresh), other 403s, 404, 500. Network
+  errors aren't retried (out of scope).
+- **D2:** the daily `TotalRequests` limit (and any other
+  `REQUEST_LIMIT_EXCEEDED` message) fails at once as `rate_limit`,
+  `retryable: false`. It used to be reported as `permission`: **breaking**
+  for code that switches on `kind`, noted in the adapters CHANGELOG.
+- **D3, required objects:** Opportunity, Account, OpportunityContactRole,
+  Task, Event, OpportunityHistory; Contact only with a second source.
+  Asked for Event and OpportunityHistory as warnings, but checked first:
+  the report has no not-measured path for them (missing Events would
+  undercount activity; missing OpportunityHistory would make
+  `close_date_history_enabled` read 0, "not enabled", which gates
+  Close-date realism), so they stay required. Note, ContentDocumentLink
+  and ContentNote are warnings: queries skipped, `notesComplete` false, so
+  the six note metrics are not measured (an end-to-end test checks this).
+- **D4:** 10% of the daily maximum is kept in reserve
+  (`DAILY_LIMIT_RESERVE_FRACTION`).
+- **D5:** adapters becomes **0.3.0** (was 0.2.1); the CLI's range
+  becomes `^0.3.0`. Both are set at the re-pack.
+- **D6:** the fake API's `adapter()` passes a no-op sleep;
+  `apiCallEstimate.perRun` stays 4, and preflight calls are outside the
+  estimate.
+- **D7:** the mid-run stop at the reserve is in. Preflight and `health()`
+  aren't stopped by it; preflight reports an org already at the reserve as
+  an `api_limit` failure.
+- **Preflight wiring:** `runPreflight()` is called from `cli.ts`, not
+  inside `buildLiveReportData`, so the existing redaction tests (which
+  build a live report on a fake org with no preflight answers) are
+  unchanged.
+- **Fake API:** sends `Sforce-Limit-Info` like the live org (not on the
+  token or the version list), starting at 10/15000 and counting calls;
+  `apiUsage()` sets it or turns it off.
+- **Re-pack (was the last commit of this batch) is held until right
+  before going public:** the README story and the demo kit change the
+  package contents again.
+
+**Live check** (approved once, read-only, after C2): 44 passed, 0
+failed, 0 shape violations. Preflight: 0 failures, 1 warning, 11 calls.
+The warning is `ContentNote` by elimination (Note and ContentDocumentLink
+were read in the same run). The live org is left without ContentNote
+access **on purpose**, as a demo of the not-measured path.
+`Sforce-Limit-Info` came back on 11 of 12 responses, as
+`api-usage=<used>/<max>` (the version list has none). Version list,
+global describe, per-object describe fields and `/limits` shapes all
+match what the adapter reads. Read pass: 12 calls (budget 25).
+
+**Tests:** adapters 172 -> 246 (2 POSIX-only skipped on Windows),
+readiness 537 -> 559, CLI 28 and kernel 40 unchanged. No test from before
+this batch was edited: new tests only, plus test-support additions (the
+fake API's no-op sleep, `tokenAnswers`, `apiVersions`, `globalDescribe`,
+`apiUsage`, `registerPreflightOrg`) and new shape kinds in
+`salesforceShapes.ts`. A drift guard fails if any queried field is
+missing from `SALESFORCE_READS` (checked by removing one field).
+
+**Release state:** nothing packed, tagged or published. Adapters
+`package.json` still says 0.2.1.
+
 ## Privacy minimum batch, 2026-10-03
 
 From the go-public gate check (gap audit C1-C5, L7). Each commit pushed

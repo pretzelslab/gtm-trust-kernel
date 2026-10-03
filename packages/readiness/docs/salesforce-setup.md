@@ -64,12 +64,34 @@ The report queries these objects, read-only:
 `Contact` is only read when a second source is connected, which the
 `--live` report doesn't do today.
 
+**Checked before every run.** A live run first checks that the Run As
+user can sign in, that the org offers the API version, and that it can
+read each object above and each field the report reads (the list is
+`SALESFORCE_READS` in the adapter). It reads no records for this and makes
+about 11 API calls. Each problem prints as one line saying what to change:
+
+- **Required**, the run stops (exit 1, no report): `Opportunity`,
+  `Account`, `OpportunityContactRole`, `Task`, `Event`,
+  `OpportunityHistory` (and `Contact` with a second source). `Event` and
+  `OpportunityHistory` are required because the report has no
+  "not measured" path for them: missing Events would undercount
+  activity, and missing history would read as "close-date history not
+  enabled".
+- **Warning**, the run continues: `Note`, `ContentDocumentLink`,
+  `ContentNote`. Without `Note` or `ContentDocumentLink`, the note metrics
+  are marked **Not measured**. Without `ContentNote`, they are marked Not
+  measured only if the scan finds Enhanced Notes it can't read (see
+  "Enhanced Notes" below).
+
 Minimum, **unverified** on a live org:
 
 - **API Enabled** on the user's profile or a permission set.
 - **Read** on Account, Opportunity and Contact. Contact roles, legacy
   notes, activities and opportunity history follow access to the parent
   opportunity; Enhanced Notes follow file sharing on the linked record.
+- **Read on Notes (`ContentNote`)**, for Enhanced Notes. Without it the
+  run still works, but any deal with Enhanced Notes makes the note metrics
+  **Not measured** instead of scoring them on the notes it could read.
 - **Record visibility decides coverage.** The scan only counts and reads
   the opportunities the Run As user can see. To assess the whole org,
   give that user **View All** on Opportunity (and Account), or use an
@@ -102,7 +124,17 @@ The Enhanced Note checks are deferred until the cause is found.
 If Enhanced Notes are linked to sampled deals but `ContentNote` can't be
 read, the note metrics show as **Not measured**, with a hint naming these
 two steps; the run doesn't fail. With no Enhanced Notes linked, nothing is
-missing and the note metrics are scored as usual.
+missing and the note metrics are scored as usual. The preflight warns
+about it before the scan: "The Run As user can't read ContentNote
+records. … Until then, Enhanced Notes are not read, and if the scan finds
+any, note metrics are marked not measured."
+
+**The maintainer's test org is left this way on purpose.** Since
+2026-10-03 its Run As user has no `ContentNote` access, so a live run
+shows the not-measured path: the preflight on 2026-10-03 reported no
+failures and one warning, which by elimination is `ContentNote` (`Note`
+and `ContentDocumentLink` were both read in the same run). Give the Run As
+user read access to Notes to score Enhanced Notes.
 
 ## 4. Settings (`.env`)
 
@@ -279,6 +311,12 @@ exits 2 if any capability has a listed verdict (a comma list of `blocked`,
 
 What a run does:
 
+- Checks access first (section 3, "Checked before every run"); a problem
+  stops the run before any record is read.
+- Prints the plan. If the org has reported its daily API usage, the
+  quota line says how many calls are left today, keeps 10% of the daily
+  maximum in reserve for the org's other tools, and refuses to start if
+  the plan needs more than the rest.
 - Counts the eligible deals (every open one, plus closed ones in the last
   12 months) and scans up to 5,000 of them, newest created first. The
   list-field metrics run over the whole scan.
@@ -300,8 +338,19 @@ calls on a 31-deal org (4 for the scan, 114 for the detailed checks, about
 four seeded deals added (35 deals, 1 of them the `ContentNote` check).
 Both runs predate batching; after it the same 35-deal org takes **12
 calls** (2026-09-30). A Developer Edition org's daily API limit is 15,000
-(**confirmed** from `/limits`; the adapter doesn't read it). `/limits`'s
-remaining count lags by minutes, so it can't measure a single run.
+(**confirmed** from `/limits`). `/limits`'s remaining count lags by
+minutes, so it can't measure a single run. Since 2026-10-03 the adapter
+reads the org's usage from the `Sforce-Limit-Info` header Salesforce
+sends with each response (**confirmed** on 11 of 12 preflight responses;
+the API version list doesn't carry it), and uses `/limits` only if no
+response has. It stops before a call once the calls left reach the 10%
+reserve, with a message giving the numbers.
+
+**Rate limits.** A 429, a 503 or a "concurrent requests"
+`REQUEST_LIMIT_EXCEEDED` is retried up to 4 attempts in all, with growing
+random waits (or the wait Salesforce asks for), at most 30 seconds each
+and 60 in total; each wait prints one line. The org's daily limit
+(`TotalRequests`) stops the run at once, since waiting can't lift it.
 
 ### Live contract tests
 

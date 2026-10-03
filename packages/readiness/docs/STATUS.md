@@ -10,7 +10,7 @@ gap or decision refer to that log.
 | Package | npm | Published | Next (unreleased, not yet packed) |
 |---|---|---|---|
 | CLI | `gtm-trust-kernel` | 0.1.0 | 0.2.0 |
-| CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.2.1 |
+| CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.3.0 (`package.json` still says 0.2.1 until the re-pack) |
 | Readiness report | (private, bundled into the CLI) | | |
 | Proposal kernel | (private) | | |
 
@@ -39,14 +39,24 @@ gap or decision refer to that log.
   write. The access token is cached in the user's config folder, owner-only
   on macOS and Linux. The full report runs against a real org from a repo clone
   (`npm run report -- --live`); see [salesforce-setup.md](salesforce-setup.md).
-  It has no health preflight and doesn't retry a rate limit (429) yet.
+- **Live-run reliability.** Before any read, a preflight checks sign-in,
+  the API version and read access to every object and field the report
+  uses; a problem stops the run with one line each. Note objects the
+  Run As user can't read are warnings, and the note metrics are then
+  marked not measured. A rate limit (429), a 503 or a concurrent-request
+  limit is retried with backoff (4 attempts, 60 s of waiting at most);
+  the org's daily limit stops the run at once. The plan uses the org's
+  own calls left today (`Sforce-Limit-Info`), keeps 10% of the daily
+  maximum for the org's other tools, refuses to start a run that doesn't
+  fit, and stops a run that reaches the reserve. `.env` is read from the
+  folder the report is run from, else the repo root.
 - **Adapter contract.** The mock and Salesforce adapters pass one shared
   contract suite; Salesforce passes it against a live Developer Edition
   org, re-run weekly in CI (`live-contract.yml`). A response-shape
   contract checks the fake Salesforce API against what the adapter reads.
 - **Proposal kernel.** Evidence-cited, human-approved field writes with
   concurrency checks, rollback and a hash-chained audit ledger.
-- **CI.** Typecheck and about 700 tests on every push (`npm run ci` removes
+- **CI.** Typecheck and about 870 tests on every push (`npm run ci` removes
   any `dist/` first), plus a packed-tarball lint of both npm packages
   (publint, arethetypeswrong).
 
@@ -59,6 +69,11 @@ gap or decision refer to that log.
   - activities logged only against a deal's contacts aren't counted;
   - Enhanced Notes and the custom-stage notice are unit-tested but not yet
     seen on a live org;
+  - the maintainer's live org has no `ContentNote` access, on purpose: it
+    shows the not-measured path for Enhanced Notes (salesforce-setup.md,
+    section 3);
+  - network errors (a dropped connection) aren't retried, only rate limits
+    and 503s;
   - paged child results (a subquery's `nextRecordsUrl`) are covered only
     by doc-based fake tests: on the live org a 201-row child result came
     back on one page;
@@ -76,10 +91,12 @@ The full list, with the reasoning behind each item, is in
 ## Releases
 
 Releases are published from GitHub Actions with npm trusted publishing;
-the steps are in [RELEASING.md](../../../RELEASING.md). Adapters 0.2.1 and
-CLI 0.2.0 are not packed yet: the tarballs prepared on 2026-10-02 are
-invalidated by the privacy batch (2026-10-03), and the reliability batch
-changes the adapters again, so both are packed once, after it. Publishing
+the steps are in [RELEASING.md](../../../RELEASING.md). Adapters 0.3.0
+(planned as 0.2.1 until the reliability batch) and CLI 0.2.0 are not
+packed yet. **The re-pack is held until right before going public**: the
+README story and the demo kit change the package contents again, so both
+are packed once, last (version bump, CLI range `^0.3.0`, lockfile, file
+lists and shasums, clean-room install). Publishing
 also waits on the repository becoming public (`publish.yml` publishes
 with `--provenance`, which npm accepts only from a public repository, as
 far as is known).
@@ -97,16 +114,18 @@ pre-rewrite commits and don't resolve in this repository.
 
 Before going public:
 
-1. **Reliability batch** (adapters): a health preflight before a live
-   scan (L5) and retry with backoff on a 429 rate limit (L6).
-2. **README story:** finish the plain-English README.
-3. **Demo kit:** a `demo:kernel` script, committed sample reports and a
+1. **README story:** finish the plain-English README.
+2. **Demo kit:** a `demo:kernel` script, committed sample reports and a
    walkthrough.
-4. **Re-pack** adapters 0.2.1 and CLI 0.2.0 once (new shasums, file
-   lists and changelogs), with a clean-room install check.
-5. **Go public**, then switch on private vulnerability reporting, secret
+3. **Re-pack**, right before going public: adapters 0.3.0 and CLI 0.2.0
+   once (version bump, new shasums, file lists and changelogs), with a
+   clean-room install check.
+4. **Go public**, then switch on private vulnerability reporting, secret
    scanning with push protection, Dependabot alerts and a ruleset for
-   `master`. Then publish adapters 0.2.1, then CLI 0.2.0.
+   `master`. Then publish adapters 0.3.0, then CLI 0.2.0.
+
+The reliability batch (L3, L5, L6, L10) is done; see the dev log,
+2026-10-03.
 
 After that:
 
