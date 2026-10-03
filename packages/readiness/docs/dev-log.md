@@ -17,6 +17,69 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Privacy minimum batch, 2026-10-03
+
+From the go-public gate check (gap audit C1-C5, L7). Each commit pushed
+with `npm run ci` and GitHub CI green.
+
+| Commit | What |
+|---|---|
+| `c74a478` | `rubric.ts` header reworded to a neutral protected-file note (comment only) |
+| `53eb498` | `narrativeRequest.ts`: the exact Messages API request, built without the SDK; the client sends exactly what `buildNarrativeRequest()` returns |
+| `f671ba2` | Canary on the narrative request: no seeded record text, hostname or record ids (mock org and fake Salesforce), with a positive control |
+| `dc72188` | `--narrative-preview` (CLI and `npm run report`): prints the request, sends nothing, writes nothing, needs no key |
+| `1921ffd` | Consent for `--narrative`: a terminal prompt, or `--narrative-consent` |
+| `178253b` | Fix: a "no" at the prompt writes the report without the AI summary; in-process "y"/"n" tests with a stubbed model client |
+| `3a6fed5` | Token cache moved to the user's config folder, owner-only (adapters `src/tokenCache.ts`) |
+| `ef66609` | Report banners state what left the machine |
+| `c897e21` | Live reports hide the org hostname by default; `--show-org` includes it |
+| `9c22141` | `docs/DATA-FLOW.md`, linked from the README and SECURITY.md |
+
+**Decisions (approved by the maintainer):**
+- **Consent flag** is `--narrative-consent` (not `--yes`). It applies to
+  `scan --demo` too. The API key is checked first, then consent, both
+  before any data is read. With no terminal and no flag the run exits 1;
+  `--narrative-consent` without `--narrative` is bad usage.
+- **Declining** at the prompt runs the report without the AI summary
+  (the deterministic summary), writes it, exits 0 and prints "AI summary
+  skipped; nothing was sent." on stderr.
+- **`--narrative-preview`** prints only and writes no reports; it can't be
+  combined with `--narrative`, `--json`, `--fail-on` (or `--all`).
+- **Org hostname** is hidden by default in the JSON and both HTML reports
+  ("Salesforce org (hostname not shown; --show-org includes it)").
+  `--show-org` (live only) includes it, and both reports then carry "This
+  report names your Salesforce org's hostname; remove --show-org before
+  sharing."
+- **Token cache:** `%LOCALAPPDATA%\gtm-trust-kernel\` (Windows),
+  `~/Library/Application Support/gtm-trust-kernel/` (macOS),
+  `$XDG_CONFIG_HOME` or `~/.config/gtm-trust-kernel/` (Linux), one
+  `salesforce-token-<hash>.json` per instance URL + client id.
+  `SF_TOKEN_CACHE_PATH` still overrides it. On macOS/Linux the file is
+  written 0600 via temp file and rename, and a folder the tool creates is
+  0700. **An existing folder is not chmod-ed**, since it may be one the
+  user chose through `SF_TOKEN_CACHE_PATH`. Windows relies on the profile
+  folder's default ACL (stated in SECURITY.md and DATA-FLOW.md). The old
+  file in the package folder is deleted on first token use, not migrated.
+  The 0600/0700 tests ran in the Linux CI job (adapters 172 passed, 0
+  skipped; they skip on Windows).
+- **Banner:** a narrative result, ok or fallback, counts as sent.
+
+**Tests:** readiness 496 -> 537, CLI 16 -> 28, adapters 153 -> 172 (2 of
+them POSIX-only). No test from before this batch was edited; the canary
+files only gained new `describe` blocks.
+
+**Release state:** the adapters 0.2.1 and CLI 0.2.0 tarballs prepared on
+2026-10-02 are invalidated (their shasums are removed here and in
+STATUS.md). The CLI tarball gains a shared chunk (7 -> 8 files) and the
+adapters one `tokenCache.js`/`.d.ts`. Both are re-packed once, after the
+reliability batch, which changes the adapters again.
+
+**Remaining before going public:** the reliability batch (L5 preflight,
+L6 retry on 429); the README story; the demo kit (`demo:kernel`,
+committed sample reports, a walkthrough); the re-pack; then, once public,
+private vulnerability reporting, secret scanning with push protection,
+Dependabot alerts and a `master` ruleset.
+
 ## Release prep, 2026-10-02: adapters 0.2.1 and CLI 0.2.0 (not published)
 
 Audit fixes, each pushed with CI green: `b97af2c` (mock fault paths threw
@@ -35,12 +98,10 @@ issue templates, Dependabot).
 `gtm-trust-kernel` 0.2.0 (`--fail-on`, `--verbose`, summary, usage errors,
 lazy SDK, adapters `^0.2.1`). Changelogs updated.
 
-**Local tarballs** (`npm pack` at this commit's package contents):
-
-| Package | Files | shasum |
-|---|---|---|
-| `@gtm-trust-kernel/adapters@0.2.1` | 20 | `1393045e2578cebbcf08f75d4c06d7e112c92ce5` |
-| `gtm-trust-kernel@0.2.0` | 7 | `c34f62472d87f299e1185e650b056156056e10c3` |
+**Local tarballs** (`npm pack` at this commit's package contents): adapters
+0.2.1 had 20 files, CLI 0.2.0 had 7. Their shasums were removed on
+2026-10-03: the privacy batch changed both packages, so those tarballs
+are invalidated (see the 2026-10-03 entry).
 
 Clean-room install of both local tarballs outside the repo: the CLI
 resolves to the local adapters 0.2.1; `--version` 0.2.0; `scan --demo`

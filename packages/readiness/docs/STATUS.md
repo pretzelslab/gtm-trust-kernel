@@ -1,13 +1,13 @@
 # Project status
 
-Current state of the GTM trust kernel, as of 2026-10-02. The dated history
+Current state of the GTM trust kernel, as of 2026-10-03. The dated history
 behind it (decisions, measurements, earlier states) is in
 [dev-log.md](dev-log.md); code comments that cite "STATUS.md" for a known
 gap or decision refer to that log.
 
 ## Packages
 
-| Package | npm | Published | Prepared, not yet published |
+| Package | npm | Published | Next (unreleased, not yet packed) |
 |---|---|---|---|
 | CLI | `gtm-trust-kernel` | 0.1.0 | 0.2.0 |
 | CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.2.1 |
@@ -22,7 +22,13 @@ gap or decision refer to that log.
   blocked or not measured, with the metrics and thresholds behind it.
   Writes a detailed HTML report and a plain-English one; an optional
   AI-written summary (`--narrative`) sends only metric names, values and
-  ratings to Anthropic's API.
+  ratings to Anthropic's API, and only with consent: a prompt in a
+  terminal, or `--narrative-consent` for unattended runs. Answering no
+  writes the report without the summary. `--narrative-preview` prints the
+  exact request and sends nothing. Each report's banner states what left
+  the machine. A live report leaves out the org hostname unless
+  `--show-org` is passed. The whole data flow is in
+  [docs/DATA-FLOW.md](../../../docs/DATA-FLOW.md).
 - **CLI from npm.** `npx gtm-trust-kernel scan --demo` runs the report on a
   bundled sample CRM with no credentials or network. 0.2.0 adds a verdict
   summary, `--verbose`, one-line usage errors, and `--fail-on` for CI (exit
@@ -30,8 +36,10 @@ gap or decision refer to that log.
 - **Salesforce, read-only.** The adapter reads deals, contact roles,
   accounts, contacts, Tasks, Events, Notes, Enhanced Notes and stage
   history, batched by deal id (12 API calls for a 35-deal org). It cannot
-  write. The full report runs against a real org from a repo clone
+  write. The access token is cached in the user's config folder, owner-only
+  on macOS and Linux. The full report runs against a real org from a repo clone
   (`npm run report -- --live`); see [salesforce-setup.md](salesforce-setup.md).
+  It has no health preflight and doesn't retry a rate limit (429) yet.
 - **Adapter contract.** The mock and Salesforce adapters pass one shared
   contract suite; Salesforce passes it against a live Developer Edition
   org, re-run weekly in CI (`live-contract.yml`). A response-shape
@@ -68,11 +76,13 @@ The full list, with the reasoning behind each item, is in
 ## Releases
 
 Releases are published from GitHub Actions with npm trusted publishing;
-the steps are in [RELEASING.md](../../../RELEASING.md). Adapters 0.2.1
-(shasum `1393045e2578cebbcf08f75d4c06d7e112c92ce5`) and CLI 0.2.0 (shasum
-`c34f62472d87f299e1185e650b056156056e10c3`) are prepared and waiting on the
-repository becoming public (`publish.yml` publishes with `--provenance`,
-which npm accepts only from a public repository, as far as is known).
+the steps are in [RELEASING.md](../../../RELEASING.md). Adapters 0.2.1 and
+CLI 0.2.0 are not packed yet: the tarballs prepared on 2026-10-02 are
+invalidated by the privacy batch (2026-10-03), and the reliability batch
+changes the adapters again, so both are packed once, after it. Publishing
+also waits on the repository becoming public (`publish.yml` publishes
+with `--provenance`, which npm accepts only from a public repository, as
+far as is known).
 
 **Backup repositories.** The repository's history was rewritten on
 2026-10-03. Two private backup repositories,
@@ -85,9 +95,23 @@ pre-rewrite commits and don't resolve in this repository.
 
 ## Next
 
-1. Make the repository public; publish adapters 0.2.1, then CLI 0.2.0.
-2. **Phase 4:** calibrate thresholds against real orgs, and build
+Before going public:
+
+1. **Reliability batch** (adapters): a health preflight before a live
+   scan (L5) and retry with backoff on a 429 rate limit (L6).
+2. **README story:** finish the plain-English README.
+3. **Demo kit:** a `demo:kernel` script, committed sample reports and a
+   walkthrough.
+4. **Re-pack** adapters 0.2.1 and CLI 0.2.0 once (new shasums, file
+   lists and changelogs), with a clean-room install check.
+5. **Go public**, then switch on private vulnerability reporting, secret
+   scanning with push protection, Dependabot alerts and a ruleset for
+   `master`. Then publish adapters 0.2.1, then CLI 0.2.0.
+
+After that:
+
+1. **Phase 4:** calibrate thresholds against real orgs, and build
    `untrusted_text_ratio`.
-3. Later: live scanning in the CLI, an `--out` flag, an approver role
+2. Later: live scanning in the CLI, an `--out` flag, an approver role
    check, per-record atomic writes, an injection test corpus, an
    evaluation harness, a HubSpot adapter.
