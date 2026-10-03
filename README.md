@@ -67,10 +67,28 @@ and after, on the deals where sellers use it. The scan doesn't measure
 these. It tells you whether the data is ready for AI to support the
 decisions behind them.
 
-## Why this matters
+## One data spine, every GTM motion
 
-Each of those moments depends on the same CRM data. Check your data before
-you buy. The usual problems:
+Every GTM motion runs on the same spine: accounts, deals, products and
+activities. When the spine is weak, each motion stalls in its own way.
+Cross-sell can't see what an account already owns. A new-geo push can't
+size a region it can't filter. The scan checks the spine before AI goes on
+top. Check your data before you buy.
+
+| GTM motion | What it needs from CRM | Checked today | Next |
+|---|---|---|---|
+| **Cross-sell / upsell** | One record per account, what each account already bought, won-deal history | Duplicate accounts; closed deals in the last 12 months; evidence kept on closed deals | Line-item coverage; product × account coverage |
+| **Land and expand** | Accounts linked to their parents, contacts linked to deals, won-deal history | Duplicate accounts; contacts linked to deals; closed deals in the last 12 months | Parent-account linkage |
+| **White space** | Which products each account has, and which it doesn't | Not yet (duplicate accounts only, as a precondition) | Product × account coverage; line-item coverage |
+| **New geo** | Country or region on accounts and deals, deal currency | Not yet | Geo field completeness |
+| **Vertical plays** | A consistent industry on every account | Not yet (industry is read but not scored) | Industry consistency |
+| **Cross-SKU / packaging** | Line items on each deal, amounts built from them | Round-number amounts (a hint that amounts aren't built from line items); amounts filled in | Line-item coverage |
+
+The "Checked today" metrics already exist for the AI use cases below. They
+aren't scored per motion: the scan gives no verdict for a motion. The
+"Next" checks are candidates, not built yet.
+
+**How a weak spine shows up:**
 
 - **No single record of the truth.** The same deal or account exists in
   more than one place, and nobody agrees which copy is right.
@@ -91,6 +109,22 @@ cross-system matching rates.
 
 An AI tool fed this data still gives answers. They just aren't right, and
 the reps who notice stop using it.
+
+
+## Governance and canonical standards
+
+- **A shared definition of clean data.** The
+  [metric definitions](packages/readiness/docs/metric-definitions.md) and
+  their thresholds give RevOps, sales and enablement one written standard
+  for what "clean" means, instead of a different one per team.
+- **Re-run on a cadence and track the trend.** Run the scan monthly or
+  quarterly and compare reports. Each report states its sample sizes and
+  seed, so runs on the same data are comparable.
+- **An enforceable gate.** `--fail-on` turns the verdicts into a pass or
+  fail: before an AI rollout, or in CI, so a drop in data quality stops
+  the pipeline instead of reaching sellers.
+- **Changes under control.** AI can suggest changes; nothing is written
+  without approval, and every change is logged.
 
 ## Who it's for, and what it isn't
 
