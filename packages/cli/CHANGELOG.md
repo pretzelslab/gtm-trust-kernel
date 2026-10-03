@@ -24,6 +24,9 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   `--fail-on` value) prints one line and the usage text and exits 1,
   instead of a stack trace. Other failures print their message only.
 - The Anthropic SDK is loaded only when `--narrative` is passed.
+- The plain-English report calls the enablement use case "pitch and
+  objection-handling answers" (was "answers drawn from past deals"). The
+  detailed report and `--json` are unchanged.
 - Depends on `@gtm-trust-kernel/adapters` `^0.3.0` (set when this
   release is packed). `scan --demo` behaves the same.
 - **Breaking for unattended runs:** `--narrative` now asks for consent

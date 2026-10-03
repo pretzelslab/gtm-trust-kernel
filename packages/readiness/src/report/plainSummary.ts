@@ -29,7 +29,7 @@ export const PLAIN_CAPABILITY: Readonly<Record<CapabilityId, string>> = {
   pipeline_risk_signals: 'pipeline risk alerts',
   close_date_realism: 'close-date reality checks',
   next_action_recommendation: 'next-step suggestions on deals',
-  enablement_answer_engine: 'answers drawn from past deals',
+  enablement_answer_engine: 'pitch and objection-handling answers',
   forecast_assistance: 'forecast support',
   bulk_hygiene_automation: 'bulk data clean-up suggestions',
   autonomous_writeback: 'fully automatic CRM updates with no human check',
