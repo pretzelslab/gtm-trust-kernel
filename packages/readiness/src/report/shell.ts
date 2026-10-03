@@ -82,6 +82,9 @@ ${body}
 </html>`;
 }
 
+/** Shown under a live banner when the report names the org's hostname (--show-org). */
+export const ORG_HOST_NOTE = "This report names your Salesforce org's hostname; remove --show-org before sharing.";
+
 /** What the banner says left the machine when the AI summary was requested. */
 export const NARRATIVE_EGRESS_TEXT = 'metric values (no record text) were sent to Anthropic for the AI summary';
 
@@ -90,15 +93,23 @@ export const NARRATIVE_EGRESS_TEXT = 'metric values (no record text) were sent t
  * renderReportHtml, plainReport.ts's renderPlainReportHtml) so they can
  * never disagree about whether a given run's data came from a live CRM, or
  * about what left the machine. `narrativeSent`: this run sent (or tried to
- * send) the narrative request to Anthropic. Not used by
+ * send) the narrative request to Anthropic. `orgHostShown` (live only): the
+ * report names the org's hostname, so ORG_HOST_NOTE follows the banner.
+ * Not used by
  * renderComparisonHtml (--all), which is fixture-only, never sends a
  * narrative and keeps its own banner markup unchanged.
  */
-export function renderBanner(mode: 'fixture' | 'live', orgLabel: string, egress?: { readonly narrativeSent?: boolean }): string {
-  const sent = egress?.narrativeSent ?? false;
+export function renderBanner(
+  mode: 'fixture' | 'live',
+  orgLabel: string,
+  options?: { readonly narrativeSent?: boolean; readonly orgHostShown?: boolean },
+): string {
+  const sent = options?.narrativeSent ?? false;
   if (mode === 'live') {
     const left = sent ? NARRATIVE_EGRESS_TEXT : 'nothing else left this machine';
-    return `<div class="banner-live">LIVE DATA · read-only. Read from your Salesforce org; ${left}.</div>`;
+    const banner = `<div class="banner-live">LIVE DATA · read-only. Read from your Salesforce org; ${left}.</div>`;
+    return options?.orgHostShown ? `${banner}
+  <p class="note">${escapeHtml(ORG_HOST_NOTE)}</p>` : banner;
   }
   const left = sent ? NARRATIVE_EGRESS_TEXT : 'nothing leaves this machine';
   return `<div class="banner">MOCK DATA — fixture: ${escapeHtml(orgLabel)}. No real CRM was contacted; ${left}.</div>`;

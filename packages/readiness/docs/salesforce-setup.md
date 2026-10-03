@@ -248,6 +248,7 @@ npm run report -- --live --json                     # also write the report data
 npm run report -- --live --quick                    # stop scanning once every stage's sample is full
 npm run report -- --live --hydrate-per-stratum 5    # detailed checks on up to 5 deals per stage (default 20)
 npm run report -- --live --fail-on                  # exit 2 if any capability is blocked
+npm run report -- --live --show-org                 # include your org's hostname in the reports
 ```
 
 Output goes to `packages/readiness/out/`: `live-latest.html` (tables),
@@ -256,6 +257,11 @@ Output goes to `packages/readiness/out/`: `live-latest.html` (tables),
 it needs `ANTHROPIC_API_KEY` and your consent (a prompt, or
 `--narrative-consent` for unattended runs). `--narrative-preview` prints
 the exact request it would send, sends nothing and writes no report.
+
+The reports and the JSON leave out your org's hostname (for example
+`acme.my.salesforce.com`) by default, so they can be shared without naming
+the org. `--show-org` includes it; both reports then carry a note saying
+so. The hostname is never sent with `--narrative`.
 
 `--fail-on` is opt-in and off by default: without it, a finished run exits
 0 whatever its verdicts. With it, the report is still written, then the run

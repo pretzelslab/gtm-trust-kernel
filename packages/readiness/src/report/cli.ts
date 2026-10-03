@@ -14,6 +14,7 @@
  *   npm run report -- --all                 # side-by-side comparison page
  *   npm run report -- --fixture fresh --json
  *   npm run report -- --live --json         # real Salesforce org, from .env
+ *   npm run report -- --live --show-org     # include the org's hostname (hidden by default)
  *   npm run report -- --narrative           # adds an LLM narrative (needs ANTHROPIC_API_KEY and consent); not supported with --all
  *   npm run report -- --narrative --narrative-consent   # consent up front, for unattended runs
  *   npm run report -- --narrative-preview   # print the request --narrative would send; sends nothing, writes no report
@@ -43,7 +44,8 @@ import { loadSalesforceConfigFromEnv, SalesforceAdapter } from '@gtm-trust-kerne
 import { FIXTURE_NAMES, type FixtureName } from '../fixtures/mockOrgs.js';
 import { buildFromFixture } from './buildFromFixture.js';
 import { loadEnvFileIfPresent } from './envFile.js';
-import { buildReportData, type BuildReportOptions, type ReportData } from './buildReport.js';
+import { type BuildReportOptions, type ReportData } from './buildReport.js';
+import { buildLiveReportData } from './liveReport.js';
 import { sampleOptionsFromFlags } from './sampleFlags.js';
 import { renderComparisonHtml, renderReportHtml } from './render.js';
 import { renderPlainReportHtml } from './plainReport.js';
@@ -64,15 +66,9 @@ function isFixtureName(name: string): name is FixtureName {
   return (FIXTURE_NAMES as readonly string[]).includes(name);
 }
 
-async function buildLive(sampling: Pick<BuildReportOptions, 'hydratePerStratum' | 'quick'>): Promise<ReportData> {
+async function buildLive(sampling: Pick<BuildReportOptions, 'hydratePerStratum' | 'quick'>, showOrg: boolean): Promise<ReportData> {
   const config = loadSalesforceConfigFromEnv();
-  const adapter = new SalesforceAdapter(config);
-  return buildReportData(adapter, undefined, {
-    orgLabel: 'Live Salesforce org',
-    orgDescription: adapter.orgId,
-    asOf: new Date().toISOString(),
-    ...sampling,
-  });
+  return buildLiveReportData(new SalesforceAdapter(config), { showOrg, sampling });
 }
 
 /**
@@ -165,6 +161,7 @@ async function main(): Promise<void> {
       'hydrate-per-stratum': { type: 'string' },
       quick: { type: 'boolean', default: false },
       'fail-on': { type: 'string' },
+      'show-org': { type: 'boolean', default: false },
     },
     allowPositionals: false,
   });
@@ -190,6 +187,12 @@ async function main(): Promise<void> {
   // Decision 24: no plain-English narrative for a multi-org comparison page -- same reason renderComparisonHtml never took a narrative option.
   if (values.all && values.narrative) {
     console.error('--narrative is not supported with --all (no plain-English narrative for a multi-org comparison page).');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (values['show-org'] && !values.live) {
+    console.error("--show-org only applies with --live (a fixture report names no real org).");
     process.exitCode = 1;
     return;
   }
@@ -221,7 +224,7 @@ async function main(): Promise<void> {
   if (values.live) {
     let data: ReportData;
     try {
-      data = await buildLive(sampling);
+      data = await buildLive(sampling, values['show-org']);
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
@@ -232,9 +235,10 @@ async function main(): Promise<void> {
       return;
     }
     const narrative = await resolveNarrative(data, narrativeClient);
-    const html = renderReportHtml(data, { mode: 'live', narrative });
+    const orgHostShown = values['show-org'];
+    const html = renderReportHtml(data, { mode: 'live', narrative, orgHostShown });
     await writeHtml(outDir, `report-live-${timestamp}.html`, 'live-latest.html', html);
-    const plainHtml = renderPlainReportHtml(data, { mode: 'live', narrativeSent: narrative !== undefined });
+    const plainHtml = renderPlainReportHtml(data, { mode: 'live', narrativeSent: narrative !== undefined, orgHostShown });
     await writeHtml(outDir, `report-live-${timestamp}-plain.html`, 'live-latest-plain.html', plainHtml);
     if (values.json) {
       await writeJson(outDir, `report-live-${timestamp}.json`, data);

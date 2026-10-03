@@ -220,11 +220,14 @@ function renderNarrativeBody(data: ReportData, narrative: NarrativeResult | unde
 
 export function renderReportHtml(
   data: ReportData,
-  options?: { readonly mode?: 'fixture' | 'live'; readonly narrative?: NarrativeResult },
+  options?: { readonly mode?: 'fixture' | 'live'; readonly narrative?: NarrativeResult; readonly orgHostShown?: boolean },
 ): string {
   const { org } = data;
   // A narrative result, ok or fallback, means the request was sent (or attempted).
-  const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel, { narrativeSent: options?.narrative !== undefined });
+  const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel, {
+    narrativeSent: options?.narrative !== undefined,
+    orgHostShown: options?.orgHostShown ?? false,
+  });
   const body = `
   ${banner}
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>

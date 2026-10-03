@@ -38,10 +38,13 @@ function renderBucket(heading: string, outcomes: readonly CapabilityOutcome[]): 
  */
 export function renderPlainReportHtml(
   data: ReportData,
-  options?: { readonly mode?: 'fixture' | 'live'; readonly narrativeSent?: boolean },
+  options?: { readonly mode?: 'fixture' | 'live'; readonly narrativeSent?: boolean; readonly orgHostShown?: boolean },
 ): string {
   const { org } = data;
-  const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel, { narrativeSent: options?.narrativeSent ?? false });
+  const banner = renderBanner(options?.mode ?? 'fixture', org.orgLabel, {
+    narrativeSent: options?.narrativeSent ?? false,
+    orgHostShown: options?.orgHostShown ?? false,
+  });
   const narrative = buildFullNarrative(data);
 
   const body = `
