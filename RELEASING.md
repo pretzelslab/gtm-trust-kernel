@@ -77,3 +77,11 @@ Those releases have no provenance attestation.
 from before the 2026-10-03 rewrite. Keep both private. Never make them
 public, transfer them, or point a Trusted Publisher or release at them.
 Releases come only from `pretzelslab/gtm-trust-kernel`.
+
+## If the repository is recreated
+
+GitHub settings don't carry over to a new repository; redo them by hand:
+
+- [ ] Actions secrets and environments: the `SF_CLIENT_ID`,
+      `SF_CLIENT_SECRET` and `SF_INSTANCE_URL` secrets, and the `adapters`
+      and `cli` environments.
