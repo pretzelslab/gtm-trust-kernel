@@ -37,7 +37,7 @@ packages/
     docs/                          Metric definitions and design notes.
 
   cli/                             Published as gtm-trust-kernel
-    src/cli.ts                     `scan --demo`, `--json`, `--narrative`.
+    src/cli.ts                     `scan --demo`, `--json`, `--narrative`, `--narrative-preview`.
 ```
 
 ## The proposal kernel

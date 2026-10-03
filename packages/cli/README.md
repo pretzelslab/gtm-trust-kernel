@@ -63,7 +63,8 @@ sample sizes and the seed.
 ## Usage
 
 ```
-gtm-trust-kernel scan --demo [--narrative] [--json] [--verbose] [--fail-on [<verdicts>]]
+gtm-trust-kernel scan --demo [--narrative [--narrative-consent]] [--json] [--verbose] [--fail-on [<verdicts>]]
+gtm-trust-kernel scan --demo --narrative-preview
 gtm-trust-kernel --version
 gtm-trust-kernel --help
 ```
@@ -72,7 +73,9 @@ gtm-trust-kernel --help
 |---|---|
 | `--json` | Print the report data as JSON to stdout; everything else goes to stderr, so it pipes cleanly |
 | `--verbose` | Also print the sampling plan and every file written |
-| `--narrative` | Add an AI-written summary. Needs `ANTHROPIC_API_KEY`, and sends metric names, values and ratings (never record text) to Anthropic's API |
+| `--narrative` | Add an AI-written summary. Needs `ANTHROPIC_API_KEY`, and sends metric names, values and ratings (never record text) to Anthropic's API. Asks before sending |
+| `--narrative-consent` | With `--narrative`: consent up front, for runs with no terminal to answer the prompt (CI, scripts). Without it, such a run exits 1 before sending anything |
+| `--narrative-preview` | Print the exact request `--narrative` would send, then exit. Sends nothing, writes no report, needs no key |
 | `--fail-on [<verdicts>]` | Exit 2 if any capability has a listed verdict (see below). Off by default |
 
 Each run writes to `./out`: `latest.html` and `latest-plain.html`, plus

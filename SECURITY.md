@@ -28,8 +28,10 @@ Only the latest published version of each package
 - **The demo makes no network calls.** `npx gtm-trust-kernel scan --demo`
   runs on bundled sample data.
 - **`--narrative` is the only data that leaves your machine,** and only
-  when you pass it: metric names, values, sample sizes and ratings go to
-  Anthropic's API. Record text (notes, emails, names) is never sent.
+  when you pass it and consent (at a prompt, or with
+  `--narrative-consent`): metric names, values, sample sizes and ratings
+  go to Anthropic's API. Record text (notes, emails, names) is never sent.
+  `--narrative-preview` prints the exact request without sending it.
 - **CRM free text is untrusted.** Notes and activity text are carried in a
   trust envelope and treated as data, never as instructions. The injection
   guard is basic (a phrase list plus a canary token); see "Known gaps" in

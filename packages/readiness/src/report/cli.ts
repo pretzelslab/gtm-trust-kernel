@@ -14,7 +14,8 @@
  *   npm run report -- --all                 # side-by-side comparison page
  *   npm run report -- --fixture fresh --json
  *   npm run report -- --live --json         # real Salesforce org, from .env
- *   npm run report -- --narrative           # adds an LLM narrative (needs ANTHROPIC_API_KEY); not supported with --all
+ *   npm run report -- --narrative           # adds an LLM narrative (needs ANTHROPIC_API_KEY and consent); not supported with --all
+ *   npm run report -- --narrative --narrative-consent   # consent up front, for unattended runs
  *   npm run report -- --narrative-preview   # print the request --narrative would send; sends nothing, writes no report
  *   npm run report -- --live --hydrate-per-stratum 10   # detailed checks on 10 deals per stage (default 20)
  *   npm run report -- --live --quick        # stop scanning once every stage's sample is full
@@ -24,6 +25,10 @@
  * --fail-on is opt-in (see failOn.ts). Unset, a finished report exits 0
  * whatever its verdicts. Set, the report is still written, then the exit
  * code is 2 if any capability has a listed verdict. Errors exit 1.
+ *
+ * --narrative asks for consent before sending (narrativeConsent.ts): a
+ * prompt in a terminal, or --narrative-consent. Without either it stops,
+ * exit 1, before reading any data.
  *
  * --narrative-preview builds the report data (from a fixture, or the org
  * with --live), prints the exact Anthropic request on stdout and exits 0.
@@ -44,6 +49,13 @@ import { renderPlainReportHtml } from './plainReport.js';
 import { AnthropicNarrativeModelClient } from './anthropicNarrativeModelClient.js';
 import { buildNarrative, type NarrativeResult } from './narrative.js';
 import { formatNarrativePreview, NARRATIVE_PREVIEW_NOTICE } from './narrativeRequest.js';
+import {
+  askOnTerminal,
+  isInteractive,
+  NARRATIVE_CONSENT_WITHOUT_NARRATIVE,
+  narrativeConsentRefusal,
+  resolveNarrativeConsent,
+} from './narrativeConsent.js';
 import { evaluateFailOn, normalizeFailOnArgs, parseFailOn, type FailOnVerdict } from './failOn.js';
 
 function isFixtureName(name: string): name is FixtureName {
@@ -66,24 +78,38 @@ async function buildLive(sampling: Pick<BuildReportOptions, 'hydratePerStratum' 
  * ANTHROPIC_API_KEY fails the whole run loudly (clear message, exit 1)
  * rather than silently continuing without a narrative --
  * AnthropicNarrativeModelClient's constructor already names the var in its
- * thrown message, reused verbatim here. buildNarrative() itself never
- * throws (every client.generate() failure is caught internally and
- * resolves to an ok:false NarrativeResult, decision 8/21) -- the only
- * failure this can realistically report is the client construction above,
- * but the whole step is wrapped for a single, simple bail-out path anyway.
- * Returns 'exit' (with exitCode already set) rather than throwing, so the
- * caller decides when to stop -- same pattern buildLive()'s caller uses.
+ * thrown message, reused verbatim here. Then consent (narrativeConsent.ts):
+ * the key is checked first, so nobody is asked to agree to a send that
+ * couldn't happen. Both run before any data is read, so a refusal costs
+ * nothing. Returns 'exit' (with exitCode already set) rather than throwing,
+ * so the caller decides when to stop -- same pattern buildLive()'s caller
+ * uses.
  */
-async function resolveNarrative(data: ReportData, useNarrative: boolean): Promise<NarrativeResult | undefined | 'exit'> {
+async function prepareNarrative(useNarrative: boolean, consentFlag: boolean): Promise<AnthropicNarrativeModelClient | undefined | 'exit'> {
   if (!useNarrative) return undefined;
+  let client: AnthropicNarrativeModelClient;
   try {
-    const client = new AnthropicNarrativeModelClient();
-    return await buildNarrative(data, client);
+    client = new AnthropicNarrativeModelClient();
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exitCode = 1;
     return 'exit';
   }
+  const decision = await resolveNarrativeConsent({ flag: consentFlag, interactive: isInteractive(), ask: askOnTerminal });
+  if (decision !== 'consented') {
+    console.error(narrativeConsentRefusal(decision));
+    process.exitCode = 1;
+    return 'exit';
+  }
+  return client;
+}
+
+/**
+ * buildNarrative() never throws (every client.generate() failure is caught
+ * internally and resolves to an ok:false NarrativeResult, decision 8/21).
+ */
+async function resolveNarrative(data: ReportData, client: AnthropicNarrativeModelClient | undefined): Promise<NarrativeResult | undefined> {
+  return client ? buildNarrative(data, client) : undefined;
 }
 
 async function writeHtml(outDir: string, filename: string, latestFilename: string, html: string): Promise<void> {
@@ -128,6 +154,7 @@ async function main(): Promise<void> {
       json: { type: 'boolean', default: false },
       live: { type: 'boolean', default: false },
       narrative: { type: 'boolean', default: false },
+      'narrative-consent': { type: 'boolean', default: false },
       'narrative-preview': { type: 'boolean', default: false },
       'hydrate-per-stratum': { type: 'string' },
       quick: { type: 'boolean', default: false },
@@ -161,6 +188,12 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (values['narrative-consent'] && !values.narrative) {
+    console.error(NARRATIVE_CONSENT_WITHOUT_NARRATIVE);
+    process.exitCode = 1;
+    return;
+  }
+
   const preview = values['narrative-preview'];
   if (preview && (values.all || values.narrative || values.json || values['fail-on'] !== undefined)) {
     console.error("--narrative-preview prints the request only; it can't be combined with --all, --narrative, --json or --fail-on.");
@@ -171,6 +204,9 @@ async function main(): Promise<void> {
     // stdout carries only the request JSON: progress lines (the sampling plan) go to stderr.
     console.log = (...args: unknown[]) => console.error(...args);
   }
+
+  const narrativeClient = await prepareNarrative(values.narrative, values['narrative-consent']);
+  if (narrativeClient === 'exit') return;
 
   const outDir = path.resolve(process.cwd(), 'out');
   if (!preview) await mkdir(outDir, { recursive: true });
@@ -189,8 +225,7 @@ async function main(): Promise<void> {
       printNarrativePreview(data);
       return;
     }
-    const narrative = await resolveNarrative(data, values.narrative);
-    if (narrative === 'exit') return;
+    const narrative = await resolveNarrative(data, narrativeClient);
     const html = renderReportHtml(data, { mode: 'live', narrative });
     await writeHtml(outDir, `report-live-${timestamp}.html`, 'live-latest.html', html);
     const plainHtml = renderPlainReportHtml(data, { mode: 'live' });
@@ -228,8 +263,7 @@ async function main(): Promise<void> {
     printNarrativePreview(data);
     return;
   }
-  const narrative = await resolveNarrative(data, values.narrative);
-  if (narrative === 'exit') return;
+  const narrative = await resolveNarrative(data, narrativeClient);
   const html = renderReportHtml(data, { narrative });
   await writeHtml(outDir, `report-${timestamp}.html`, 'latest.html', html);
   const plainHtml = renderPlainReportHtml(data);

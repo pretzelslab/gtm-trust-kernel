@@ -245,8 +245,10 @@ npm run report -- --live --fail-on                  # exit 2 if any capability i
 
 Output goes to `packages/readiness/out/`: `live-latest.html` (tables),
 `live-latest-plain.html` (plain English), plus timestamped copies and the
-`.json` file when `--json` is set. `--narrative` adds an AI-written summary
-and needs `ANTHROPIC_API_KEY`.
+`.json` file when `--json` is set. `--narrative` adds an AI-written summary;
+it needs `ANTHROPIC_API_KEY` and your consent (a prompt, or
+`--narrative-consent` for unattended runs). `--narrative-preview` prints
+the exact request it would send, sends nothing and writes no report.
 
 `--fail-on` is opt-in and off by default: without it, a finished run exits
 0 whatever its verdicts. With it, the report is still written, then the run

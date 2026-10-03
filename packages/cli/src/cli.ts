@@ -4,7 +4,7 @@
  * the readiness assessment against the bundled `healthy` mock org (no CRM
  * credentials involved), writes HTML reports to ./out, and prints a verdict
  * summary. --narrative is an opt-in extra (needs ANTHROPIC_API_KEY only when
- * passed). --json prints the report JSON to stdout (everything else goes to
+ * passed, and consent: a terminal prompt or --narrative-consent). --json prints the report JSON to stdout (everything else goes to
  * stderr). --verbose also prints the sampling plan and every file written.
  *
  * Deliberately narrow: the scan itself lives in scan.ts and wraps
@@ -15,7 +15,8 @@
  * Usage:
  *   npx gtm-trust-kernel scan --demo
  *   npx gtm-trust-kernel scan --demo --json > report.json
- *   npx gtm-trust-kernel scan --demo --narrative   # needs ANTHROPIC_API_KEY
+ *   npx gtm-trust-kernel scan --demo --narrative   # needs ANTHROPIC_API_KEY; asks before sending
+ *   npx gtm-trust-kernel scan --demo --narrative --narrative-consent   # unattended: consent up front
  *   npx gtm-trust-kernel scan --demo --narrative-preview   # print what --narrative would send
  *   npx gtm-trust-kernel scan --demo --fail-on degraded   # exit 2 on a degraded capability
  *   npx gtm-trust-kernel --version
@@ -26,10 +27,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { normalizeFailOnArgs, parseFailOn } from '@gtm-trust-kernel/readiness/report/failOn.js';
+import { NARRATIVE_CONSENT_WITHOUT_NARRATIVE } from '@gtm-trust-kernel/readiness/report/narrativeConsent.js';
 import { runScan } from './scan.js';
 
 const USAGE = `Usage:
-  gtm-trust-kernel scan --demo [--narrative] [--json] [--verbose] [--fail-on [<verdicts>]]
+  gtm-trust-kernel scan --demo [--narrative [--narrative-consent]] [--json] [--verbose] [--fail-on [<verdicts>]]
   gtm-trust-kernel scan --demo --narrative-preview
   gtm-trust-kernel --version
   gtm-trust-kernel --help
@@ -39,7 +41,11 @@ against a bundled mock org, no CRM credentials needed).
 
 --narrative           Add an AI-written summary. Sends metric names, values,
                       sample sizes and ratings (no record text) to
-                      Anthropic's API. Needs ANTHROPIC_API_KEY.
+                      Anthropic's API. Needs ANTHROPIC_API_KEY, and asks
+                      before sending.
+--narrative-consent   Consent to that send up front, for runs with no
+                      terminal to answer the prompt (CI, scripts). Without
+                      it, such a run stops before sending anything.
 --narrative-preview   Print the exact request --narrative would send, then
                       exit. Sends nothing, writes no report, needs no key.
 --verbose             Also print the sampling plan and every file written.
@@ -74,6 +80,7 @@ function parseCli() {
     options: {
       demo: { type: 'boolean', default: false },
       narrative: { type: 'boolean', default: false },
+      'narrative-consent': { type: 'boolean', default: false },
       'narrative-preview': { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       version: { type: 'boolean', default: false },
@@ -110,6 +117,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (values['narrative-consent'] && !values.narrative) {
+    usageError(NARRATIVE_CONSENT_WITHOUT_NARRATIVE);
+    return;
+  }
+
   if (values['narrative-preview'] && (values.narrative || values.json || values['fail-on'] !== undefined)) {
     usageError("--narrative-preview prints the request only; it can't be combined with --narrative, --json or --fail-on.");
     return;
@@ -126,6 +138,7 @@ async function main(): Promise<void> {
   await runScan({
     outDir: path.resolve(process.cwd(), 'out'),
     useNarrative: values.narrative,
+    narrativeConsent: values['narrative-consent'],
     narrativePreview: values['narrative-preview'],
     useJson: values.json,
     verbose: values.verbose,

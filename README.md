@@ -56,7 +56,9 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 | Option | What it does |
 |---|---|
 | `--json` | Also print the report data as JSON |
-| `--narrative` | Add an AI-written summary (needs `ANTHROPIC_API_KEY`; sends report data to Anthropic's API) |
+| `--narrative` | Add an AI-written summary (needs `ANTHROPIC_API_KEY`; sends report data to Anthropic's API, and asks first) |
+| `--narrative-consent` | With `--narrative`: consent up front, for runs with no terminal to answer the prompt (CI, scripts) |
+| `--narrative-preview` | Print the exact request `--narrative` would send, then stop. Sends nothing, writes no report |
 | `--verbose` | Also print the sampling plan and every file written |
 | `--fail-on [<verdicts>]` | For CI: exit 2 if any use case has a listed verdict (a bare `--fail-on` means `blocked`) |
 
@@ -72,7 +74,7 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 ## Privacy
 
 - The demo scan uses bundled sample data and makes no network calls.
-- `--narrative` is optional. It sends metric names, values, sample sizes and ratings to Anthropic's API. It never sends record text such as notes, emails or names.
+- `--narrative` is optional. It sends metric names, values, sample sizes and ratings to Anthropic's API. It never sends record text such as notes, emails or names. It asks before sending, or needs `--narrative-consent` when there's no terminal, and `--narrative-preview` shows the exact request without sending it.
 - The Salesforce adapter is read-only. It cannot write to your CRM.
 
 ## For developers

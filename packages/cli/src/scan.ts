@@ -25,6 +25,12 @@ import { buildReportData, type ReportData } from '@gtm-trust-kernel/readiness/re
 import { evaluateFailOn, type FailOnVerdict } from '@gtm-trust-kernel/readiness/report/failOn.js';
 import { buildNarrative, type NarrativeResult } from '@gtm-trust-kernel/readiness/report/narrative.js';
 import { formatNarrativePreview, NARRATIVE_PREVIEW_NOTICE } from '@gtm-trust-kernel/readiness/report/narrativeRequest.js';
+import {
+  askOnTerminal,
+  isInteractive,
+  narrativeConsentRefusal,
+  resolveNarrativeConsent,
+} from '@gtm-trust-kernel/readiness/report/narrativeConsent.js';
 import { renderPlainReportHtml } from '@gtm-trust-kernel/readiness/report/plainReport.js';
 import { buildFullNarrative } from '@gtm-trust-kernel/readiness/report/plainSummary.js';
 import { renderReportHtml } from '@gtm-trust-kernel/readiness/report/render.js';
@@ -32,6 +38,12 @@ import { renderReportHtml } from '@gtm-trust-kernel/readiness/report/render.js';
 export interface ScanOptions {
   readonly outDir: string;
   readonly useNarrative: boolean;
+  /** --narrative-consent: consent given up front, so no prompt. */
+  readonly narrativeConsent?: boolean;
+  /** Whether a person can answer the consent prompt. Defaults to isInteractive(). */
+  readonly interactive?: boolean;
+  /** Shows the consent prompt and resolves to the answer. Defaults to askOnTerminal. */
+  readonly ask?: (prompt: string) => Promise<string>;
   readonly useJson: boolean;
   /** --narrative-preview: print the narrative request to `stdout` and stop; no files, no network. */
   readonly narrativePreview?: boolean;
@@ -70,23 +82,42 @@ async function withoutConsoleLog<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+type NarrativeClient = Parameters<typeof buildNarrative>[1];
+
 /**
- * Mirrors readiness's own cli.ts resolveNarrative: opt-in, loud failure on a
- * missing key, never silently skipped. The narrative client (the only code
- * that imports @anthropic-ai/sdk) is loaded here, so a scan without
- * --narrative never loads the SDK.
+ * Mirrors readiness's own cli.ts prepareNarrative: opt-in, loud failure on a
+ * missing key, then consent (readiness's narrativeConsent.ts), both before
+ * the scan reads anything. The narrative client (the only code that imports
+ * @anthropic-ai/sdk) is loaded here, so a scan without --narrative never
+ * loads the SDK.
  */
-async function resolveNarrative(data: ReportData, useNarrative: boolean): Promise<NarrativeResult | undefined | 'exit'> {
-  if (!useNarrative) return undefined;
+async function prepareNarrative(options: ScanOptions): Promise<NarrativeClient | undefined | 'exit'> {
+  if (!options.useNarrative) return undefined;
+  let client: NarrativeClient;
   try {
     const { AnthropicNarrativeModelClient } = await import('@gtm-trust-kernel/readiness/report/anthropicNarrativeModelClient.js');
-    const client = new AnthropicNarrativeModelClient();
-    return await buildNarrative(data, client);
+    client = new AnthropicNarrativeModelClient();
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exitCode = 1;
     return 'exit';
   }
+  const decision = await resolveNarrativeConsent({
+    flag: options.narrativeConsent ?? false,
+    interactive: options.interactive ?? isInteractive(),
+    ask: options.ask ?? askOnTerminal,
+  });
+  if (decision !== 'consented') {
+    console.error(narrativeConsentRefusal(decision));
+    process.exitCode = 1;
+    return 'exit';
+  }
+  return client;
+}
+
+/** buildNarrative() never throws: a failed call resolves to an ok:false result. */
+async function resolveNarrative(data: ReportData, client: NarrativeClient | undefined): Promise<NarrativeResult | undefined> {
+  return client ? buildNarrative(data, client) : undefined;
 }
 
 async function writeHtml(outDir: string, filename: string, latestFilename: string, html: string): Promise<string[]> {
@@ -119,6 +150,8 @@ export function verdictSummary(data: ReportData): string {
 
 async function scan(options: ScanOptions): Promise<void> {
   const write = options.stdout ?? ((text: string) => process.stdout.write(text));
+  const narrativeClient = await prepareNarrative(options);
+  if (narrativeClient === 'exit') return;
   const data = options.verbose ? await buildDemoReport() : await withoutConsoleLog(buildDemoReport);
 
   if (options.narrativePreview) {
@@ -129,8 +162,7 @@ async function scan(options: ScanOptions): Promise<void> {
 
   await mkdir(options.outDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const narrative = await resolveNarrative(data, options.useNarrative);
-  if (narrative === 'exit') return;
+  const narrative = await resolveNarrative(data, narrativeClient);
 
   const written = [
     ...(await writeHtml(options.outDir, `report-${timestamp}.html`, 'latest.html', renderReportHtml(data, { narrative }))),

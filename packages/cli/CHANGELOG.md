@@ -24,6 +24,11 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   `--fail-on` value) prints one line and the usage text and exits 1,
   instead of a stack trace. Other failures print their message only.
 - The Anthropic SDK is loaded only when `--narrative` is passed.
+- **Breaking for unattended runs:** `--narrative` now asks for consent
+  before sending anything to Anthropic's API. In a terminal it prompts
+  (default no); with no terminal (CI, scripts) it exits 1 unless
+  `--narrative-consent` is passed. The API key is still checked first.
+  Declining exits 1 without writing a report.
 - Dependencies: `@gtm-trust-kernel/adapters` `^0.2.1`; `@anthropic-ai/sdk`
   and `tldts` use caret ranges instead of exact pins.
 
