@@ -15,6 +15,7 @@ import { installFakeSalesforce, sfId, sfRef } from '../../../adapters/test/suppo
 import { buildReportData } from '../../src/report/buildReport.js';
 import { renderPlainReportHtml } from '../../src/report/plainReport.js';
 import { renderReportHtml } from '../../src/report/render.js';
+import { buildNarrativeRequest } from '../../src/report/narrativeRequest.js';
 
 const CANARY = {
   notePreview: 'CANARY-sf-note-preview',
@@ -106,6 +107,26 @@ describe('Salesforce Enhanced Note and Event text never reaches report output', 
       for (const canary of Object.values(CANARY)) {
         expect(text, `${canary} leaked into ${surface}`).not.toContain(canary);
       }
+    }
+  });
+});
+
+describe('Salesforce text, hostname and record ids never reach the narrative request', () => {
+  it('the request built from a live-shaped report carries none of them', async () => {
+    const sf = install();
+    const adapter = sf.adapter();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    // Same orgDescription a live run uses (readiness cli.ts buildLive).
+    const data = await buildReportData(adapter, undefined, { orgLabel: 'Live Salesforce org', orgDescription: adapter.orgId, asOf: ASOF });
+    expect(JSON.stringify(data)).toContain(adapter.orgId);
+
+    const request = JSON.stringify(buildNarrativeRequest(data, {}));
+    for (const canary of Object.values(CANARY)) {
+      expect(request, `${canary} leaked into the narrative request`).not.toContain(canary);
+    }
+    expect(request).not.toContain(adapter.orgId);
+    for (const id of [OPEN, CLOSED, ACC, NOTE_SHORT, NOTE_CAPPED]) {
+      expect(request, `record id ${id} leaked into the narrative request`).not.toContain(id);
     }
   });
 });

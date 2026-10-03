@@ -28,6 +28,7 @@ import { buildReportData } from '../../src/report/buildReport.js';
 import type { ReportData } from '../../src/report/buildReport.js';
 import { renderComparisonHtml, renderReportHtml } from '../../src/report/render.js';
 import { renderPlainReportHtml } from '../../src/report/plainReport.js';
+import { buildNarrativeRequest } from '../../src/report/narrativeRequest.js';
 
 // ---------------------------------------------------------------------------
 // Canary vocabulary. Six flavors, cycled by index so every mutated field gets
@@ -281,5 +282,59 @@ describe('redaction canary: no canary fragment survives into any output surface'
     ] as const)('%s', (surface, getText) => {
       assertNoCanary(getText(), surface);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The narrative request is the only payload that leaves the machine (and only
+// with --narrative). It's checked directly here, not just transitively
+// through ReportData: no canary text, no org hostname, no record ids.
+// ---------------------------------------------------------------------------
+
+describe('redaction canary: the narrative request sent to Anthropic', () => {
+  const CANARY_HOST = 'canaryhost-7f3a.my.salesforce.com';
+  let canaryOrg: ReturnType<typeof buildCanaryOrg>;
+  let reportData: ReportData;
+  let requestJson: string;
+  let promptText: string;
+
+  beforeAll(async () => {
+    canaryOrg = buildCanaryOrg();
+    const adapter = new MockAdapter('org-canary', canaryOrg.data, canaryOrg.capabilities);
+    const secondSourceAdapter = new MockSecondSourceAdapter(canaryOrg.secondSource.data, canaryOrg.secondSource.capabilities);
+    reportData = await buildReportData(adapter, secondSourceAdapter, {
+      orgLabel: 'Canary Org',
+      // A live run puts the Salesforce hostname here (SalesforceAdapter.orgId).
+      orgDescription: CANARY_HOST,
+      asOf: canaryOrg.asOf,
+    });
+    const request = buildNarrativeRequest(reportData, {});
+    requestJson = JSON.stringify(request);
+    promptText = request.messages[0].content;
+  });
+
+  it('positive control: the request carries the report metric values', () => {
+    expect(reportData.metrics.length).toBeGreaterThan(0);
+    for (const m of reportData.metrics) expect(promptText).toContain(`"${m.metric}"`);
+    expect(JSON.stringify(reportData)).toContain(CANARY_HOST);
+  });
+
+  it('carries no canary fragment', () => {
+    assertNoCanary(requestJson, 'narrative request (buildNarrativeRequest)');
+  });
+
+  it('carries no org hostname', () => {
+    expect(normalize(requestJson)).not.toContain(normalize(CANARY_HOST));
+    expect(requestJson).not.toContain('salesforce.com');
+  });
+
+  it('carries no opportunity, contact or account id', () => {
+    const ids = [
+      ...canaryOrg.data.opportunities.map((o) => o.ref.id),
+      ...canaryOrg.data.contacts.map((c) => c.ref.id),
+      ...canaryOrg.data.accounts.map((a) => a.ref.id),
+    ];
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) expect(promptText, `record id ${id} leaked into the narrative request`).not.toContain(`"${id}"`);
   });
 });
