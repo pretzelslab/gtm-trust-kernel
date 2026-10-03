@@ -139,3 +139,14 @@ After that:
 2. Later: live scanning in the CLI, an `--out` flag, an approver role
    check, per-record atomic writes, an injection test corpus, an
    evaluation harness, a HubSpot adapter.
+
+### Phase 5 backlog (candidate checks, not scoped)
+
+From the README's "One data spine, every GTM motion" table. Titles only;
+none is designed, and none touches `rubric.ts` until it is.
+
+- Line-item coverage
+- Parent-account linkage
+- Product × account coverage
+- Geo field completeness
+- Industry consistency
