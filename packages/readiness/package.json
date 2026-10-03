@@ -15,7 +15,7 @@
     "./report/plainSummary.js": "./src/report/plainSummary.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.128.0",
+    "@anthropic-ai/sdk": "0.129.0",
     "@gtm-trust-kernel/adapters": "*",
     "tldts": "7.4.13"
   },
