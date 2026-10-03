@@ -2,13 +2,17 @@
 
 GTM Trust Kernel · npm: `gtm-trust-kernel`
 
-**It scores how well your CRM data can support AI. It checks your data,
-not the AI tools.**
+**Faster, cleaner deals start with CRM data your sellers can trust.**
 
-The scan reads your deals, activities, notes and history. For each AI use
-case, such as account briefs or forecast support, it says whether your data
-is ready, with the numbers behind every verdict. It only reads your CRM. It
-never writes to it.
+Revenue outcome ← seller decision ← AI assist ← CRM data ← this scan.
+
+AI can help sellers make better calls on their deals. It is not the
+point; the seller's decision is. This scan checks the CRM data underneath,
+before AI goes on top. It checks your data, not the AI tools.
+
+For each AI use case, such as account briefs or forecast support, it says
+whether your data is ready, with the numbers behind every verdict. It only
+reads your CRM. It never writes to it.
 
 There is also a trust layer for teams that go further: AI can suggest
 changes; nothing is written without approval, and every change is logged.
@@ -21,10 +25,52 @@ changes; nothing is written without approval, and every change is logged.
 **Status:** early open-source release. The npm CLI runs on built-in sample
 data. Scanning a live Salesforce org runs from a clone of this repo.
 
+## Where AI helps sellers, and what it needs
+
+Read each row from left to right: the outcome you care about, the moment in
+a deal where it is won or lost, the decision a seller makes there, the AI
+that can help, and the data that AI depends on.
+
+| Revenue outcome | Deal friction / seller moment | Decision it supports | AI assist (use case) | What the scan checks |
+|---|---|---|---|---|
+| **Deal velocity** | Deals stall between stages; reps spend time on the wrong deals | Which deals need attention this week, and what to do next | Pipeline risk alerts; next-step suggestions on deals | Activities captured, stages mapped, stage history, deals touched recently, next steps filled in |
+| **Win rate** | Reps walk into calls without context and handle objections from memory | How to prepare for this account and answer this objection | AI-generated account briefs; pitch and objection-handling answers | Notes with real content, few duplicate accounts, enough closed deals, evidence kept on closed deals |
+| **Forecast accuracy** | Close dates slip; commit calls rest on gut feel | Which deals to call commit, and which close dates to challenge | Forecast support; close-date reality checks | Amounts and close dates filled in, stages mapped, close-date history, past-due close dates, enough closed deals |
+| **Rep ramp / enablement** | New reps don't know how similar deals were won or lost | What worked on deals like this one | Pitch and objection-handling answers; AI-generated account briefs | Enough closed deals, evidence kept on closed deals, notes with real content |
+| **Attach and expansion** | The right products and bundle for this account aren't clear | Which options to put in front of the buyer | Quote options (next, not scored yet) | Not measured yet |
+
+Two use cases sit under every row. Bulk data clean-up suggestions keep the
+data usable, with a person approving each batch. Fully automatic CRM
+updates stay not ready, by design.
+
+```mermaid
+flowchart LR
+  P[Prospect] --> D[Discover] --> E[Evaluate] --> R[Propose] --> N[Negotiate] --> C[Close] --> X[Expand]
+  P -.- fP["No context on the account<br/>Helps: account briefs"]
+  D -.- fD["Next step unclear after first calls<br/>Helps: next-step suggestions"]
+  E -.- fE["Objections handled from memory<br/>Helps: pitch and objection answers"]
+  R -.- fR["Deal goes quiet<br/>Helps: pipeline risk alerts"]
+  N -.- fN["Close date slips<br/>Helps: close-date reality checks"]
+  C -.- fC["Commit call on gut feel<br/>Helps: forecast support"]
+  X -.- fX["Right bundle unclear<br/>Next: quote options, not scored yet"]
+  classDef friction fill:#fff4e5,stroke:#d9822b,color:#3d2a12
+  class fP,fD,fE,fR,fN,fC,fX friction
+```
+
+The scan checks data readiness. It doesn't cause or measure revenue
+outcomes.
+
+### Measure the outcome
+
+If you roll AI out, track deal velocity, win rate and forecast error before
+and after, on the deals where sellers use it. The scan doesn't measure
+these. It tells you whether the data is ready for AI to support the
+decisions behind them.
+
 ## Why this matters
 
-AI answers are only as good as the CRM data under them. Check your data
-before you buy. The usual problems:
+Each of those moments depends on the same CRM data. Check your data before
+you buy. The usual problems:
 
 - **No single record of the truth.** The same deal or account exists in
   more than one place, and nobody agrees which copy is right.
@@ -65,7 +111,7 @@ the reps who notice stop using it.
   summary, which sends metric names and values, never record text, and
   only after you say yes. See [Privacy](#privacy-and-where-data-goes).
 
-## What the scan checks, per use case
+## Check the data before you put AI into these moments
 
 Each AI use case needs certain things from your data. The scan checks those
 things and gives each use case one verdict.
@@ -105,9 +151,7 @@ The thresholds behind each check are provisional. They haven't been
 calibrated on real orgs yet ([help us do that](#help-calibrate-the-thresholds)).
 `latest.html` shows every metric, its threshold and its sample size.
 
-**Next, not scored yet:**
-
-- AI-suggested quote options.
+**Next, not scored yet:** AI-suggested quote options.
 
 ## Try it in 2 minutes
 

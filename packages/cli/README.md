@@ -4,8 +4,11 @@
 [![ci](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/pretzelslab/gtm-trust-kernel/blob/master/LICENSE)
 
-**CRM Data Readiness Scan: it scores how well your CRM data can support
-AI. It checks your data, not the AI tools.**
+**CRM Data Readiness Scan. Faster, cleaner deals start with CRM data your
+sellers can trust.**
+
+Revenue outcome ← seller decision ← AI assist ← CRM data ← this scan. It
+checks your data, not the AI tools, and doesn't measure revenue outcomes.
 
 A command-line readiness report for sales CRM data. It checks whether the
 data is complete, consistent and recent enough to support specific AI use
