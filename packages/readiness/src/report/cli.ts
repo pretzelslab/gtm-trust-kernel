@@ -45,7 +45,7 @@ import { FIXTURE_NAMES, type FixtureName } from '../fixtures/mockOrgs.js';
 import { buildFromFixture } from './buildFromFixture.js';
 import { loadEnvFileIfPresent } from './envFile.js';
 import { type BuildReportOptions, type ReportData } from './buildReport.js';
-import { buildLiveReportData } from './liveReport.js';
+import { buildLiveReportData, formatRetry, runPreflight } from './liveReport.js';
 import { sampleOptionsFromFlags } from './sampleFlags.js';
 import { renderComparisonHtml, renderReportHtml } from './render.js';
 import { renderPlainReportHtml } from './plainReport.js';
@@ -68,7 +68,10 @@ function isFixtureName(name: string): name is FixtureName {
 
 async function buildLive(sampling: Pick<BuildReportOptions, 'hydratePerStratum' | 'quick'>, showOrg: boolean): Promise<ReportData> {
   const config = loadSalesforceConfigFromEnv();
-  return buildLiveReportData(new SalesforceAdapter(config), { showOrg, sampling });
+  const adapter = new SalesforceAdapter(config, { onRetry: (info) => console.error(formatRetry(info)) });
+  // Before the sampling plan and any record read; a failure throws PreflightError (one line per problem).
+  await runPreflight(adapter);
+  return buildLiveReportData(adapter, { showOrg, sampling });
 }
 
 /**
