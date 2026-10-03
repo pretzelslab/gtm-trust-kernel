@@ -14,6 +14,11 @@
  * expiry: it reuses a cached token until a request 401s, then refreshes
  * once and retries.
  *
+ * Rate limits: a 429, a 503 or a concurrent-request REQUEST_LIMIT_EXCEEDED
+ * is retried with backoff (retry.ts, DEFAULT_RETRY_POLICY), honouring
+ * Retry-After; the org's daily request limit fails at once, since waiting
+ * can't lift it. Auth and other 4xx errors are never retried.
+ *
  * Writes: applyFieldWrite() is implemented only because CrmAdapter requires
  * it for type conformance. It never calls Salesforce — it always returns
  * 'rejected'. capabilities().writeGranularity is 'none' for the same
@@ -25,6 +30,7 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 
 import { CANONICAL_STAGE_ORDER } from './model/canonical.js';
+import { DEFAULT_RETRY_POLICY, nextRetryDelay, parseRetryAfter, type RetryInfo } from './retry.js';
 import {
   type CachedToken,
   defaultTokenCachePath,
@@ -213,28 +219,29 @@ async function safeReadBody(res: Response): Promise<string> {
   }
 }
 
-async function fetchAccessToken(config: SalesforceConfig): Promise<CachedToken> {
+async function fetchAccessToken(config: SalesforceConfig, backoff: Backoff): Promise<CachedToken> {
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: config.clientId,
     client_secret: config.clientSecret,
   });
-  let res: Response;
-  try {
-    res = await fetch(`${config.instanceUrl}/services/oauth2/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-  } catch (err) {
-    throw new AdapterError(
-      `Network error requesting Salesforce access token: ${err instanceof Error ? err.message : String(err)}`,
-      'network',
-      true,
-    );
-  }
+  const { res, body: readBody } = await backoff(async () => {
+    try {
+      return await fetch(`${config.instanceUrl}/services/oauth2/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+    } catch (err) {
+      throw new AdapterError(
+        `Network error requesting Salesforce access token: ${err instanceof Error ? err.message : String(err)}`,
+        'network',
+        true,
+      );
+    }
+  });
   if (!res.ok) {
-    const detail = await safeReadBody(res);
+    const detail = readBody ?? (await safeReadBody(res));
     throw new AdapterError(
       `Salesforce token request failed (${res.status}): ${detail}`,
       res.status === 401 || res.status === 400 ? 'auth' : 'unknown',
@@ -243,6 +250,69 @@ async function fetchAccessToken(config: SalesforceConfig): Promise<CachedToken> 
   }
   const json = (await res.json()) as { access_token: string; instance_url: string };
   return { accessToken: json.access_token, instanceUrl: json.instance_url, obtainedAt: new Date().toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Rate limits and retry
+// ---------------------------------------------------------------------------
+
+/** A response the retry loop let through, with its body if the loop already read it. */
+interface SettledResponse {
+  readonly res: Response;
+  readonly body?: string;
+}
+
+type Backoff = (send: () => Promise<Response>) => Promise<SettledResponse>;
+
+type Throttle =
+  | { readonly kind: 'none'; readonly body?: string }
+  | { readonly kind: 'daily' }
+  | { readonly kind: 'retry'; readonly reason: string; readonly rateLimited: boolean; readonly retryAfterMs?: number };
+
+/**
+ * Whether a response is a throttle worth retrying. Salesforce answers
+ * REQUEST_LIMIT_EXCEEDED with a 403 whose message names the limit:
+ * "ConcurrentPerOrgLongTxn Limit exceeded." clears as long-running
+ * requests finish, so it is retried; "TotalRequests Limit exceeded." is
+ * the org's daily limit, and any other message is treated the same way
+ * (fail at once). Only a 403's body is read here; it is handed back so
+ * the caller can still report it.
+ */
+async function throttleOf(res: Response): Promise<Throttle> {
+  if (res.status === 429 || res.status === 503) {
+    const retryAfterMs = parseRetryAfter(res.headers.get('Retry-After'), Date.now());
+    return {
+      kind: 'retry',
+      reason: String(res.status),
+      rateLimited: res.status === 429,
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    };
+  }
+  if (res.status !== 403) return { kind: 'none' };
+  const body = await safeReadBody(res);
+  let errors: unknown;
+  try {
+    errors = JSON.parse(body);
+  } catch {
+    return { kind: 'none', body };
+  }
+  const limit = Array.isArray(errors)
+    ? (errors as ({ errorCode?: unknown; message?: unknown } | null)[]).find((e) => e?.errorCode === 'REQUEST_LIMIT_EXCEEDED')
+    : undefined;
+  if (!limit) return { kind: 'none', body };
+  if (typeof limit.message === 'string' && /^Concurrent/i.test(limit.message.trim())) {
+    return { kind: 'retry', reason: '403 REQUEST_LIMIT_EXCEEDED, concurrent requests', rateLimited: true };
+  }
+  return { kind: 'daily' };
+}
+
+export const DAILY_LIMIT_MESSAGE =
+  "Salesforce refused the request: this org's daily API request limit is used up (REQUEST_LIMIT_EXCEEDED). " +
+  'Nothing was written. The limit frees up over a rolling 24 hours; try again later.';
+
+function gaveUpMessage(reason: string, attempts: number, waitedMs: number): string {
+  const what = reason === '503' ? 'answering 503 (service unavailable)' : `rate-limiting requests (${reason})`;
+  return `Salesforce kept ${what} after ${attempts} attempts over ${Math.round(waitedMs / 1000)}s. Nothing was written. Try again later.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,6 +589,20 @@ const OPPORTUNITY_HISTORY_FIELDS = ['Id', 'OpportunityId', 'StageName', 'CloseDa
 // Adapter
 // ---------------------------------------------------------------------------
 
+export type { RetryInfo } from './retry.js';
+
+/** Optional hooks for SalesforceAdapter, for tests and progress output. */
+export interface SalesforceAdapterDeps {
+  /** Waits between retries. Default: a real timer. */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** Jitter source, in [0, 1). Default: Math.random. */
+  readonly random?: () => number;
+  /** Called before each wait, e.g. to tell the user why the run paused. The adapter itself prints nothing. */
+  readonly onRetry?: (info: RetryInfo) => void;
+}
+
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class SalesforceAdapter implements CrmAdapter {
   readonly vendor = 'salesforce' as const;
   readonly orgId: string;
@@ -536,7 +620,10 @@ export class SalesforceAdapter implements CrmAdapter {
   /** opportunityId -> last-seen toStage, for deriving fromStage across listStageHistory pages/calls on this instance. */
   private readonly lastKnownStage = new Map<string, CanonicalStage>();
 
-  constructor(private readonly config: SalesforceConfig) {
+  constructor(
+    private readonly config: SalesforceConfig,
+    private readonly deps: SalesforceAdapterDeps = {},
+  ) {
     this.orgId = new URL(config.instanceUrl).host;
     this.stageMap = { ...SALESFORCE_STAGE_MAP, ...config.stageMap };
   }
@@ -663,49 +750,71 @@ export class SalesforceAdapter implements CrmAdapter {
         return fromDisk;
       }
     }
-    const fresh = await fetchAccessToken(this.config);
+    const fresh = await fetchAccessToken(this.config, (send) => this.withBackoff(send));
     this.cachedToken = fresh;
     await writeTokenCache(this.config.tokenCachePath, fresh);
     return fresh;
   }
 
   private async request<T>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
-    return this.requestWithRetry<T>(pathOrUrl, init, false, 'json');
+    return this.requestWithRetry<T>(pathOrUrl, init, 'json');
   }
 
   /** Same auth, retry and error mapping as request(), for an endpoint that returns a raw body. */
   private async requestText(pathOrUrl: string): Promise<string> {
-    return this.requestWithRetry<string>(pathOrUrl, {}, false, 'text');
+    return this.requestWithRetry<string>(pathOrUrl, {}, 'text');
   }
 
-  private async requestWithRetry<T>(pathOrUrl: string, init: RequestInit, hasRetried: boolean, as: 'json' | 'text'): Promise<T> {
-    const token = await this.getToken(hasRetried);
-    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${token.instanceUrl}${pathOrUrl}`;
+  /**
+   * Calls send() until the answer is not a retryable throttle (throttleOf),
+   * or the retry policy gives up. Each attempt is a fresh send(), so a
+   * retried page of a paged query is that one page, not the whole query.
+   */
+  private async withBackoff(send: () => Promise<Response>): Promise<SettledResponse> {
+    const policy = DEFAULT_RETRY_POLICY;
+    let waitedMs = 0;
+    for (let attempt = 1; ; attempt += 1) {
+      const res = await send();
+      const throttle = await throttleOf(res);
+      if (throttle.kind === 'none') return throttle.body === undefined ? { res } : { res, body: throttle.body };
+      if (throttle.kind === 'daily') throw new AdapterError(DAILY_LIMIT_MESSAGE, 'rate_limit', false);
+      const delayMs = nextRetryDelay(policy, attempt, waitedMs, throttle.retryAfterMs, this.deps.random ?? Math.random);
+      if (delayMs === undefined) {
+        throw new AdapterError(
+          gaveUpMessage(throttle.reason, attempt, waitedMs),
+          throttle.rateLimited ? 'rate_limit' : 'unknown',
+          true,
+          throttle.retryAfterMs,
+        );
+      }
+      this.deps.onRetry?.({ reason: throttle.reason, attempt: attempt + 1, maxAttempts: policy.maxAttempts, delayMs });
+      await (this.deps.sleep ?? realSleep)(delayMs);
+      waitedMs += delayMs;
+    }
+  }
 
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        ...init,
-        headers: { Authorization: `Bearer ${token.accessToken}`, ...(init.headers ?? {}) },
-      });
-    } catch (err) {
-      throw new AdapterError(`Network error calling Salesforce: ${err instanceof Error ? err.message : String(err)}`, 'network', true);
-    }
+  /** One authorised fetch; after a 401, one new token and one more fetch. */
+  private async sendAuthorized(pathOrUrl: string, init: RequestInit): Promise<Response> {
+    const send = async (forceRefresh: boolean): Promise<Response> => {
+      const token = await this.getToken(forceRefresh);
+      const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${token.instanceUrl}${pathOrUrl}`;
+      try {
+        return await fetch(url, {
+          ...init,
+          headers: { Authorization: `Bearer ${token.accessToken}`, ...(init.headers ?? {}) },
+        });
+      } catch (err) {
+        throw new AdapterError(`Network error calling Salesforce: ${err instanceof Error ? err.message : String(err)}`, 'network', true);
+      }
+    };
+    const res = await send(false);
+    return res.status === 401 ? send(true) : res;
+  }
 
-    if (res.status === 401 && !hasRetried) {
-      return this.requestWithRetry<T>(pathOrUrl, init, true, as);
-    }
-    if (res.status === 429) {
-      const retryAfterHeader = Number(res.headers.get('Retry-After'));
-      throw new AdapterError(
-        'Salesforce rate limit hit',
-        'rate_limit',
-        true,
-        Number.isFinite(retryAfterHeader) ? retryAfterHeader * 1000 : undefined,
-      );
-    }
+  private async requestWithRetry<T>(pathOrUrl: string, init: RequestInit, as: 'json' | 'text'): Promise<T> {
+    const { res, body } = await this.withBackoff(() => this.sendAuthorized(pathOrUrl, init));
     if (res.status === 401 || res.status === 403) {
-      const detail = await safeReadBody(res);
+      const detail = body ?? (await safeReadBody(res));
       throw new AdapterError(
         `Salesforce ${res.status === 401 ? 'auth' : 'permission'} error: ${detail}`,
         res.status === 401 ? 'auth' : 'permission',
@@ -713,7 +822,7 @@ export class SalesforceAdapter implements CrmAdapter {
       );
     }
     if (!res.ok) {
-      const detail = await safeReadBody(res);
+      const detail = body ?? (await safeReadBody(res));
       throw new AdapterError(`Salesforce API error (${res.status}): ${detail}`, 'unknown', res.status >= 500);
     }
     if (as === 'text') return (await safeReadBody(res)) as T;

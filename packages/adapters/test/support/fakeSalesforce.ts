@@ -3,7 +3,8 @@
  * SalesforceAdapter without a real org. Replaces global `fetch` (via
  * vi.stubGlobal) with a router that answers:
  *
- *  - POST /services/oauth2/token: a fixed access token.
+ *  - POST /services/oauth2/token: a fixed access token, after any error
+ *    answers queued with tokenAnswers().
  *  - GET  /services/data/<v>/query?q=<soql>: the first registered handler
  *    whose pattern matches the decoded SOQL. A handler returns records, or
  *    a full SoqlResponse for paging, a COUNT() total, or an HTTP status to
@@ -24,6 +25,10 @@
  *    them in the query's ORDER BY order). Options split the parents, or a
  *    parent's child rows, into pages served from nextRecordsUrl.
  *
+ * adapter() passes a no-op sleep, so retries on a throttle (429, 503,
+ * concurrent REQUEST_LIMIT_EXCEEDED) don't really wait; pass deps to
+ * record the waits.
+ *
  * Every SOQL string the adapter sends is recorded in `queries`, in order,
  * so tests can assert what was asked as well as what was mapped. A query
  * with no matching handler fails the test loudly rather than returning an
@@ -35,7 +40,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { vi } from 'vitest';
 import type { RecordRef } from '../../src/model/canonical.js';
-import { SalesforceAdapter, type SalesforceConfig } from '../../src/salesforce.js';
+import { SalesforceAdapter, type SalesforceAdapterDeps, type SalesforceConfig } from '../../src/salesforce.js';
 
 export const INSTANCE_URL = 'https://example.my.salesforce.com';
 export const API_VERSION = 'v62.0';
@@ -72,12 +77,14 @@ export interface FakeSalesforce {
    * `parentField` (e.g. 'ParentId'). See the module docblock.
    */
   subqueryRows(relationship: string, parentField: string, rows: ChildRows, options?: SubqueryOptions): void;
+  /** Error answers for the token endpoint, served in order before the token. */
+  tokenAnswers(...answers: readonly { readonly status: number; readonly body?: string; readonly headers?: Record<string, string> }[]): void;
   /** Every SOQL string sent, in order. */
   readonly queries: string[];
   /** Every URL fetched (token, query, queryMore, limits), in order. */
   readonly urls: string[];
-  /** A fresh adapter wired to this fake, with a throwaway token cache. */
-  adapter(overrides?: Partial<SalesforceConfig>): SalesforceAdapter;
+  /** A fresh adapter wired to this fake, with a throwaway token cache and a no-op sleep. */
+  adapter(overrides?: Partial<SalesforceConfig>, deps?: SalesforceAdapterDeps): SalesforceAdapter;
 }
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -92,6 +99,7 @@ export function installFakeSalesforce(): FakeSalesforce {
   const describes = new Map<string, Record<string, unknown> | { readonly status: number; readonly body?: string } | Error>();
   const pendingPages = new Map<string, { rest: readonly (readonly Record<string, unknown>[])[] }>();
   const subqueries = new Map<string, { parentField: string; rows: ChildRows; options: SubqueryOptions }>();
+  const tokenQueue: { status: number; body?: string; headers?: Record<string, string> }[] = [];
   let locatorSeq = 0;
 
   function chunks<T>(items: readonly T[], size: number | undefined): T[][] {
@@ -151,6 +159,8 @@ export function installFakeSalesforce(): FakeSalesforce {
     urls.push(url.pathname + url.search);
 
     if (url.pathname === '/services/oauth2/token') {
+      const queuedAnswer = tokenQueue.shift();
+      if (queuedAnswer) return answer(queuedAnswer);
       return json({ access_token: 'FAKE_TOKEN', instance_url: INSTANCE_URL });
     }
     if (url.pathname === `/services/data/${API_VERSION}/limits/`) return json({});
@@ -206,9 +216,12 @@ export function installFakeSalesforce(): FakeSalesforce {
     subqueryRows(relationship, parentField, rows, options = {}) {
       subqueries.set(relationship, { parentField, rows, options });
     },
+    tokenAnswers(...answers) {
+      tokenQueue.push(...answers);
+    },
     queries,
     urls,
-    adapter(overrides = {}) {
+    adapter(overrides = {}, deps = {}) {
       const cacheDir = mkdtempSync(path.join(tmpdir(), 'gtk-sf-test-'));
       return new SalesforceAdapter({
         clientId: 'id',
@@ -217,7 +230,7 @@ export function installFakeSalesforce(): FakeSalesforce {
         apiVersion: API_VERSION,
         tokenCachePath: path.join(cacheDir, 'token.json'),
         ...overrides,
-      });
+      }, { sleep: async () => {}, ...deps });
     },
   };
 }
