@@ -42,10 +42,11 @@ against a bundled mock org, no CRM credentials needed).
 --narrative           Add an AI-written summary. Sends metric names, values,
                       sample sizes and ratings (no record text) to
                       Anthropic's API. Needs ANTHROPIC_API_KEY, and asks
-                      before sending.
+                      before sending; answering no runs the scan without
+                      it.
 --narrative-consent   Consent to that send up front, for runs with no
                       terminal to answer the prompt (CI, scripts). Without
-                      it, such a run stops before sending anything.
+                      it, such a run exits 1 before sending anything.
 --narrative-preview   Print the exact request --narrative would send, then
                       exit. Sends nothing, writes no report, needs no key.
 --verbose             Also print the sampling plan and every file written.

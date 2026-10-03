@@ -27,7 +27,8 @@
  * code is 2 if any capability has a listed verdict. Errors exit 1.
  *
  * --narrative asks for consent before sending (narrativeConsent.ts): a
- * prompt in a terminal, or --narrative-consent. Without either it stops,
+ * prompt in a terminal, or --narrative-consent. Answering no runs the
+ * report without the AI summary; with no terminal and no flag it stops,
  * exit 1, before reading any data.
  *
  * --narrative-preview builds the report data (from a fixture, or the org
@@ -52,8 +53,9 @@ import { formatNarrativePreview, NARRATIVE_PREVIEW_NOTICE } from './narrativeReq
 import {
   askOnTerminal,
   isInteractive,
+  NARRATIVE_CONSENT_DECLINED,
+  NARRATIVE_CONSENT_REQUIRED,
   NARRATIVE_CONSENT_WITHOUT_NARRATIVE,
-  narrativeConsentRefusal,
   resolveNarrativeConsent,
 } from './narrativeConsent.js';
 import { evaluateFailOn, normalizeFailOnArgs, parseFailOn, type FailOnVerdict } from './failOn.js';
@@ -80,8 +82,8 @@ async function buildLive(sampling: Pick<BuildReportOptions, 'hydratePerStratum' 
  * AnthropicNarrativeModelClient's constructor already names the var in its
  * thrown message, reused verbatim here. Then consent (narrativeConsent.ts):
  * the key is checked first, so nobody is asked to agree to a send that
- * couldn't happen. Both run before any data is read, so a refusal costs
- * nothing. Returns 'exit' (with exitCode already set) rather than throwing,
+ * couldn't happen. Both run before any data is read. A "no" at the prompt
+ * returns undefined: the report runs without the AI summary. Returns 'exit' (with exitCode already set) rather than throwing,
  * so the caller decides when to stop -- same pattern buildLive()'s caller
  * uses.
  */
@@ -96,10 +98,14 @@ async function prepareNarrative(useNarrative: boolean, consentFlag: boolean): Pr
     return 'exit';
   }
   const decision = await resolveNarrativeConsent({ flag: consentFlag, interactive: isInteractive(), ask: askOnTerminal });
-  if (decision !== 'consented') {
-    console.error(narrativeConsentRefusal(decision));
+  if (decision === 'needs-flag') {
+    console.error(NARRATIVE_CONSENT_REQUIRED);
     process.exitCode = 1;
     return 'exit';
+  }
+  if (decision === 'declined') {
+    console.error(NARRATIVE_CONSENT_DECLINED);
+    return undefined;
   }
   return client;
 }

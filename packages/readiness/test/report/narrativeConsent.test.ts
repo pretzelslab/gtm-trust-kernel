@@ -3,7 +3,6 @@ import {
   NARRATIVE_CONSENT_DECLINED,
   NARRATIVE_CONSENT_PROMPT,
   NARRATIVE_CONSENT_REQUIRED,
-  narrativeConsentRefusal,
   resolveNarrativeConsent,
 } from '../../src/report/narrativeConsent.js';
 
@@ -41,15 +40,13 @@ describe('resolveNarrativeConsent', () => {
   });
 });
 
-describe('narrativeConsentRefusal', () => {
+describe('consent messages', () => {
   it('names --narrative-consent and --narrative-preview when no one could be asked', () => {
-    expect(narrativeConsentRefusal('needs-flag')).toBe(NARRATIVE_CONSENT_REQUIRED);
     expect(NARRATIVE_CONSENT_REQUIRED).toContain('--narrative-consent');
     expect(NARRATIVE_CONSENT_REQUIRED).toContain('--narrative-preview');
   });
 
-  it('says nothing was sent when the answer was no', () => {
-    expect(narrativeConsentRefusal('declined')).toBe(NARRATIVE_CONSENT_DECLINED);
-    expect(NARRATIVE_CONSENT_DECLINED).toContain('Nothing was sent');
+  it('says the AI summary was skipped and nothing was sent when the answer was no', () => {
+    expect(NARRATIVE_CONSENT_DECLINED).toBe('AI summary skipped; nothing was sent.');
   });
 });

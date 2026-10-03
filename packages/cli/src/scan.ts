@@ -28,7 +28,8 @@ import { formatNarrativePreview, NARRATIVE_PREVIEW_NOTICE } from '@gtm-trust-ker
 import {
   askOnTerminal,
   isInteractive,
-  narrativeConsentRefusal,
+  NARRATIVE_CONSENT_DECLINED,
+  NARRATIVE_CONSENT_REQUIRED,
   resolveNarrativeConsent,
 } from '@gtm-trust-kernel/readiness/report/narrativeConsent.js';
 import { renderPlainReportHtml } from '@gtm-trust-kernel/readiness/report/plainReport.js';
@@ -44,6 +45,12 @@ export interface ScanOptions {
   readonly interactive?: boolean;
   /** Shows the consent prompt and resolves to the answer. Defaults to askOnTerminal. */
   readonly ask?: (prompt: string) => Promise<string>;
+  /**
+   * Builds the narrative model client. Defaults to the Anthropic client,
+   * loaded lazily (which checks ANTHROPIC_API_KEY). Tests pass a stub, so
+   * no SDK is loaded and nothing is sent.
+   */
+  readonly createNarrativeClient?: () => Promise<NarrativeClient>;
   readonly useJson: boolean;
   /** --narrative-preview: print the narrative request to `stdout` and stop; no files, no network. */
   readonly narrativePreview?: boolean;
@@ -82,12 +89,18 @@ async function withoutConsoleLog<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-type NarrativeClient = Parameters<typeof buildNarrative>[1];
+export type NarrativeClient = Parameters<typeof buildNarrative>[1];
+
+async function createAnthropicClient(): Promise<NarrativeClient> {
+  const { AnthropicNarrativeModelClient } = await import('@gtm-trust-kernel/readiness/report/anthropicNarrativeModelClient.js');
+  return new AnthropicNarrativeModelClient();
+}
 
 /**
  * Mirrors readiness's own cli.ts prepareNarrative: opt-in, loud failure on a
  * missing key, then consent (readiness's narrativeConsent.ts), both before
- * the scan reads anything. The narrative client (the only code that imports
+ * the scan reads anything. A "no" at the prompt returns undefined: the scan
+ * runs without the AI summary. The narrative client (the only code that imports
  * @anthropic-ai/sdk) is loaded here, so a scan without --narrative never
  * loads the SDK.
  */
@@ -95,8 +108,7 @@ async function prepareNarrative(options: ScanOptions): Promise<NarrativeClient |
   if (!options.useNarrative) return undefined;
   let client: NarrativeClient;
   try {
-    const { AnthropicNarrativeModelClient } = await import('@gtm-trust-kernel/readiness/report/anthropicNarrativeModelClient.js');
-    client = new AnthropicNarrativeModelClient();
+    client = await (options.createNarrativeClient ?? createAnthropicClient)();
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exitCode = 1;
@@ -107,10 +119,14 @@ async function prepareNarrative(options: ScanOptions): Promise<NarrativeClient |
     interactive: options.interactive ?? isInteractive(),
     ask: options.ask ?? askOnTerminal,
   });
-  if (decision !== 'consented') {
-    console.error(narrativeConsentRefusal(decision));
+  if (decision === 'needs-flag') {
+    console.error(NARRATIVE_CONSENT_REQUIRED);
     process.exitCode = 1;
     return 'exit';
+  }
+  if (decision === 'declined') {
+    console.error(NARRATIVE_CONSENT_DECLINED);
+    return undefined;
   }
   return client;
 }

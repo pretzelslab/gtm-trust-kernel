@@ -74,7 +74,7 @@ The report is written to `./out/` in your current directory. Open `out/latest.ht
 ## Privacy
 
 - The demo scan uses bundled sample data and makes no network calls.
-- `--narrative` is optional. It sends metric names, values, sample sizes and ratings to Anthropic's API. It never sends record text such as notes, emails or names. It asks before sending, or needs `--narrative-consent` when there's no terminal, and `--narrative-preview` shows the exact request without sending it.
+- `--narrative` is optional. It sends metric names, values, sample sizes and ratings to Anthropic's API. It never sends record text such as notes, emails or names. It asks before sending (answering no runs the report without it), or needs `--narrative-consent` when there's no terminal, and `--narrative-preview` shows the exact request without sending it.
 - The Salesforce adapter is read-only. It cannot write to your CRM.
 
 ## For developers

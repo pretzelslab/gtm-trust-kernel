@@ -73,7 +73,7 @@ gtm-trust-kernel --help
 |---|---|
 | `--json` | Print the report data as JSON to stdout; everything else goes to stderr, so it pipes cleanly |
 | `--verbose` | Also print the sampling plan and every file written |
-| `--narrative` | Add an AI-written summary. Needs `ANTHROPIC_API_KEY`, and sends metric names, values and ratings (never record text) to Anthropic's API. Asks before sending |
+| `--narrative` | Add an AI-written summary. Needs `ANTHROPIC_API_KEY`, and sends metric names, values and ratings (never record text) to Anthropic's API. Asks before sending; answering no runs the scan without it |
 | `--narrative-consent` | With `--narrative`: consent up front, for runs with no terminal to answer the prompt (CI, scripts). Without it, such a run exits 1 before sending anything |
 | `--narrative-preview` | Print the exact request `--narrative` would send, then exit. Sends nothing, writes no report, needs no key |
 | `--fail-on [<verdicts>]` | Exit 2 if any capability has a listed verdict (see below). Off by default |

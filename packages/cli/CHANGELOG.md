@@ -28,7 +28,8 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   before sending anything to Anthropic's API. In a terminal it prompts
   (default no); with no terminal (CI, scripts) it exits 1 unless
   `--narrative-consent` is passed. The API key is still checked first.
-  Declining exits 1 without writing a report.
+  Answering no runs the scan without the AI summary (the deterministic
+  summary, as without `--narrative`), writes the report and exits 0.
 - Dependencies: `@gtm-trust-kernel/adapters` `^0.2.1`; `@anthropic-ai/sdk`
   and `tldts` use caret ranges instead of exact pins.
 

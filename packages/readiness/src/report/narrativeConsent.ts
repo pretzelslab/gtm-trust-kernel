@@ -4,8 +4,10 @@
  * of:
  *   - --narrative-consent, for unattended runs (CI, cron, scripts);
  *   - a "y" at an interactive prompt, when stdin and stderr are a terminal.
- * Without a terminal and without the flag, the run stops before anything is
- * sent. The prompt goes to stderr so --json's stdout stays clean.
+ * Any other answer runs the report without the AI summary (the
+ * deterministic summary, as without --narrative) and exits 0. Without a
+ * terminal and without the flag, the run stops with exit 1 before reading
+ * anything. The prompt goes to stderr so --json's stdout stays clean.
  *
  * Callers check ANTHROPIC_API_KEY first (by constructing the client), so a
  * missing key is reported before anyone is asked to consent to a send that
@@ -23,7 +25,8 @@ export const NARRATIVE_CONSENT_REQUIRED =
   "--narrative sends report metrics to Anthropic's API and needs your consent: run it in a terminal to answer the prompt, " +
   'or pass --narrative-consent. Use --narrative-preview to see exactly what would be sent. Nothing was sent and no report was written.';
 
-export const NARRATIVE_CONSENT_DECLINED = 'Narrative not sent: consent declined. Nothing was sent and no report was written.';
+/** Printed on stderr when the prompt is answered no; the report then runs without the AI summary. */
+export const NARRATIVE_CONSENT_DECLINED = 'AI summary skipped; nothing was sent.';
 
 export const NARRATIVE_CONSENT_WITHOUT_NARRATIVE = '--narrative-consent only applies together with --narrative.';
 
@@ -58,9 +61,4 @@ export async function askOnTerminal(prompt: string): Promise<string> {
   } finally {
     rl.close();
   }
-}
-
-/** The stderr line for a run that stops without consent. */
-export function narrativeConsentRefusal(decision: Exclude<NarrativeConsentDecision, 'consented'>): string {
-  return decision === 'needs-flag' ? NARRATIVE_CONSENT_REQUIRED : NARRATIVE_CONSENT_DECLINED;
 }
