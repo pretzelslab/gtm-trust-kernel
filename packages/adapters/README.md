@@ -78,7 +78,7 @@ Settings (environment variables):
 | `SF_CLIENT_ID`, `SF_CLIENT_SECRET` | yes | The connected app's consumer key and secret |
 | `SF_INSTANCE_URL` | yes | Your org's My Domain URL, e.g. `https://acme.my.salesforce.com` |
 | `SF_API_VERSION` | no | Default `v62.0` |
-| `SF_TOKEN_CACHE_PATH` | no | Where the access token is cached |
+| `SF_TOKEN_CACHE_PATH` | no | Where the access token is cached. Default: your user config folder, owner-only on macOS/Linux |
 | `SF_ACTIVITY_CAPTURE` | no | `auto` if email/calendar sync logs activity; unset means `manual` |
 | `SF_NOTE_FULLTEXT_FETCH_LIMIT` | no | Enhanced Note bodies fetched in full per run (default 200) |
 | `SF_STAGE_MAP_PATH` | no | JSON file mapping your stage labels to the canonical stages |

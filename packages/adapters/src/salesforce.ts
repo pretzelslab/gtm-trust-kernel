@@ -22,11 +22,17 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 import { CANONICAL_STAGE_ORDER } from './model/canonical.js';
+import {
+  type CachedToken,
+  defaultTokenCachePath,
+  LEGACY_TOKEN_CACHE_PATH,
+  readTokenCache,
+  removeLegacyTokenCache,
+  writeTokenCache,
+} from './tokenCache.js';
 import type {
   Account,
   Activity,
@@ -66,8 +72,6 @@ import {
 const REQUIRED_ENV_VARS = ['SF_CLIENT_ID', 'SF_CLIENT_SECRET', 'SF_INSTANCE_URL'] as const;
 const DEFAULT_API_VERSION = 'v62.0';
 
-const THIS_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_TOKEN_CACHE_PATH = path.join(THIS_FILE_DIR, '..', '.cache', 'salesforce-token.json');
 
 /**
  * How this org captures activity, as declared by the user
@@ -184,12 +188,13 @@ export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env
       `Invalid SF_NOTE_FULLTEXT_FETCH_LIMIT value ${JSON.stringify(env.SF_NOTE_FULLTEXT_FETCH_LIMIT)}. Use a whole number (0 or more), or leave it unset.`,
     );
   }
+  const instanceUrl = env.SF_INSTANCE_URL!.replace(/\/+$/, '');
   return {
     clientId: env.SF_CLIENT_ID!,
     clientSecret: env.SF_CLIENT_SECRET!,
-    instanceUrl: env.SF_INSTANCE_URL!.replace(/\/+$/, ''),
+    instanceUrl,
     apiVersion: env.SF_API_VERSION || DEFAULT_API_VERSION,
-    tokenCachePath: env.SF_TOKEN_CACHE_PATH || DEFAULT_TOKEN_CACHE_PATH,
+    tokenCachePath: env.SF_TOKEN_CACHE_PATH || defaultTokenCachePath(instanceUrl, env.SF_CLIENT_ID!, process.platform, env, os.homedir()),
     ...(activityCaptureRaw ? { activityCapture: activityCaptureRaw as SalesforceActivityCapture } : {}),
     ...(fetchLimitRaw ? { noteFullTextFetchLimit: Number(fetchLimitRaw) } : {}),
     ...(env.SF_STAGE_MAP_PATH?.trim() ? { stageMap: loadStageMapFile(env.SF_STAGE_MAP_PATH.trim()) } : {}),
@@ -199,26 +204,6 @@ export function loadSalesforceConfigFromEnv(env: NodeJS.ProcessEnv = process.env
 // ---------------------------------------------------------------------------
 // Token cache + auth
 // ---------------------------------------------------------------------------
-
-interface CachedToken {
-  readonly accessToken: string;
-  readonly instanceUrl: string;
-  readonly obtainedAt: string;
-}
-
-async function readTokenCache(cachePath: string): Promise<CachedToken | null> {
-  try {
-    const raw = await readFile(cachePath, 'utf8');
-    return JSON.parse(raw) as CachedToken;
-  } catch {
-    return null;
-  }
-}
-
-async function writeTokenCache(cachePath: string, token: CachedToken): Promise<void> {
-  await mkdir(path.dirname(cachePath), { recursive: true });
-  await writeFile(cachePath, JSON.stringify(token, null, 2), 'utf8');
-}
 
 async function safeReadBody(res: Response): Promise<string> {
   try {
@@ -539,6 +524,7 @@ export class SalesforceAdapter implements CrmAdapter {
   readonly orgId: string;
 
   private cachedToken: CachedToken | null = null;
+  private legacyCacheChecked = false;
   /** Default Sales Process map with the org's own stage map merged over it. */
   private readonly stageMap: Readonly<Record<string, CanonicalStage>>;
   /** Enhanced Note full-text fetches used so far by this instance (one run). */
@@ -665,6 +651,10 @@ export class SalesforceAdapter implements CrmAdapter {
   // -- auth plumbing ---------------------------------------------------
 
   private async getToken(forceRefresh: boolean): Promise<CachedToken> {
+    if (!this.legacyCacheChecked) {
+      this.legacyCacheChecked = true;
+      await removeLegacyTokenCache(LEGACY_TOKEN_CACHE_PATH, this.config.tokenCachePath);
+    }
     if (!forceRefresh) {
       if (this.cachedToken) return this.cachedToken;
       const fromDisk = await readTokenCache(this.config.tokenCachePath);

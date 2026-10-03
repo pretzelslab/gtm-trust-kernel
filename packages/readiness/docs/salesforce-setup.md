@@ -116,7 +116,7 @@ wins over the file.
 | `SF_CLIENT_SECRET` | Yes | Consumer secret of the app in step 2 | None |
 | `SF_INSTANCE_URL` | Yes | Your My Domain URL; a trailing `/` is removed | None |
 | `SF_API_VERSION` | No | REST API version, with the `v` | `v62.0` |
-| `SF_TOKEN_CACHE_PATH` | No | Where the access token is cached between runs | `.cache/salesforce-token.json` inside the adapters package |
+| `SF_TOKEN_CACHE_PATH` | No | Where the access token is cached between runs | Your user config folder (below) |
 | `SF_ACTIVITY_CAPTURE` | No | `auto` or `manual`: how your org captures activity (below) | Unset, treated as `manual` |
 | `SF_NOTE_FULLTEXT_FETCH_LIMIT` | No | Most Enhanced Note bodies fetched in full per run, for notes whose preview is cut off. `0` never fetches | `200` |
 | `SF_STAGE_MAP_PATH` | No | Path to a JSON file mapping your stage labels to the tool's stages (below) | Unset: only Salesforce's default stage labels are mapped |
@@ -125,8 +125,15 @@ A missing required variable, a bad `SF_ACTIVITY_CAPTURE` or
 `SF_NOTE_FULLTEXT_FETCH_LIMIT`, or a bad stage map file stops the run with
 an error naming the problem.
 
-The token cache holds a live access token. It is git-ignored; delete it to
-force a fresh sign-in.
+The token cache holds a live access token, one file per org and connected
+app (`salesforce-token-<hash>.json`), in your user config folder:
+`%LOCALAPPDATA%\gtm-trust-kernel\` on Windows, `~/Library/Application
+Support/gtm-trust-kernel/` on macOS, `$XDG_CONFIG_HOME/gtm-trust-kernel/`
+(default `~/.config/gtm-trust-kernel/`) on Linux. On macOS and Linux it is
+owner-only (file 0600, folder 0700); on Windows it relies on your profile
+folder's default permissions. Delete it to force a fresh sign-in. A cache
+file left inside the adapters package folder by an older version is
+deleted on the next run.
 
 ### `SF_ACTIVITY_CAPTURE`
 

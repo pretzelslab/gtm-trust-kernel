@@ -15,6 +15,15 @@ adapter authors, and each one is listed under "Breaking".
 
 ### Changed
 
+- **Token cache location.** The Salesforce access token is now cached in
+  the user's config folder (`%LOCALAPPDATA%\gtm-trust-kernel` on Windows,
+  `~/Library/Application Support/gtm-trust-kernel` on macOS,
+  `$XDG_CONFIG_HOME` or `~/.config/gtm-trust-kernel` elsewhere), one file
+  per org and connected app, instead of inside the package folder. On
+  macOS and Linux the file is 0600 and a folder it creates 0700.
+  `SF_TOKEN_CACHE_PATH` still overrides it. The old file is deleted on
+  first use, not migrated, so the first run after upgrading fetches one
+  new token. `SalesforceConfig` is unchanged.
 - The optional `vitest` peer dependency (for the `/contract/*` suites) is
   widened from `^2.1.3` to `>=2.1.3 <6`, so adapter authors on vitest 3, 4
   or 5 no longer get a peer conflict.

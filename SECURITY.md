@@ -23,8 +23,16 @@ Only the latest published version of each package
 - **Credentials stay where you put them.** Salesforce credentials are read
   from environment variables (or a local `.env` you create); they are never
   logged, written to the reports, or included in the published packages.
-  The access token is cached on disk at `SF_TOKEN_CACHE_PATH` (by default
-  inside the adapters package folder); treat that file like a password.
+  The access token is cached on disk in your user config folder
+  (`%LOCALAPPDATA%\gtm-trust-kernel` on Windows, `~/Library/Application
+  Support/gtm-trust-kernel` on macOS, `$XDG_CONFIG_HOME` or
+  `~/.config/gtm-trust-kernel` on Linux), one file per org, or at
+  `SF_TOKEN_CACHE_PATH`. On macOS and Linux the file is owner-only (0600)
+  in a 0700 folder. **Windows assumption:** there are no mode bits, so the
+  file relies on `%LOCALAPPDATA%` being private to your account by default
+  (you, SYSTEM and Administrators); a changed profile ACL changes that.
+  Treat the file like a password. A token cached inside the adapters
+  package folder by 0.2.0 or earlier is deleted on the next live run.
 - **The demo makes no network calls.** `npx gtm-trust-kernel scan --demo`
   runs on bundled sample data.
 - **`--narrative` is the only data that leaves your machine,** and only
