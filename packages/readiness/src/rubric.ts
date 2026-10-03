@@ -1,5 +1,6 @@
 /**
- * PROTECTED FILE. Claude must not edit this file or invent values in it.
+ * PROTECTED FILE. Thresholds change only with the maintainer's explicit
+ * sign-off. Do not add, edit or invent values here.
  *
  * This is the rubric: every threshold that turns a measured number into a
  * verdict about someone's data. It is the intellectual property of this tool.
