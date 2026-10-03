@@ -17,4 +17,14 @@ export default defineConfig({
       conditions: ['source', ...defaultServerConditions],
     },
   },
+  test: {
+    // runSample prints its sample plan with console.log on every report
+    // build, which floods the CI log (vitest shows console output from
+    // passing tests there). Drop only that block from the test output; the
+    // call itself still runs, so console spies (the canary tests) see it.
+    onConsoleLog(log, type) {
+      if (type === 'stdout' && log.startsWith('Stratified sample plan')) return false;
+      return undefined;
+    },
+  },
 });
