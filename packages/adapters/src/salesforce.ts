@@ -19,6 +19,12 @@
  * Retry-After; the org's daily request limit fails at once, since waiting
  * can't lift it. Auth and other 4xx errors are never retried.
  *
+ * Daily API limit: every response's Sforce-Limit-Info header (or, if none
+ * was seen, /limits) gives the org's used and maximum daily calls. The
+ * adapter keeps DAILY_LIMIT_RESERVE_FRACTION of the maximum for the org's
+ * other integrations: it stops, before sending, once the calls left fall
+ * to that reserve.
+ *
  * Writes: applyFieldWrite() is implemented only because CrmAdapter requires
  * it for type conformance. It never calls Salesforce — it always returns
  * 'rejected'. capabilities().writeGranularity is 'none' for the same
@@ -312,6 +318,48 @@ async function throttleOf(res: Response): Promise<Throttle> {
 export const DAILY_LIMIT_MESSAGE =
   "Salesforce refused the request: this org's daily API request limit is used up (REQUEST_LIMIT_EXCEEDED). " +
   'Nothing was written. The limit frees up over a rolling 24 hours; try again later.';
+
+/**
+ * Share of the org's daily API maximum the adapter leaves for the org's
+ * other integrations (maintainer decision D4, 2026-10-03).
+ */
+export const DAILY_LIMIT_RESERVE_FRACTION = 0.1;
+
+/** Used until the org reports its own limit: a Developer Edition-typical guess. */
+const ESTIMATED_DAILY_LIMIT = 15000;
+
+export interface DailyApiUsage {
+  readonly used: number;
+  readonly max: number;
+}
+
+/**
+ * Used and maximum daily calls from a Sforce-Limit-Info header, such as
+ * "api-usage=18/15000" (other entries, e.g. per-app-api-usage, ignored).
+ * Undefined when absent or malformed.
+ */
+export function parseLimitInfo(header: string | null): DailyApiUsage | undefined {
+  if (header === null) return undefined;
+  const m = /(?:^|[\s;,])api-usage=(\d+)\/(\d+)(?:$|[\s;,])/.exec(header);
+  if (!m) return undefined;
+  const used = Number(m[1]);
+  const max = Number(m[2]);
+  return max > 0 ? { used, max } : undefined;
+}
+
+/** Calls kept back for the org's other integrations, out of a daily maximum. */
+export function dailyLimitReserve(max: number): number {
+  return Math.ceil(max * DAILY_LIMIT_RESERVE_FRACTION);
+}
+
+function reserveStopMessage(usage: DailyApiUsage): string {
+  const remaining = Math.max(0, usage.max - usage.used);
+  return (
+    `Stopped to leave Salesforce API calls for your other tools: this org has ${remaining} of its ${usage.max} daily calls left, ` +
+    `and this tool keeps ${dailyLimitReserve(usage.max)} (${Math.round(DAILY_LIMIT_RESERVE_FRACTION * 100)}%) in reserve. ` +
+    'Nothing was written. Try again once the daily limit frees up.'
+  );
+}
 
 function gaveUpMessage(reason: string, attempts: number, waitedMs: number): string {
   const what = reason === '503' ? 'answering 503 (service unavailable)' : `rate-limiting requests (${reason})`;
@@ -716,6 +764,10 @@ export class SalesforceAdapter implements CrmAdapter {
   private readonly unreadableNoteObjects = new Set<'Note' | 'ContentDocumentLink'>();
   /** Set when preflight() decided contentNoteQueryable, so probe() needn't ask again. */
   private contentNoteCheckedByPreflight = false;
+  /** The org's daily API usage as last reported (Sforce-Limit-Info or /limits); null until then. */
+  private dailyUsage: DailyApiUsage | null = null;
+  /** True while preflight() or health() runs: their few calls aren't stopped by the reserve. */
+  private reserveCheckSuspended = false;
   /** opportunityId -> last-seen toStage, for deriving fromStage across listStageHistory pages/calls on this instance. */
   private readonly lastKnownStage = new Map<string, CanonicalStage>();
 
@@ -782,9 +834,17 @@ export class SalesforceAdapter implements CrmAdapter {
       bulkRead: false,
       writeGranularity: 'none',
       nativeConcurrencyCheck: false,
-      // Static Developer-Edition-typical estimate, not queried live via
-      // /services/data/vXX/limits/. Flagged as a known gap in STATUS.md.
-      rateLimit: { kind: 'daily_quota', value: 15000 },
+      // The org's own figures once a response has reported them
+      // (Sforce-Limit-Info, or /limits); a static estimate before that.
+      rateLimit: this.dailyUsage
+        ? {
+            kind: 'daily_quota',
+            value: this.dailyUsage.max,
+            remaining: Math.max(0, this.dailyUsage.max - this.dailyUsage.used),
+            reserve: dailyLimitReserve(this.dailyUsage.max),
+            source: 'org',
+          }
+        : { kind: 'daily_quota', value: ESTIMATED_DAILY_LIMIT, source: 'estimate' },
       stageMap: this.stageMap,
       stageMapHint: STAGE_MAP_HINT,
       accountBatchLimit: 200,
@@ -835,12 +895,33 @@ export class SalesforceAdapter implements CrmAdapter {
    * Before any read: credentials (a token), the API version (the org's
    * version list), then object access (one global describe) and field
    * access (one describe per object) for SALESFORCE_READS. Reads no
-   * records; at most 12 calls. A credentials or version problem stops the
-   * checks there. A 'notes' object that can't be read is a warning: its
+   * records; at most 13 calls (the last reads /limits, only when no
+   * response has reported the org's daily usage). A credentials or version
+   * problem stops the checks there. If the org's calls left are already at
+   * the reserve (DAILY_LIMIT_RESERVE_FRACTION), that is a failure too. A 'notes' object that can't be read is a warning: its
    * queries are skipped and notesComplete is false. Messages carry
    * Salesforce error codes, never response text.
    */
   async preflight(options: PreflightOptions = {}): Promise<PreflightResult> {
+    this.reserveCheckSuspended = true;
+    try {
+      const checked = await this.checkAccess(options);
+      let apiCallsConsumed = checked.apiCallsConsumed;
+      if (checked.failures.length === 0 && !this.dailyUsage) {
+        apiCallsConsumed += 1;
+        await this.readLimits().catch(() => undefined);
+      }
+      const failures = [...checked.failures];
+      if (this.dailyUsage && this.belowReserve(this.dailyUsage)) {
+        failures.push({ check: 'api_limit', message: reserveStopMessage(this.dailyUsage) });
+      }
+      return { failures, warnings: checked.warnings, apiCallsConsumed };
+    } finally {
+      this.reserveCheckSuspended = false;
+    }
+  }
+
+  private async checkAccess(options: PreflightOptions): Promise<PreflightResult> {
     const failures: PreflightIssue[] = [];
     const warnings: PreflightIssue[] = [];
     let apiCallsConsumed = 0;
@@ -946,12 +1027,30 @@ export class SalesforceAdapter implements CrmAdapter {
   }
 
   async health(): Promise<{ ok: boolean; detail?: string }> {
+    this.reserveCheckSuspended = true;
     try {
-      await this.request(`/services/data/${this.config.apiVersion}/limits/`);
+      await this.readLimits();
       return { ok: true };
     } catch (err) {
       return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+    } finally {
+      this.reserveCheckSuspended = false;
     }
+  }
+
+  /** One /limits call; records DailyApiRequests when the body has it. */
+  private async readLimits(): Promise<void> {
+    const body = await this.request<{ DailyApiRequests?: { Max?: unknown; Remaining?: unknown } }>(
+      `/services/data/${this.config.apiVersion}/limits/`,
+    );
+    const daily = body?.DailyApiRequests;
+    if (typeof daily?.Max === 'number' && typeof daily.Remaining === 'number' && daily.Max > 0) {
+      this.dailyUsage = { used: Math.max(0, daily.Max - daily.Remaining), max: daily.Max };
+    }
+  }
+
+  private belowReserve(usage: DailyApiUsage): boolean {
+    return usage.max - usage.used <= dailyLimitReserve(usage.max);
   }
 
   // -- auth plumbing ---------------------------------------------------
@@ -1015,16 +1114,24 @@ export class SalesforceAdapter implements CrmAdapter {
   /** One authorised fetch; after a 401, one new token and one more fetch. */
   private async sendAuthorized(pathOrUrl: string, init: RequestInit): Promise<Response> {
     const send = async (forceRefresh: boolean): Promise<Response> => {
+      // Stop before a call that would eat into the reserve (D7).
+      if (this.dailyUsage && !this.reserveCheckSuspended && this.belowReserve(this.dailyUsage)) {
+        throw new AdapterError(reserveStopMessage(this.dailyUsage), 'rate_limit', false);
+      }
       const token = await this.getToken(forceRefresh);
       const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${token.instanceUrl}${pathOrUrl}`;
+      let res: Response;
       try {
-        return await fetch(url, {
+        res = await fetch(url, {
           ...init,
           headers: { Authorization: `Bearer ${token.accessToken}`, ...(init.headers ?? {}) },
         });
       } catch (err) {
         throw new AdapterError(`Network error calling Salesforce: ${err instanceof Error ? err.message : String(err)}`, 'network', true);
       }
+      const usage = parseLimitInfo(res.headers.get('Sforce-Limit-Info'));
+      if (usage) this.dailyUsage = usage;
+      return res;
     };
     const res = await send(false);
     return res.status === 401 ? send(true) : res;

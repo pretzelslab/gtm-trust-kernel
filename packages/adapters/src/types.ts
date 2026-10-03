@@ -119,7 +119,22 @@ export interface AdapterCapabilities {
   /** Rate limit shape, used by the scheduler to plan sync. */
   readonly rateLimit: {
     readonly kind: 'daily_quota' | 'per_second' | 'none';
+    /** daily_quota: the daily maximum. per_second: calls per second. */
     readonly value: number;
+    /**
+     * Optional, daily_quota only: calls left today as the vendor last
+     * reported them. Like notesComplete, it can change during a run;
+     * absent until the adapter has heard from the vendor.
+     */
+    readonly remaining?: number;
+    /**
+     * Optional, with remaining: calls the adapter keeps back for the org's
+     * other integrations. It stops before remaining falls to this, and a
+     * run should plan to use at most remaining - reserve.
+     */
+    readonly reserve?: number;
+    /** Optional: 'org' when value and remaining come from the vendor, 'estimate' when value is a static guess. */
+    readonly source?: 'org' | 'estimate';
   };
   /** Maps vendor stage labels onto the canonical ladder. */
   readonly stageMap: Readonly<Record<string, CanonicalStage>>;
@@ -585,7 +600,7 @@ export interface PreflightOptions {
 
 /** One problem a preflight found: one plain-English sentence saying what to change. */
 export interface PreflightIssue {
-  readonly check: 'auth' | 'api_version' | 'object_access' | 'field_access';
+  readonly check: 'auth' | 'api_version' | 'object_access' | 'field_access' | 'api_limit';
   readonly message: string;
 }
 

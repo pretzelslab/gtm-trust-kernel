@@ -14,8 +14,13 @@
  *    set with apiVersions()).
  *  - GET  /services/data/<v>/sobjects/: the global describe registered
  *    with globalDescribe(); unregistered fails.
- *  - GET  /services/data/<v>/limits/: DailyApiRequests, Max 15000 and
- *    Remaining 14990 (health()).
+ *  - GET  /services/data/<v>/limits/: DailyApiRequests from the usage
+ *    below, or Max 15000 and Remaining 14990 with apiUsage(null).
+ *
+ * Like a real org, every response but the token and the version list
+ * carries Sforce-Limit-Info: "api-usage=<used>/<max>", starting at
+ * 10/15000 and counting each call. apiUsage() sets it; apiUsage(null)
+ * leaves the header off.
  *  - GET  /services/data/<v>/sobjects/ContentNote/<id>/Content: the body
  *    registered with noteContent(id, body).
  *  - GET  /services/data/<v>/sobjects/<name>/describe: the result
@@ -82,6 +87,8 @@ export interface FakeSalesforce {
    * `parentField` (e.g. 'ParentId'). See the module docblock.
    */
   subqueryRows(relationship: string, parentField: string, rows: ChildRows, options?: SubqueryOptions): void;
+  /** The org's daily API usage the next responses report; null leaves Sforce-Limit-Info off. */
+  apiUsage(used: number | null, max?: number): void;
   /** The versions /services/data/ lists, e.g. ['61.0', '62.0']. */
   apiVersions(versions: readonly string[]): void;
   /** Answer the global describe (sobjects/) with these objects, or an HTTP error. */
@@ -110,6 +117,7 @@ export function installFakeSalesforce(): FakeSalesforce {
   const subqueries = new Map<string, { parentField: string; rows: ChildRows; options: SubqueryOptions }>();
   const tokenQueue: { status: number; body?: string; headers?: Record<string, string> }[] = [];
   let versionList: readonly string[] = ['61.0', '62.0'];
+  let usage: { used: number; max: number } | null = { used: 10, max: 15000 };
   let globalResult: readonly { name: string; queryable: boolean }[] | { status: number; body?: string } | undefined;
   let locatorSeq = 0;
 
@@ -165,7 +173,18 @@ export function installFakeSalesforce(): FakeSalesforce {
     return new Response(r.body ?? '[{"errorCode":"FAKE","message":"fake error"}]', { status: r.status, headers: r.headers });
   }
 
-  const fakeFetch = async (input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+  /** Adds Sforce-Limit-Info, counting this call, except on the token and the version list. */
+  const fakeFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const res = await route(input, init);
+    const pathname = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).pathname;
+    if (usage && pathname !== '/services/oauth2/token' && pathname !== '/services/data/') {
+      usage.used += 1;
+      res.headers.set('Sforce-Limit-Info', `api-usage=${usage.used}/${usage.max}`);
+    }
+    return res;
+  };
+
+  const route = async (input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     urls.push(url.pathname + url.search);
 
@@ -175,7 +194,7 @@ export function installFakeSalesforce(): FakeSalesforce {
       return json({ access_token: 'FAKE_TOKEN', instance_url: INSTANCE_URL });
     }
     if (url.pathname === `/services/data/${API_VERSION}/limits/`) {
-      return json({ DailyApiRequests: { Max: 15000, Remaining: 14990 } });
+      return json({ DailyApiRequests: usage ? { Max: usage.max, Remaining: usage.max - usage.used - 1 } : { Max: 15000, Remaining: 14990 } });
     }
     if (url.pathname === '/services/data/') {
       return json(versionList.map((version) => ({ label: `v${version}`, url: `/services/data/v${version}`, version })));
@@ -236,6 +255,9 @@ export function installFakeSalesforce(): FakeSalesforce {
     },
     subqueryRows(relationship, parentField, rows, options = {}) {
       subqueries.set(relationship, { parentField, rows, options });
+    },
+    apiUsage(used, max = 15000) {
+      usage = used === null ? null : { used, max };
     },
     apiVersions(versions) {
       versionList = versions;
