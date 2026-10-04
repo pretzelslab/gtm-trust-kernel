@@ -17,6 +17,21 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Re-pack after the use-case section, 2026-10-04
+
+CLI 0.2.0 re-packed (the report sections and use-case section changes live
+in the CLI bundle). Nothing tagged, nothing published.
+
+- Adapters 0.3.0: file list (24 files) and shasum unchanged,
+  `59cd85dc00821587025c9cf32cda12f88ccc4e49`.
+- CLI 0.2.0: same 7 files, 58.3 kB packed / 221.1 kB unpacked, new shasum
+  `ccf95f5cac6b579815ec63767eb50ff4f195a114` (STATUS.md, "Releases").
+- `npm run ci` green, `lint:pack` passes. Clean-room install of both
+  tarballs outside the repository: adapters 0.3.0 under CLI 0.2.0,
+  `--version` 0.2.0, `scan --demo` prints "4 ready, 3 use with caution, 1
+  not ready" and writes both reports with the jump bar, three verdict
+  groups and 8 card ids.
+
 ## Use-case section, 2026-10-04
 
 Layout only, after the report sections. No metric, threshold, verdict or
