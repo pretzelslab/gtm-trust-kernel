@@ -17,6 +17,61 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Demo kit, README polish and a test flake, 2026-10-03
+
+Each commit green locally with `npm run ci`, pushed to `master`, CI green.
+
+| Commit | What |
+|---|---|
+| `06c48ed` | README: the calibration ask no longer repeats "anonymised scores"; "Check your data before you buy." closes "How a weak spine shows up". The Mermaid diagram was rendered in the default and dark themes (mermaid-cli) and left unchanged |
+| `4dafaab` | Flaky `salesforce.tokenCache.test.ts` fixed (below) |
+| `d0e2e4f` | `buildReportData` takes an optional `generatedAt` (default now), so committed samples regenerate byte for byte. No CLI flag |
+| `95f346d` | `packages/demo` (private, not in `lint:pack`): `npm run demo:kernel`, committed samples and screenshots in `docs/demo/`, 9 tests. The kernel package gets an exports map for the two modules the demo imports |
+| this entry | `docs/DEMO.md`, the screenshots in the README's "Try it in 2 minutes", STATUS, this log |
+
+**The token cache flake.** Root cause: every `SalesforceAdapter`, in every
+test file, deletes the real `packages/adapters/.cache/` file and folder
+on first token use, and the "deletes the pre-0.2.1 cache file" test
+created that same real file. Test files run in parallel workers, so a
+delete landing between the test's `mkdir` and `writeFile` failed it with
+ENOENT. Reproduced 1 in 20 full adapters-suite runs. Fix, in the test
+file only: `vi.mock` points `LEGACY_TOKEN_CACHE_PATH` at a temp folder
+the test owns; no assertion changed, and the default-path test still
+compares against the real constant. After the fix: 0 of 20 failures with
+the file alone, 0 of 20 with the full adapters suite.
+
+**Demo kit decisions (approved by the maintainer):**
+- One motion: deal velocity, "next step unclear after first calls",
+  next-step suggestions. A rep may change `nextStep`, so the approval is
+  the normal path, not a special case.
+- The not-measured path uses the mock adapter with `notesComplete: false`
+  and the Salesforce adapter's own `NOTES_ACCESS_HINT`; the report side is
+  the same code a live org goes through. Running the real Salesforce
+  adapter offline would need the fake API (`fakeSalesforce.ts`, built on
+  vitest) split from the test runner; not done.
+- The suggestion is scripted; no model is called.
+- Screenshots: `playwright-core` with the installed Chrome (`channel:
+  'chrome'`), so nothing downloads a browser; GitHub's ubuntu runners ship
+  Chrome, and the screenshot test ran there. PNGs are excluded from the
+  byte-for-byte check.
+- DEMO.md: first half for the field (no "kernel" or "invariants"), second
+  half the transcript, the mapping to the invariants and the ledger.
+- A terminal recording is deferred until after the re-pack (STATUS, Next).
+
+**Correction to the plan:** the plan said the injected suggestion would
+be quarantined. The kernel refuses it at `build()`
+(`CONTENT_INJECTION_SUSPECTED`), before a proposal exists, so it is
+shown as refused and never reaches the ledger. `quarantine()` was not
+used.
+
+**Tests:** demo 9 (new), readiness 560 -> 561 (`generatedAt`). No existing
+assertion changed.
+
+**Release state:** nothing packed, tagged or published. The demo package
+is private and not part of either npm package.
+
+---
+
 ## README story, 2026-10-03
 
 Merged to `master` through PR #5 (merge commit `f1219f7`); the PR's CI

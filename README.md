@@ -234,7 +234,18 @@ Not ready yet
 ```
 
 `out/latest.html` has the full detail: every metric, its threshold, the
-sample sizes and the seed.
+sample sizes and the seed. The plain report for the sample CRM:
+
+![The plain-English readiness report for the sample CRM, with use cases grouped under Ready to use, Usable with caution and Not ready yet.](docs/demo/scan-plain.png)
+
+When a scan can't see data a use case needs, it says "Can't tell yet" and
+names the setting to change, instead of guessing. Here, the same data read
+as a Salesforce org whose scan user can't open Enhanced Notes:
+
+![The same report when Enhanced Notes can't be read: three use cases under Can't tell yet, each with the setting to change.](docs/demo/scan-notes-not-measured-plain.png)
+
+To follow one deal from seller friction to the scan verdict to a change a
+rep approves, see the [demo walkthrough](docs/DEMO.md).
 
 ### Scan your own Salesforce org
 

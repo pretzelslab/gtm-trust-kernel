@@ -13,6 +13,7 @@ gap or decision refer to that log.
 | CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.3.0 (`package.json` still says 0.2.1 until the re-pack) |
 | Readiness report | (private, bundled into the CLI) | | |
 | Proposal kernel | (private) | | |
+| Demo kit | (private, never published) | | |
 
 ## What works
 
@@ -57,7 +58,12 @@ gap or decision refer to that log.
   contract checks the fake Salesforce API against what the adapter reads.
 - **Proposal kernel.** Evidence-cited, human-approved field writes with
   concurrency checks, rollback and a hash-chained audit ledger.
-- **CI.** Typecheck and about 870 tests on every push (`npm run ci` removes
+- **Demo kit.** `npm run demo:kernel` follows one GTM motion on the
+  bundled sample CRM, from the scan verdict to an approval-gated change,
+  including the Enhanced Notes not-measured path. Committed samples and
+  screenshots are in `docs/demo/`; the walkthrough is
+  [docs/DEMO.md](../../../docs/DEMO.md).
+- **CI.** Typecheck and about 880 tests on every push (`npm run ci` removes
   any `dist/` first), plus a packed-tarball lint of both npm packages
   (publint, arethetypeswrong).
 
@@ -121,14 +127,16 @@ Before going public:
 
 1. **README story:** done, merged to `master` (PR #5, `f1219f7`); see the
    dev log, 2026-10-03.
-2. **Demo kit:** a `demo:kernel` script, committed sample reports and a
-   walkthrough.
+2. **Demo kit:** done (`packages/demo`, `docs/demo/`, `docs/DEMO.md`);
+   see the dev log, 2026-10-03.
 3. **Re-pack**, right before going public: adapters 0.3.0 and CLI 0.2.0
    once (version bump, new shasums, file lists and changelogs), with a
    clean-room install check.
 4. **Go public**, then switch on private vulnerability reporting, secret
    scanning with push protection, Dependabot alerts and a ruleset for
    `master`. Then publish adapters 0.3.0, then CLI 0.2.0.
+5. **Terminal recording** of the demo (GIF or similar), after the
+   re-pack, so it shows the released CLI and package versions.
 
 The reliability batch (L3, L5, L6, L10) is done; see the dev log,
 2026-10-03.
