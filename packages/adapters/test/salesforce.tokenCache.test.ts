@@ -4,6 +4,11 @@
  * deleted on first use. Path tests are pure (platform, env and home passed
  * in), so they never touch the real home folder. The permission tests need
  * POSIX mode bits and are skipped on Windows only; CI runs them on Linux.
+ *
+ * LEGACY_TOKEN_CACHE_PATH is redirected to a temp folder owned by this file.
+ * The real one (packages/adapters/.cache/) is shared: every SalesforceAdapter
+ * in every test file deletes it on first token use, and test files run in
+ * parallel workers, so creating it here raced with those deletes (ENOENT).
  */
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -22,6 +27,15 @@ import {
   writeTokenCache,
 } from '../src/tokenCache.js';
 import { installFakeSalesforce, INSTANCE_URL, sfId } from './support/fakeSalesforce.js';
+
+vi.mock('../src/tokenCache.js', async (importOriginal) => {
+  const { mkdtempSync: mkdtemp } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const actual = await importOriginal<typeof import('../src/tokenCache.js')>();
+  const legacyRoot = mkdtemp(join(tmpdir(), 'gtk-legacy-cache-'));
+  return { ...actual, LEGACY_TOKEN_CACHE_PATH: join(legacyRoot, '.cache', 'salesforce-token.json') };
+});
 
 const TOKEN = { accessToken: 'tok', instanceUrl: 'https://x.my.salesforce.com', obtainedAt: '2026-10-03T00:00:00.000Z' };
 const tmpDirs: string[] = [];
@@ -94,8 +108,9 @@ describe('loadSalesforceConfigFromEnv token cache path', () => {
     expect(loadSalesforceConfigFromEnv({ ...base, SF_TOKEN_CACHE_PATH: '/somewhere/token.json' }).tokenCachePath).toBe('/somewhere/token.json');
   });
 
-  it('no longer defaults to a path inside the package folder', () => {
-    expect(loadSalesforceConfigFromEnv(base).tokenCachePath).not.toBe(LEGACY_TOKEN_CACHE_PATH);
+  it('no longer defaults to a path inside the package folder', async () => {
+    const real = await vi.importActual<typeof import('../src/tokenCache.js')>('../src/tokenCache.js');
+    expect(loadSalesforceConfigFromEnv(base).tokenCachePath).not.toBe(real.LEGACY_TOKEN_CACHE_PATH);
   });
 });
 
@@ -176,11 +191,10 @@ describe('removeLegacyTokenCache', () => {
 
 describe('SalesforceAdapter and the token cache', () => {
   it('deletes the pre-0.2.1 cache file on first token use, then caches at the configured path', async () => {
-    const legacyExisted = existsSync(LEGACY_TOKEN_CACHE_PATH);
-    if (!legacyExisted) {
-      mkdirSync(path.dirname(LEGACY_TOKEN_CACHE_PATH), { recursive: true });
-      writeFileSync(LEGACY_TOKEN_CACHE_PATH, '{"accessToken":"stale"}');
-    }
+    // The redirected temp path (see the vi.mock above), never the package folder.
+    tmpDirs.push(path.dirname(path.dirname(LEGACY_TOKEN_CACHE_PATH)));
+    mkdirSync(path.dirname(LEGACY_TOKEN_CACHE_PATH), { recursive: true });
+    writeFileSync(LEGACY_TOKEN_CACHE_PATH, '{"accessToken":"stale"}');
     const sf = installFakeSalesforce();
     sf.on(/FROM Opportunity /, []);
     const file = path.join(tmp(), 'token.json');
