@@ -75,14 +75,32 @@ Cross-sell can't see what an account already owns. A new-geo push can't
 size a region it can't filter. The scan checks the spine before AI goes on
 top. Check your data before you buy.
 
+**New business**
+
 | GTM motion | What it needs from CRM | Checked today | Next |
 |---|---|---|---|
-| **Cross-sell / upsell** | One record per account, what each account already bought, won-deal history | Duplicate accounts; closed deals in the last 12 months; evidence kept on closed deals | Line-item coverage; product × account coverage |
-| **Land and expand** | Accounts linked to their parents, contacts linked to deals, won-deal history | Duplicate accounts; contacts linked to deals; closed deals in the last 12 months | Parent-account linkage |
-| **White space** | Which products each account has, and which it doesn't | Not yet (duplicate accounts only, as a precondition) | Product × account coverage; line-item coverage |
+| **New logo** | One record per account, with industry and size filled in; won and lost history on similar deals | Duplicate accounts; closed deals in the last 12 months; evidence kept on closed deals | Firmographic completeness; industry consistency |
 | **New geo** | Country or region on accounts and deals, deal currency | Not yet | Geo field completeness |
 | **Vertical plays** | A consistent industry on every account | Not yet (industry is read but not scored) | Industry consistency |
+| **ABM** | A defined list of target accounts, buying-group contacts linked to deals, activity on those deals | Duplicate accounts; contacts linked to deals; activities captured | Target account list coverage |
+| **Partner / channel** | The partner recorded on each deal, partner accounts linked | Not yet | Partner attribution on deals |
+
+**Existing customers**
+
+| GTM motion | What it needs from CRM | Checked today | Next |
+|---|---|---|---|
+| **Renewal / retention** | Contract and renewal dates, what each account owns, recent activity on customer accounts | Not yet | Renewal and contract dates; line-item coverage |
+| **Upsell** | What each account already bought, and how much; won-deal history | Duplicate accounts; closed deals in the last 12 months | Line-item coverage; product × account coverage |
+| **Cross-sell** | Which products each account has; won-deal history across products | Duplicate accounts; closed deals in the last 12 months; evidence kept on closed deals | Product × account coverage; line-item coverage |
+| **Land and expand** | Accounts linked to their parents, contacts linked to deals, won-deal history | Duplicate accounts; contacts linked to deals; closed deals in the last 12 months | Parent-account linkage |
+| **White space** | Which products each account has, and which it doesn't | Not yet (duplicate accounts only, as a precondition) | Product × account coverage; line-item coverage |
 | **Cross-SKU / packaging** | Line items on each deal, amounts built from them | Round-number amounts (a hint that amounts aren't built from line items); amounts filled in | Line-item coverage |
+
+**Win-back**
+
+| GTM motion | What it needs from CRM | Checked today | Next |
+|---|---|---|---|
+| **Churned or lost accounts** | Lost deals with the reason recorded, churn dates and reasons, contacts still current | Closed deals in the last 12 months (won and lost); evidence kept on closed deals | Churn and loss reason capture |
 
 The "Checked today" metrics already exist for the AI use cases below. They
 aren't scored per motion: the scan gives no verdict for a motion. The
@@ -110,40 +128,6 @@ cross-system matching rates.
 An AI tool fed this data still gives answers. They just aren't right, and
 the reps who notice stop using it.
 
-
-## Governance and canonical standards
-
-- **A shared definition of clean data.** The
-  [metric definitions](packages/readiness/docs/metric-definitions.md) and
-  their thresholds give RevOps, sales and enablement one written standard
-  for what "clean" means, instead of a different one per team.
-- **Re-run on a cadence and track the trend.** Run the scan monthly or
-  quarterly and compare reports. Each report states its sample sizes and
-  seed, so runs on the same data are comparable.
-- **An enforceable gate.** `--fail-on` turns the verdicts into a pass or
-  fail: before an AI rollout, or in CI, so a drop in data quality stops
-  the pipeline instead of reaching sellers.
-- **Changes under control.** AI can suggest changes; nothing is written
-  without approval, and every change is logged.
-
-## Who it's for, and what it isn't
-
-**For:**
-
-- RevOps, sales ops and GTM ops leads asked "is our CRM ready for AI?"
-- Revenue enablement managers planning AI help for reps.
-- Engineers who want a readiness check in CI (`--fail-on`).
-
-**It is not:**
-
-- **An AI tool evaluator.** It doesn't compare or score AI vendors or
-  models.
-- **A data cleaner.** It reads and reports. It doesn't fix records. It
-  tells you which checks are holding each use case back.
-- **A way for your data to leave your machine.** Record text stays on your
-  machine. The only thing that can be sent anywhere is the optional AI
-  summary, which sends metric names and values, never record text, and
-  only after you say yes. See [Privacy](#privacy-and-where-data-goes).
 
 ## Check the data before you put AI into these moments
 
@@ -186,6 +170,40 @@ calibrated on real orgs yet ([help us do that](#help-calibrate-the-thresholds)).
 `latest.html` shows every metric, its threshold and its sample size.
 
 **Next, not scored yet:** AI-suggested quote options.
+
+## Governance and canonical standards
+
+- **A shared definition of clean data.** The
+  [metric definitions](packages/readiness/docs/metric-definitions.md) and
+  their thresholds give RevOps, sales and enablement one written standard
+  for what "clean" means, instead of a different one per team.
+- **Re-run on a cadence and track the trend.** Run the scan before each AI
+  rollout, then quarterly, and compare reports. Each report states its sample sizes and
+  seed, so runs on the same data are comparable.
+- **An enforceable gate.** `--fail-on` turns the verdicts into a pass or
+  fail: before an AI rollout, or in CI, so a drop in data quality stops
+  the pipeline instead of reaching sellers.
+- **Changes under control.** AI can suggest changes; nothing is written
+  without approval, and every change is logged.
+
+## Who it's for, and what it isn't
+
+**For:**
+
+- RevOps, sales ops and GTM ops leads asked "is our CRM ready for AI?"
+- Revenue enablement managers planning AI help for reps.
+- Engineers who want a readiness check in CI (`--fail-on`).
+
+**It is not:**
+
+- **An AI tool evaluator.** It doesn't compare or score AI vendors or
+  models.
+- **A data cleaner.** It reads and reports. It doesn't fix records. It
+  tells you which checks are holding each use case back.
+- **A way for your data to leave your machine.** Record text stays on your
+  machine. The only thing that can be sent anywhere is the optional AI
+  summary, which sends metric names and values, never record text, and
+  only after you say yes. See [Privacy](#privacy-and-where-data-goes).
 
 ## Try it in 2 minutes
 
