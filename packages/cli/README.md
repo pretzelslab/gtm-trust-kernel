@@ -4,14 +4,17 @@
 [![ci](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pretzelslab/gtm-trust-kernel/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/pretzelslab/gtm-trust-kernel/blob/master/LICENSE)
 
-**Find out whether your CRM data is good enough for AI, before you roll AI
-out.**
+**CRM Data Readiness Scan. Faster, cleaner deals start with CRM data your
+sellers can trust.**
+
+Revenue outcome ← seller decision ← AI assist ← CRM data ← this scan. It
+checks your data, not the AI tools, and doesn't measure revenue outcomes.
 
 A command-line readiness report for sales CRM data. It checks whether the
 data is complete, consistent and recent enough to support specific AI use
-cases (pipeline risk alerts, close-date checks, account briefs, forecast
-support, automatic CRM updates) and says, for each one, ready, use with
-caution, or not ready, with the metrics behind every verdict.
+cases (account briefs, forecast support, pipeline risk alerts, close-date
+checks, automatic CRM updates) and gives each one a verdict, with the
+metrics behind it.
 
 ## Who it's for
 
@@ -19,6 +22,15 @@ caution, or not ready, with the metrics behind every verdict.
   read on CRM data quality before an AI rollout.
 - **Developers** wiring a readiness gate into CI (`--fail-on`) or
   evaluating the [GTM trust kernel](https://github.com/pretzelslab/gtm-trust-kernel).
+
+## What it isn't
+
+- **An AI tool evaluator.** It doesn't compare or score AI vendors or
+  models.
+- **A data cleaner.** It reads and reports. It doesn't fix records.
+- **A way for your data to leave your machine.** The only thing that can
+  be sent anywhere is the optional AI summary (`--narrative`), which sends
+  metric names and values, never record text, and only after you say yes.
 
 ## What runs from npm today, and what doesn't
 
@@ -81,6 +93,25 @@ gtm-trust-kernel --help
 Each run writes to `./out`: `latest.html` and `latest-plain.html`, plus
 timestamped copies so runs don't overwrite each other.
 
+### Verdict words
+
+The plain-English report (`latest-plain.html`) and the scan summary use
+plain words. The detailed report (`latest.html`), `--json` and
+`--fail-on` use the raw verdicts.
+
+| Plain report | Raw verdict | Meaning |
+|---|---|---|
+| Ready to use | `viable` | Every check the use case depends on passes |
+| Usable with caution | `degraded` | It can run, on thinner evidence than ideal |
+| Not ready yet | `blocked` | Data it needs is missing or poor |
+| Can't tell yet | `not_measured` | The scan can't see the data it would need |
+
+One exception: fully automatic CRM updates is shown as **Not ready yet**
+when its raw verdict is `degraded` or `not_measured`, because AI writing
+to the CRM needs a person to check every change. `--fail-on blocked` (and a
+bare `--fail-on`) follows the same rule: it fails whenever the plain report
+shows a use case as **Not ready yet**.
+
 ### `--fail-on` (for CI)
 
 Opt-in. The value is a comma-separated list of `blocked`, `degraded` and
@@ -88,10 +119,12 @@ Opt-in. The value is a comma-separated list of `blocked`, `degraded` and
 only when you list it. The report is always written first; then the exit
 code is 2 if any capability has a listed verdict, and the failing ones are
 named on stderr. `--fail-on` works on the raw verdicts shown in
-`latest.html`.
+`latest.html`, except that `blocked` also matches fully automatic CRM
+updates when the plain report shows it as Not ready yet. On the demo data a
+bare `--fail-on` exits 2 for that reason.
 
 ```bash
-npx gtm-trust-kernel scan --demo --fail-on                    # fail on blocked
+npx gtm-trust-kernel scan --demo --fail-on                    # fail on anything "Not ready yet"
 npx gtm-trust-kernel scan --demo --fail-on blocked,degraded
 ```
 
@@ -111,6 +144,13 @@ npx gtm-trust-kernel scan --demo --fail-on blocked,degraded
   real orgs.
 - ESM-only Node.js package (it's a CLI, so this only matters if you import
   its internals, which aren't a public API).
+
+## Help calibrate the thresholds
+
+If you scan a real org, you can help calibrate the thresholds by sharing
+anonymised scores, never data:
+[share your scores](https://github.com/pretzelslab/gtm-trust-kernel/issues/new?template=calibration-scores.yml).
+The form only offers fixed choices.
 
 ## More
 

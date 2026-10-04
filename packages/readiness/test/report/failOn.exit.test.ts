@@ -1,6 +1,7 @@
 /**
  * `npm run report -- --fail-on` exit codes, from a real process. The legacy
- * fixture has every capability blocked; healthy has none blocked. Each
+ * fixture has every capability blocked; healthy has none blocked, but its
+ * degraded autonomous_writeback shows as "Not ready yet". Each
  * case runs in its own temp directory.
  */
 
@@ -39,8 +40,8 @@ describe.concurrent('report --fail-on exit codes', { timeout: 60_000 }, () => {
     expect(r.stderr).toMatch(/--fail-on blocked: \d+ capabilit(y|ies) failed/);
   });
 
-  it('exits 0 for --fail-on blocked when nothing is blocked', () => {
-    expect(report('--fixture', 'healthy', '--fail-on', 'blocked').status).toBe(0);
+  it('exits 2 for --fail-on blocked when nothing is blocked but the plain report shows a use case as not ready', () => {
+    expect(report('--fixture', 'healthy', '--fail-on', 'blocked').status).toBe(2);
   });
 
   it('exits 1 on an invalid value, without writing a report', () => {

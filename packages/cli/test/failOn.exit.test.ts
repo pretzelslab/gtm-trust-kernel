@@ -2,7 +2,9 @@
  * `scan --demo --fail-on` exit codes, from a real process (process.exitCode
  * can't be observed in-process without leaking into the test runner). The
  * demo org (healthy fixture) has viable and degraded capabilities, none
- * blocked or not_measured. Each case runs in its own temp directory.
+ * blocked or not_measured; its degraded autonomous_writeback shows as "Not
+ * ready yet" in the plain report, so a bare --fail-on fails on it. Each case
+ * runs in its own temp directory.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -33,8 +35,11 @@ describe.concurrent('scan --demo --fail-on exit codes', { timeout: 60_000 }, () 
     expect(r.wroteReport).toBe(true);
   });
 
-  it('exits 0 for a bare --fail-on (blocked) on an org with nothing blocked', () => {
-    expect(scan('--fail-on').status).toBe(0);
+  it('exits 2 for a bare --fail-on (blocked) when the plain report shows a use case as not ready', () => {
+    const r = scan('--fail-on');
+    expect(r.status).toBe(2);
+    expect(r.wroteReport).toBe(true);
+    expect(r.stderr).toMatch(/--fail-on blocked: 1 capability failed: .*\(degraded, shown as not ready\)/);
   });
 
   it('exits 2 for --fail-on degraded, after writing the report', () => {

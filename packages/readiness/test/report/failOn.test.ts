@@ -83,6 +83,17 @@ describe('evaluateFailOn', () => {
     expect(result.message).toBe('--fail-on blocked,degraded,not_measured: 3 capabilities failed: B (degraded), C (not_measured), D (blocked)');
   });
 
+  it('treats autonomous_writeback degraded or not measured as blocked, like the plain report', () => {
+    const wb = (verdict: CapabilityVerdict): ReportCapabilityRow => ({ ...row('W', verdict), id: 'autonomous_writeback' });
+    for (const verdict of ['degraded', 'not_measured'] as const) {
+      const result = evaluateFailOn([row('A', 'viable'), wb(verdict)], parseFailOn('blocked'));
+      expect(result.exitCode).toBe(2);
+      expect(result.message).toBe(`--fail-on blocked: 1 capability failed: W (${verdict}, shown as not ready)`);
+    }
+    expect(evaluateFailOn([wb('viable')], parseFailOn('blocked')).exitCode).toBe(0);
+    expect(evaluateFailOn([row('B', 'degraded')], parseFailOn('blocked')).exitCode).toBe(0);
+  });
+
   it('exits 0 when no capability has a listed verdict', () => {
     expect(evaluateFailOn([row('A', 'viable')], parseFailOn('blocked,degraded,not_measured'))).toEqual({ exitCode: 0, failing: [] });
   });

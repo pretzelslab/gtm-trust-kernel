@@ -52,8 +52,10 @@ against a bundled mock org, no CRM credentials needed).
 --verbose             Also print the sampling plan and every file written.
 --fail-on <verdicts>  Comma list of blocked, degraded, not_measured. After
                       the report is written, exit 2 if any capability has
-                      one of them. A bare --fail-on means blocked. Off by
-                      default: without it, a finished scan exits 0.
+                      one of them. blocked also matches anything the plain
+                      report shows as "Not ready yet". A bare --fail-on
+                      means blocked. Off by default: without it, a
+                      finished scan exits 0.
 Exit codes: 0 success, 1 error (including an invalid --fail-on value),
 2 a capability matched --fail-on.`;
 

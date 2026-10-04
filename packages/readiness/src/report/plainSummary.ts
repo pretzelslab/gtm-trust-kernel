@@ -29,7 +29,7 @@ export const PLAIN_CAPABILITY: Readonly<Record<CapabilityId, string>> = {
   pipeline_risk_signals: 'pipeline risk alerts',
   close_date_realism: 'close-date reality checks',
   next_action_recommendation: 'next-step suggestions on deals',
-  enablement_answer_engine: 'answers drawn from past deals',
+  enablement_answer_engine: 'pitch and objection-handling answers',
   forecast_assistance: 'forecast support',
   bulk_hygiene_automation: 'bulk data clean-up suggestions',
   autonomous_writeback: 'fully automatic CRM updates with no human check',
@@ -135,6 +135,15 @@ function effectiveBucket(c: ReportCapabilityRow): Bucket {
   if (c.verdict === 'degraded') return 'caution';
   if (c.verdict === 'not_measured') return 'notMeasured';
   return 'notReady';
+}
+
+/**
+ * True when the plain report lists this capability under "Not ready yet":
+ * blocked, or autonomous_writeback degraded or not measured (the fail-safe
+ * above). `--fail-on blocked` (and a bare `--fail-on`) uses the same rule.
+ */
+export function showsAsNotReady(c: ReportCapabilityRow): boolean {
+  return effectiveBucket(c) === 'notReady';
 }
 
 function joinPlain(phrases: readonly string[]): string {

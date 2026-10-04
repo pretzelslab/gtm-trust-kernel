@@ -17,6 +17,47 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## README story, 2026-10-03
+
+On branch `readme-story`, pushed, not merged. Each commit green with
+`npm run ci`.
+
+| Commit | What |
+|---|---|
+| `8527b00` | Plain report: the enablement use case is "pitch and objection-handling answers" (was "answers drawn from past deals"); CLI CHANGELOG |
+| `76a7ff4` | ARCHITECTURE.md: the seven invariants, two examples and the kernel's known gaps (from the README); contract-suite paragraph corrected |
+| `bff580e` | README rewritten for RevOps and enablement readers: H1 "CRM Data Readiness Scan" |
+| `bbf8010` | `.github/ISSUE_TEMPLATE/calibration-scores.yml`: dropdowns and checkboxes only |
+| `0b41920` | CLI README: same opening, verdict-words table, calibration link |
+| this entry | STATUS (`untrusted_text_ratio` is built), this log |
+
+**Decisions (approved by the maintainer):**
+- Lead use case: account briefs; forecast support second. "AI-suggested
+  quote options" is listed as next, not scored; `rubric.ts` untouched.
+- User-facing verdict words are the plain report's (Ready to use, Usable
+  with caution, Not ready yet, Can't tell yet). The mapping to the raw
+  verdicts is in the CLI README, next to `--fail-on`.
+- "Also reported" column: reported-only metrics shown next to the use
+  case they inform most; PII density is a footnote that applies to all.
+- Calibration ask: "share anonymised scores, never data", through an
+  issue form with 10-point value ranges. The ranges are for collecting
+  data only, not thresholds.
+
+**Live check** (approved once, read-only, default hostname redaction):
+wall time 10.7 s including tool start-up; 35 of 35 eligible deals
+scanned, detailed checks on 35; preflight passed with 1 warning
+(`ContentNote`, on purpose). Quota line: "260 calls planned (up to 255 +
+at least 5); your org has 14897 of its 15000 daily calls left and this
+tool keeps 1500 in reserve, so 13397 are free for this run". The report
+doesn't print the calls actually used; the README quotes the 11
+preflight and 12 read calls measured on the same org in the reliability
+batch.
+
+**Release state:** nothing packed, tagged or published. The label change
+reaches users with the CLI 0.2.0 re-pack.
+
+---
+
 ## Reliability batch, 2026-10-03
 
 From the go-public gate (gap audit L3, L5, L6, L10). Each commit pushed

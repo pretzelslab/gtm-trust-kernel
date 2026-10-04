@@ -78,8 +78,12 @@ gap or decision refer to that log.
     by doc-based fake tests: on the live org a 201-row child result came
     back on one page;
   - `CurrencyIsoCode` isn't read, so deal currency is unset.
-- **Not built yet:** the `untrusted_text_ratio` metric (Phase 4); live
-  scanning from the published CLI.
+- **`untrusted_text_ratio` is built** (`textSubstrate.ts`), computed on
+  every run, and gates fully automatic CRM updates. Open question: on
+  Salesforce every Task and Event counts as external text, because stock
+  Salesforce has no reliable inbound/outbound signal; whether logged calls
+  and meetings can count as user-authored is undecided (Phase 4).
+- **Not built yet:** live scanning from the published CLI.
 - **Trust kernel:** the injection guard is a phrase list plus a canary
   token, with no red-team corpus; the audit ledger is in memory and not
   anchored externally; writes are per field, not atomic per record; an
@@ -114,7 +118,8 @@ pre-rewrite commits and don't resolve in this repository.
 
 Before going public:
 
-1. **README story:** finish the plain-English README.
+1. **README story:** drafted on branch `readme-story` (not merged), in
+   review; see the dev log, 2026-10-03.
 2. **Demo kit:** a `demo:kernel` script, committed sample reports and a
    walkthrough.
 3. **Re-pack**, right before going public: adapters 0.3.0 and CLI 0.2.0
@@ -129,8 +134,24 @@ The reliability batch (L3, L5, L6, L10) is done; see the dev log,
 
 After that:
 
-1. **Phase 4:** calibrate thresholds against real orgs, and build
-   `untrusted_text_ratio`.
+1. **Phase 4:** calibrate thresholds against real orgs, and settle how
+   `untrusted_text_ratio` treats Salesforce activities.
 2. Later: live scanning in the CLI, an `--out` flag, an approver role
    check, per-record atomic writes, an injection test corpus, an
    evaluation harness, a HubSpot adapter.
+
+### Phase 5 backlog (candidate checks, not scoped)
+
+From the README's "One data spine, every GTM motion" table. Titles only;
+none is designed, and none touches `rubric.ts` until it is.
+
+- Line-item coverage
+- Parent-account linkage
+- Product × account coverage
+- Geo field completeness
+- Industry consistency
+- Firmographic completeness
+- Target account list coverage
+- Partner attribution on deals
+- Renewal and contract dates
+- Churn and loss reason capture
