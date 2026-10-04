@@ -159,6 +159,15 @@ export const STYLE = `
 
   .dv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
   .dv-card { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .dv-group { margin: 0 0 18px; }
+  .dv-group:last-child { margin-bottom: 0; }
+  .dv-group-head { font-size: 14px; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .dv-card:target { outline: 2px solid var(--accent); outline-offset: 2px; scroll-margin-top: 64px; }
+  .dv-fold { margin-top: 8px; }
+  .dv-fold > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); padding: 4px 0; }
+  .dv-fold > summary:hover { color: var(--fg); }
+  .dv-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .dv-fold[open] > summary { margin-bottom: 6px; }
   .dv-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .dv-card-title { font-weight: 700; font-size: 15px; }
   .dv-why { margin: 6px 0 10px; font-size: 13px; color: var(--muted); }

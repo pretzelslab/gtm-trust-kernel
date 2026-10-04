@@ -13,6 +13,11 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   sits under a "Details" heading, pages are at most 1100 px wide, and the
   `latest.html` tables scroll sideways on narrow screens. The `--all`
   comparison page is unchanged.
+- The use-case cards are grouped under "Ready to use (N)", "Usable with
+  caution (N)", "Not ready yet (N)" and "Can't tell yet (N)". A ready card
+  folds to one "All N checks pass" line; the other cards show only their
+  weak, failing and can't-tell checks and fold the passing ones. Each card
+  has a link-able id (`uc-<use case>`).
 
 ### Added
 

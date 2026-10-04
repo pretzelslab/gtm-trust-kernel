@@ -337,16 +337,55 @@ function renderCheck(check: CardCheck): string {
         </div>`;
 }
 
+function renderChecks(checks: readonly CardCheck[]): string {
+  return `<div class="dv-checks">${checks.map(renderCheck).join('')}</div>`;
+}
+
+/**
+ * A ready card folds every check under one "All N checks pass" line; any
+ * other card shows its weak, failing and can't-tell checks and folds the
+ * passing ones under "N checks pass". Native <details>, no script. Every
+ * check stays in the markup either way.
+ */
+function renderCardBody(card: UseCaseCard): string {
+  const passing = card.checks.filter((c) => c.status === 'pass');
+  if (card.bucket === 'ready') {
+    if (card.checks.length === 0) return '';
+    return `<details class="dv-fold"><summary>${card.checks.length === 1 ? 'The 1 check passes' : `All ${card.checks.length} checks pass`}</summary>${renderChecks(card.checks)}</details>`;
+  }
+  const open = card.checks.filter((c) => c.status !== 'pass');
+  const fold =
+    passing.length === 0
+      ? ''
+      : `<details class="dv-fold"><summary>${passing.length === 1 ? '1 check passes' : `${passing.length} checks pass`}</summary>${renderChecks(passing)}</details>`;
+  return `${open.length === 0 ? '' : renderChecks(open)}${fold}`;
+}
+
+/** The anchor id of a use-case card, stable for links into the report. */
+export function cardId(id: string): string {
+  return `uc-${id}`;
+}
+
 function renderCard(card: UseCaseCard): string {
-  return `<div class="dv-card dv-s-${BUCKET_STATUS[card.bucket]}-edge" data-capability="${escapeHtml(card.id)}">
+  return `<div class="dv-card dv-s-${BUCKET_STATUS[card.bucket]}-edge" id="${escapeHtml(cardId(card.id))}" data-capability="${escapeHtml(card.id)}">
       <div class="dv-card-head"><div class="dv-card-title">${escapeHtml(card.label)}</div>${bucketTag(card.bucket)}</div>
       <p class="dv-why">${escapeHtml(card.why)}</p>
-      <div class="dv-checks">${card.checks.map(renderCheck).join('')}</div>
+      ${renderCardBody(card)}
     </div>`;
 }
 
+/** Cards grouped under "Ready to use (N)" and so on, in the summary strip's order; empty groups are left out. */
 function renderCards(view: DecisionViewModel): string {
-  return part('use-cases', `<div class="dv-cards">${view.cards.map(renderCard).join('')}</div>`);
+  const groups = SUMMARY_ORDER.map((bucket) => ({ bucket, cards: view.cards.filter((c) => c.bucket === bucket) }))
+    .filter((g) => g.cards.length > 0)
+    .map(
+      (g) => `<div class="dv-group" data-bucket="${g.bucket}">
+      <h4 class="dv-group-head">${escapeHtml(BUCKET_WORD[g.bucket])} (${g.cards.length})</h4>
+      <div class="dv-cards">${g.cards.map(renderCard).join('')}</div>
+    </div>`,
+    )
+    .join('');
+  return part('use-cases', groups);
 }
 
 // ---------------------------------------------------------------------------

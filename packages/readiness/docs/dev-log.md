@@ -17,6 +17,36 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Use-case section, 2026-10-04
+
+Layout only, after the report sections. No metric, threshold, verdict or
+score changed. Visual review approved.
+
+- **Groups.** Part 4 groups the cards under h4 headings in the summary
+  strip's order, each with its count ("Ready to use (4)"); empty groups
+  are left out; the README lead order holds inside a group. The plain
+  report's h2 bucket headings are unchanged.
+- **Folds.** Native `<details>`, no script, closed by default. A ready
+  card shows its title, tag and reason, then one "All N checks pass" line
+  (a single check reads "The 1 check passes"). Any other card shows its
+  weak, failing and can't-tell checks and folds the passing ones under
+  "N checks pass" ("1 check passes"); with none passing there is no fold.
+  Every check stays in the markup, so the existing check-block tests
+  needed no change.
+- **Ids.** Each card has `id="uc-<capability id>"` (exactly once per
+  report) and a `:target` outline; the jump bar is unchanged.
+- **Collision check.** The `</details>` placement test uses the first
+  `</details>` in latest.html, the plain-summary toggle before the decision
+  view, so the new folds don't affect it. No existing assertion was edited.
+- **Glance crop.** Nothing above part 4 moved, so "Fix this first" still
+  ends at 1688 px and the crop stays 1000 x 1696. Part 4 is now about
+  1430 px tall instead of 2150.
+- **Tests.** New `useCaseGroups.test.ts` (9 tests): group order and counts
+  match the summary strip, ready cards collapsed with every check inside
+  the fold, other cards list only non-passing checks openly, each card id
+  exactly once.
+- **Release.** CLI 0.2.0 re-packed after this change (next entry up).
+
 ## Report sections, 2026-10-04
 
 Layout only, from the approved plan. No metric, threshold, verdict or
