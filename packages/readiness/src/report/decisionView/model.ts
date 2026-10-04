@@ -155,6 +155,8 @@ export interface Heatmap {
 export interface DecisionViewModel {
   readonly secondSourceConnected: boolean;
   readonly objects: readonly ObjectHealthRow[];
+  /** Objects read only by cross-system checks (Contact) when no second system is connected: shown greyed, never counted. */
+  readonly secondSystemOnly: readonly UnscannedObjectRow[];
   readonly unscanned: readonly UnscannedObjectRow[];
   readonly summary: SummaryStrip;
   /** Empty means every gating check passes: the "nothing to fix" state. */
@@ -184,12 +186,19 @@ function numericThreshold(v: unknown): number | null {
   return typeof v === 'number' ? v : null;
 }
 
-function buildObjects(rows: readonly MetricRow[], secondSource: boolean): ObjectHealthRow[] {
+function buildObjects(
+  rows: readonly MetricRow[],
+  secondSource: boolean,
+): { objects: ObjectHealthRow[]; secondSystemOnly: UnscannedObjectRow[] } {
   const result: ObjectHealthRow[] = [];
+  const secondSystemOnly: UnscannedObjectRow[] = [];
   for (const object of OBJECT_ORDER) {
     const own = rows.filter((r) => METRIC_OBJECT[r.metric] === object);
     const counted = own.filter((r) => secondSource || !SECOND_SOURCE_METRICS.has(r.metric));
-    if (counted.length === 0) continue;
+    if (counted.length === 0) {
+      if (own.length > 0) secondSystemOnly.push({ label: OBJECT_LABEL[object] });
+      continue;
+    }
     const metrics: ObjectMetric[] = counted
       .map((r) => ({
         metric: r.metric,
@@ -211,13 +220,14 @@ function buildObjects(rows: readonly MetricRow[], secondSource: boolean): Object
     });
   }
   // Worst first: failing, then weak, then can't tell, all descending; ties keep the fixed object order.
-  return result.sort(
+  result.sort(
     (a, b) =>
       b.failing - a.failing ||
       b.weak - a.weak ||
       b.cantTell - a.cantTell ||
       OBJECT_ORDER.indexOf(a.object) - OBJECT_ORDER.indexOf(b.object),
   );
+  return { objects: result, secondSystemOnly };
 }
 
 const FIX_STATUS_RANK: Readonly<Record<Exclude<PlainStatus, 'pass'>, number>> = { failing: 0, cant_tell: 1, weak: 2 };
@@ -325,9 +335,11 @@ export function buildDecisionView(data: ReportData): DecisionViewModel {
     })),
   };
 
+  const { objects, secondSystemOnly } = buildObjects(rows, secondSource);
   return {
     secondSourceConnected: secondSource,
-    objects: buildObjects(rows, secondSource),
+    objects,
+    secondSystemOnly,
     unscanned: UNSCANNED_OBJECTS.map((label) => ({ label })),
     summary: {
       ready: narrative.ready.length,

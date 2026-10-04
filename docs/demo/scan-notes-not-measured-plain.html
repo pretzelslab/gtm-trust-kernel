@@ -16,9 +16,23 @@
     --deferred-bg: #f1edf9; --deferred-fg: #5b4b8a;
     --nimpl-bg: #ececec; --nimpl-fg: #767676;
     --floor-bg: #fff3cd; --floor-fg: #8a6d00;
+    --dv-pass: #1a7f37; --dv-pass-bg: #dcf3e4; --dv-pass-fill: #2da44e;
+    --dv-weak: #8a5a00; --dv-weak-bg: #fdf0cc; --dv-weak-fill: #d4a72c;
+    --dv-fail: #b42318; --dv-fail-bg: #fbe4e2; --dv-fail-fill: #cf222e;
+    --dv-unknown: #3b5b82; --dv-unknown-bg: #e6ecf4;
+    --dv-none: #6b7280; --dv-none-bg: #f3f4f6;
+    --dv-track: #e8e9ee; --dv-mark: #1a1a1a; --dv-panel: #ffffff;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #14161a; --fg: #e7e7ea; --muted: #9aa0a6; --border: #2b2e33; --card-bg: #1c1f24; }
+    :root {
+      --bg: #14161a; --fg: #e7e7ea; --muted: #9aa0a6; --border: #2b2e33; --card-bg: #1c1f24;
+      --dv-pass: #56d364; --dv-pass-bg: #12301d; --dv-pass-fill: #2ea043;
+      --dv-weak: #e3b341; --dv-weak-bg: #33280b; --dv-weak-fill: #bb8009;
+      --dv-fail: #ff7b72; --dv-fail-bg: #3d1514; --dv-fail-fill: #da3633;
+      --dv-unknown: #9db7da; --dv-unknown-bg: #1d2633;
+      --dv-none: #9aa0a6; --dv-none-bg: #22252a;
+      --dv-track: #2e3238; --dv-mark: #e7e7ea; --dv-panel: #181b20;
+    }
   }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 24px; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, Segoe UI, Helvetica, Arial, sans-serif; }
@@ -55,6 +69,92 @@
   .narrative-fallback-notice { background: var(--ninstr-bg); color: var(--ninstr-fg); border: 1px solid var(--ninstr-fg); border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 12px; }
   ul { padding-left: 20px; }
   ul li { margin-bottom: 10px; }
+
+  /* Decision view (decisionView/render.ts). Every coloured mark also has a symbol or a word. */
+  .dv { margin: 18px 0 28px; }
+  .dv-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dv-title { font-size: 18px; margin: 0 0 4px; }
+  .dv h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 26px 0 10px; }
+  .dv h3:first-of-type { margin-top: 14px; }
+  .dv-panel { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 6px 16px; }
+  .dv-muted { color: var(--muted); }
+  .dv-note { color: var(--muted); font-size: 12px; margin: -4px 0 8px; }
+  .dv-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .dv-s-pass { background: var(--dv-pass-bg); color: var(--dv-pass); }
+  .dv-s-weak { background: var(--dv-weak-bg); color: var(--dv-weak); }
+  .dv-s-failing { background: var(--dv-fail-bg); color: var(--dv-fail); }
+  .dv-s-cant_tell { background: var(--dv-unknown-bg); color: var(--dv-unknown); }
+  .dv-s-none { background: var(--dv-none-bg); color: var(--dv-none); }
+  .dv-s-pass-edge { border-left: 4px solid var(--dv-pass-fill); }
+  .dv-s-weak-edge { border-left: 4px solid var(--dv-weak-fill); }
+  .dv-s-failing-edge { border-left: 4px solid var(--dv-fail-fill); }
+  .dv-s-cant_tell-edge { border-left: 4px solid var(--dv-unknown); }
+  .dv-bar { display: block; width: 100%; }
+  .dv-f-pass { fill: var(--dv-pass-fill); }
+  .dv-f-weak { fill: var(--dv-weak-fill); }
+  .dv-f-failing { fill: var(--dv-fail-fill); }
+  .dv-hatch-bg { fill: var(--dv-unknown-bg); }
+  .dv-hatch-line { fill: var(--dv-unknown); }
+  .dv-track { fill: var(--dv-track); }
+
+  .dv-obj { display: grid; grid-template-columns: minmax(150px, 210px) 1fr minmax(220px, 280px); gap: 6px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .dv-obj:last-child { border-bottom: 0; }
+  .dv-obj-name { font-weight: 600; }
+  .dv-sub { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .dv-objbar { height: 12px; border-radius: 6px; overflow: hidden; background: var(--dv-track); }
+  .dv-obj-counts { font-size: 13px; }
+  .dv-obj-off { color: var(--muted); }
+  .dv-obj-off .dv-obj-name { font-weight: 400; }
+  .dv-bar-off { background: repeating-linear-gradient(135deg, var(--dv-none-bg) 0 6px, transparent 6px 12px); border: 1px dashed var(--border); }
+  .dv-obj-off .dv-obj-counts { font-style: italic; }
+
+  .dv-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .dv-stat { border-radius: 10px; padding: 12px 14px; }
+  .dv-stat-n { font-size: 28px; font-weight: 800; line-height: 1.1; }
+  .dv-stat-l { font-size: 13px; font-weight: 600; }
+
+  .dv-fixes { display: grid; gap: 8px; }
+  .dv-fix { display: grid; grid-template-columns: 28px 1fr; gap: 12px; background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .dv-fix-rank { font-size: 18px; font-weight: 800; color: var(--muted); line-height: 1.3; text-align: center; }
+  .dv-fix-action { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+  .dv-fix-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; }
+  .dv-fix-holds { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .dv-dot { color: var(--muted); }
+  .dv-empty { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+
+  .dv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+  .dv-card { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .dv-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .dv-card-title { font-weight: 700; font-size: 15px; }
+  .dv-why { margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+  .dv-checks { display: grid; gap: 8px; }
+  .dv-check { padding: 8px 10px; border-radius: 8px; background: var(--card-bg); }
+  .dv-check[data-status="weak"] { box-shadow: inset 3px 0 0 var(--dv-weak-fill); background: var(--dv-weak-bg); }
+  .dv-check[data-status="failing"] { box-shadow: inset 3px 0 0 var(--dv-fail-fill); background: var(--dv-fail-bg); }
+  .dv-check-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 4px; }
+  .dv-check-name { font-weight: 600; margin-right: auto; }
+  .dv-flag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+  .dv-checkbar { height: 14px; overflow: visible; }
+  .dv-mark { fill: var(--dv-mark); }
+  .dv-check-foot { font-size: 12px; margin-top: 4px; }
+  .dv-hint { color: var(--dv-unknown); }
+  .dv-yn-v { display: inline-block; padding: 1px 10px; border-radius: 6px; font-weight: 700; font-size: 12px; }
+
+  .dv-heat-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--dv-panel); }
+  .dv-heat { display: grid; grid-template-columns: minmax(170px, 1.6fr) repeat(var(--dv-cols), minmax(92px, 1fr)); min-width: 640px; }
+  .dv-heat-row { display: contents; }
+  .dv-heat-corner, .dv-heat-col { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; padding: 8px; border-bottom: 1px solid var(--border); }
+  .dv-heat-rowhead { font-size: 13px; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .dv-cell { font-size: 12px; font-weight: 600; padding: 6px 8px; margin: 3px; border-radius: 6px; display: flex; align-items: center; gap: 4px; }
+  .dv-cell.dv-s-none { font-weight: 400; background: transparent; }
+
+  @media (max-width: 720px) {
+    body { padding: 16px; }
+    .dv-obj { grid-template-columns: 1fr; gap: 4px; }
+    .dv-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dv-cards { grid-template-columns: 1fr; }
+    .dv-fix { grid-template-columns: 20px 1fr; gap: 8px; padding: 10px 12px; }
+  }
 </style>
 </head>
 <body>
@@ -66,6 +166,297 @@
   <div class="meta">Scanned 124 of 124 eligible deals; detailed checks on 124 sampled deals (up to 20 per stage, seed &quot;report&quot;).</div>
   
   
+  <section class="dv" aria-label="At a glance">
+    <svg class="dv-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id="dv-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="dv-hatch-bg" width="6" height="6"></rect><rect class="dv-hatch-line" x="0" y="0" width="2.5" height="6"></rect></pattern></defs></svg>
+    <h2 class="dv-title">At a glance</h2>
+    <h3>Data health by CRM object</h3>
+    <div class="dv-panel dv-objects"><div class="dv-obj" data-object="opportunity">
+      <div class="dv-obj-name">Opportunity</div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="8 of 10 checks pass, 2 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="80.00%" height="100%"><title>8 pass</title></rect><rect class="dv-f-weak" x="80.00%" y="0" width="20.00%" height="100%"><title>2 weak</title></rect></svg>
+      <div class="dv-obj-counts">8 of 10 checks pass, 2 weak, 0 failing</div>
+    </div><div class="dv-obj" data-object="activities">
+      <div class="dv-obj-name">Activities (Task/Event)</div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="2 of 4 checks pass, 2 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="50.00%" height="100%"><title>2 pass</title></rect><rect class="dv-f-weak" x="50.00%" y="0" width="50.00%" height="100%"><title>2 weak</title></rect></svg>
+      <div class="dv-obj-counts">2 of 4 checks pass, 2 weak, 0 failing</div>
+    </div><div class="dv-obj" data-object="account">
+      <div class="dv-obj-name">Account</div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="1 of 2 checks pass, 1 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="50.00%" height="100%"><title>1 pass</title></rect><rect class="dv-f-weak" x="50.00%" y="0" width="50.00%" height="100%"><title>1 weak</title></rect></svg>
+      <div class="dv-obj-counts">1 of 2 checks pass, 1 weak, 0 failing</div>
+    </div><div class="dv-obj" data-object="opportunity_history">
+      <div class="dv-obj-name">Opportunity history</div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="3 of 4 checks pass, 1 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="75.00%" height="100%"><title>3 pass</title></rect><rect class="dv-f-weak" x="75.00%" y="0" width="25.00%" height="100%"><title>1 weak</title></rect></svg>
+      <div class="dv-obj-counts">3 of 4 checks pass, 1 weak, 0 failing</div>
+    </div><div class="dv-obj" data-object="notes">
+      <div class="dv-obj-name">Notes<div class="dv-sub">PII density and untrusted text ratio also read activity text</div></div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="0 of 6 checks pass, 0 weak, 0 failing, 6 can&#39;t tell"><rect class="dv-f-cant_tell" x="0.00%" y="0" width="100.00%" height="100%" fill="url(#dv-hatch)"><title>6 can&#39;t tell</title></rect></svg>
+      <div class="dv-obj-counts">0 of 6 checks pass, 0 weak, 0 failing, 6 can&#39;t tell</div>
+    </div><div class="dv-obj" data-object="contact_roles">
+      <div class="dv-obj-name">Contact roles</div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="1 of 1 check pass, 0 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="100.00%" height="100%"><title>1 pass</title></rect></svg>
+      <div class="dv-obj-counts">1 of 1 check pass, 0 weak, 0 failing</div>
+    </div><div class="dv-obj" data-object="contact">
+      <div class="dv-obj-name">Contact</div>
+      <svg class="dv-bar dv-objbar" role="img" aria-label="1 of 1 check pass, 0 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="100.00%" height="100%"><title>1 pass</title></rect></svg>
+      <div class="dv-obj-counts">1 of 1 check pass, 0 weak, 0 failing</div>
+    </div><div class="dv-obj dv-obj-off">
+      <div class="dv-obj-name">Leads</div>
+      <div class="dv-bar dv-objbar dv-bar-off"></div>
+      <div class="dv-obj-counts">not scanned yet</div>
+    </div><div class="dv-obj dv-obj-off">
+      <div class="dv-obj-name">Quotes</div>
+      <div class="dv-bar dv-objbar dv-bar-off"></div>
+      <div class="dv-obj-counts">not scanned yet</div>
+    </div><div class="dv-obj dv-obj-off">
+      <div class="dv-obj-name">Products / line items</div>
+      <div class="dv-bar dv-objbar dv-bar-off"></div>
+      <div class="dv-obj-counts">not scanned yet</div>
+    </div><div class="dv-obj dv-obj-off">
+      <div class="dv-obj-name">Campaigns</div>
+      <div class="dv-bar dv-objbar dv-bar-off"></div>
+      <div class="dv-obj-counts">not scanned yet</div>
+    </div><div class="dv-obj dv-obj-off">
+      <div class="dv-obj-name">Territories / targets</div>
+      <div class="dv-bar dv-objbar dv-bar-off"></div>
+      <div class="dv-obj-counts">not scanned yet</div>
+    </div></div>
+    <h3>AI use cases</h3>
+    <div class="dv-strip"><div class="dv-stat dv-s-pass" data-bucket="ready">
+        <div class="dv-stat-n">3</div>
+        <div class="dv-stat-l"><span aria-hidden="true">✓</span> Ready to use</div>
+      </div><div class="dv-stat dv-s-weak" data-bucket="caution">
+        <div class="dv-stat-n">1</div>
+        <div class="dv-stat-l"><span aria-hidden="true">!</span> Usable with caution</div>
+      </div><div class="dv-stat dv-s-failing" data-bucket="notReady">
+        <div class="dv-stat-n">1</div>
+        <div class="dv-stat-l"><span aria-hidden="true">✕</span> Not ready yet</div>
+      </div><div class="dv-stat dv-s-cant_tell" data-bucket="cantTell">
+        <div class="dv-stat-n">3</div>
+        <div class="dv-stat-l"><span aria-hidden="true">?</span> Can&#39;t tell yet</div>
+      </div></div>
+    <h3>Fix this first</h3>
+    <div class="dv-fixes"><div class="dv-fix dv-s-cant_tell-edge" data-metric="substantive_note_rate">
+      <div class="dv-fix-rank">1</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span> <span>Notes</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: Reps</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Substantive note rate</span></div>
+        <div class="dv-fix-holds">Holds back 3 use cases: AI-generated account briefs, Next-step suggestions on deals, Pitch and objection-handling answers</div>
+      </div>
+    </div><div class="dv-fix dv-s-weak-edge" data-metric="closed_deal_count_12m">
+      <div class="dv-fix-rank">2</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Record every finished deal as won or lost; recheck after another quarter.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span> <span>Opportunity</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: RevOps</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Closed deal count 12m</span></div>
+        <div class="dv-fix-holds">Holds back 3 use cases: Pitch and objection-handling answers, Forecast support, Fully automatic CRM updates with no human check</div>
+      </div>
+    </div><div class="dv-fix dv-s-cant_tell-edge" data-metric="note_coverage_rate">
+      <div class="dv-fix-rank">3</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span> <span>Notes</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: Reps</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Note coverage rate</span></div>
+        <div class="dv-fix-holds">Holds back 1 use case: AI-generated account briefs</div>
+      </div>
+    </div><div class="dv-fix dv-s-cant_tell-edge" data-metric="median_note_length_chars">
+      <div class="dv-fix-rank">4</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span> <span>Notes</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: Reps</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Median note length chars</span></div>
+        <div class="dv-fix-holds">Holds back 1 use case: AI-generated account briefs</div>
+      </div>
+    </div><div class="dv-fix dv-s-cant_tell-edge" data-metric="untrusted_text_ratio">
+      <div class="dv-fix-rank">5</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span> <span>Notes</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: Admin</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Untrusted text ratio</span></div>
+        <div class="dv-fix-holds">Holds back 1 use case: Fully automatic CRM updates with no human check</div>
+      </div>
+    </div><div class="dv-fix dv-s-cant_tell-edge" data-metric="outcome_evidence_retention_rate">
+      <div class="dv-fix-rank">6</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span> <span>Notes</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: Admin</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Outcome evidence retention rate</span></div>
+        <div class="dv-fix-holds">Holds back 1 use case: Pitch and objection-handling answers</div>
+      </div>
+    </div><div class="dv-fix dv-s-weak-edge" data-metric="temporal_anomaly_rate">
+      <div class="dv-fix-rank">7</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Fix timestamps that are in the future or out of order; store both systems in UTC.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span> <span>Activities (Task/Event)</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: Admin</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Temporal anomaly rate</span></div>
+        <div class="dv-fix-holds">Holds back 1 use case: Fully automatic CRM updates with no human check</div>
+      </div>
+    </div><div class="dv-fix dv-s-weak-edge" data-metric="win_rate_dispersion">
+      <div class="dv-fix-rank">8</div>
+      <div class="dv-fix-body">
+        <div class="dv-fix-action">Agree what each stage means and apply it the same way on every deal.</div>
+        <div class="dv-fix-meta"><span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span> <span>Opportunity history</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: RevOps</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">Win rate dispersion</span></div>
+        <div class="dv-fix-holds">Holds back 1 use case: Forecast support</div>
+      </div>
+    </div></div>
+    <h3>Use cases and the checks behind them</h3>
+    <div class="dv-cards"><div class="dv-card dv-s-cant_tell-edge" data-capability="grounded_account_brief">
+      <div class="dv-card-head"><div class="dv-card-title">AI-generated account briefs</div><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> Can&#39;t tell yet</span></div>
+      <p class="dv-why">This scan can&#39;t see all the notes or account records an account summary would draw on, so it can&#39;t say yet whether one would be safe. Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="note_coverage_rate" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Note coverage rate</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div><div class="dv-check" data-metric="duplicate_account_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Duplicate account rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="0%, pass ≤ 2%, weak ≤ 8% · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="0.00%" height="8" data-value="0"></rect><g class="dv-mark dv-mark-pass" data-at="2.00" transform="translate(-1 0)"><title>pass line</title><rect x="2.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="8.00" transform="translate(-1 0)"><title>weak line</title><rect x="8.00%" y="0" width="2" height="4"></rect><rect x="8.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>0%</strong> <span class="dv-muted">· pass ≤ 2%, weak ≤ 8% · lower is better</span></div>
+        </div><div class="dv-check" data-metric="substantive_note_rate" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Substantive note rate</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div><div class="dv-check" data-metric="median_note_length_chars" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Median note length chars</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div></div>
+    </div><div class="dv-card dv-s-pass-edge" data-capability="pipeline_risk_signals">
+      <div class="dv-card-head"><div class="dv-card-title">Pipeline risk alerts</div><span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> Ready to use</span></div>
+      <p class="dv-why">Stalled, silent or slipping deals can be flagged automatically.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="activity_capture_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Activity capture rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="88%, pass ≥ 80%, weak ≥ 50%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="88.00%" height="8" data-value="0.88"></rect><g class="dv-mark dv-mark-pass" data-at="80.00" transform="translate(-1 0)"><title>pass line</title><rect x="80.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="50.00" transform="translate(-1 0)"><title>weak line</title><rect x="50.00%" y="0" width="2" height="4"></rect><rect x="50.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>at least 88%</strong> <span class="dv-muted">· pass ≥ 80%, weak ≥ 50%</span></div>
+        </div><div class="dv-check" data-metric="median_days_since_modified" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Median days since modified</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="4.5 days, pass ≤ 7 days, weak ≤ 21 days · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="17.14%" height="8" data-value="4.5"></rect><g class="dv-mark dv-mark-pass" data-at="26.67" transform="translate(-1 0)"><title>pass line</title><rect x="26.67%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="80.00" transform="translate(-1 0)"><title>weak line</title><rect x="80.00%" y="0" width="2" height="4"></rect><rect x="80.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>4.5 days</strong> <span class="dv-muted">· pass ≤ 7 days, weak ≤ 21 days · lower is better</span></div>
+        </div><div class="dv-check" data-metric="stage_mapping_coverage" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Stage mapping coverage</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="100%, pass ≥ 100%, weak ≥ 90%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="100.00%" height="8" data-value="1"></rect><g class="dv-mark dv-mark-pass" data-at="100.00" transform="translate(-1 0)"><title>pass line</title><rect x="100.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="90.00" transform="translate(-1 0)"><title>weak line</title><rect x="90.00%" y="0" width="2" height="4"></rect><rect x="90.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>100%</strong> <span class="dv-muted">· pass ≥ 100%, weak ≥ 90%</span></div>
+        </div><div class="dv-check" data-metric="stage_history_months" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Stage history months</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="21 months, pass ≥ 18 months, weak ≥ 6 months"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="80.00%" height="8" data-value="21"></rect><g class="dv-mark dv-mark-pass" data-at="68.57" transform="translate(-1 0)"><title>pass line</title><rect x="68.57%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="22.86" transform="translate(-1 0)"><title>weak line</title><rect x="22.86%" y="0" width="2" height="4"></rect><rect x="22.86%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>21 months</strong> <span class="dv-muted">· pass ≥ 18 months, weak ≥ 6 months</span></div>
+        </div></div>
+    </div><div class="dv-card dv-s-pass-edge" data-capability="close_date_realism">
+      <div class="dv-card-head"><div class="dv-card-title">Close-date reality checks</div><span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> Ready to use</span></div>
+      <p class="dv-why">Deals with unrealistic or already-passed close dates can be flagged automatically.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="close_date_fill_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Close date fill rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="95%, pass ≥ 95%, weak ≥ 85%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="95.00%" height="8" data-value="0.95"></rect><g class="dv-mark dv-mark-pass" data-at="95.00" transform="translate(-1 0)"><title>pass line</title><rect x="95.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="85.00" transform="translate(-1 0)"><title>weak line</title><rect x="85.00%" y="0" width="2" height="4"></rect><rect x="85.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>95%</strong> <span class="dv-muted">· pass ≥ 95%, weak ≥ 85%</span></div>
+        </div><div class="dv-check" data-metric="past_due_close_date_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Past due close date rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="0%, pass ≤ 10%, weak ≤ 25% · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="0.00%" height="8" data-value="0"></rect><g class="dv-mark dv-mark-pass" data-at="10.00" transform="translate(-1 0)"><title>pass line</title><rect x="10.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="25.00" transform="translate(-1 0)"><title>weak line</title><rect x="25.00%" y="0" width="2" height="4"></rect><rect x="25.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>0%</strong> <span class="dv-muted">· pass ≤ 10%, weak ≤ 25% · lower is better</span></div>
+        </div><div class="dv-check" data-metric="close_date_history_enabled" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Close date history enabled</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <div class="dv-yn"><span class="dv-yn-v dv-s-pass">Yes</span></div>
+          <div class="dv-check-foot">pass = Yes</div>
+        </div></div>
+    </div><div class="dv-card dv-s-cant_tell-edge" data-capability="next_action_recommendation">
+      <div class="dv-card-head"><div class="dv-card-title">Next-step suggestions on deals</div><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> Can&#39;t tell yet</span></div>
+      <p class="dv-why">This scan can&#39;t see all the activity and note detail a next-step suggestion would rely on, so it can&#39;t say yet whether one would be safe. Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="next_step_fill_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Next step fill rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="91%, pass ≥ 60%, weak ≥ 30%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="91.00%" height="8" data-value="0.91"></rect><g class="dv-mark dv-mark-pass" data-at="60.00" transform="translate(-1 0)"><title>pass line</title><rect x="60.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="30.00" transform="translate(-1 0)"><title>weak line</title><rect x="30.00%" y="0" width="2" height="4"></rect><rect x="30.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>91%</strong> <span class="dv-muted">· pass ≥ 60%, weak ≥ 30%</span></div>
+        </div><div class="dv-check" data-metric="activity_capture_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Activity capture rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="88%, pass ≥ 80%, weak ≥ 50%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="88.00%" height="8" data-value="0.88"></rect><g class="dv-mark dv-mark-pass" data-at="80.00" transform="translate(-1 0)"><title>pass line</title><rect x="80.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="50.00" transform="translate(-1 0)"><title>weak line</title><rect x="50.00%" y="0" width="2" height="4"></rect><rect x="50.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>at least 88%</strong> <span class="dv-muted">· pass ≥ 80%, weak ≥ 50%</span></div>
+        </div><div class="dv-check" data-metric="contact_linkage_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Contact linkage rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="90%, pass ≥ 85%, weak ≥ 60%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="90.00%" height="8" data-value="0.9"></rect><g class="dv-mark dv-mark-pass" data-at="85.00" transform="translate(-1 0)"><title>pass line</title><rect x="85.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="60.00" transform="translate(-1 0)"><title>weak line</title><rect x="60.00%" y="0" width="2" height="4"></rect><rect x="60.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>90%</strong> <span class="dv-muted">· pass ≥ 85%, weak ≥ 60%</span></div>
+        </div><div class="dv-check" data-metric="substantive_note_rate" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Substantive note rate</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div></div>
+    </div><div class="dv-card dv-s-cant_tell-edge" data-capability="enablement_answer_engine">
+      <div class="dv-card-head"><div class="dv-card-title">Pitch and objection-handling answers</div><span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> Can&#39;t tell yet</span></div>
+      <p class="dv-why">This scan can&#39;t see all the closed-deal history these answers would draw on, so it can&#39;t say yet whether they would be reliable. Of the data it could see, some is thinner than ideal. Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="substantive_note_rate" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Substantive note rate</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div><div class="dv-check" data-metric="closed_deal_count_12m" data-status="weak">
+          <div class="dv-check-head"><span class="dv-check-name">Closed deal count 12m</span> <span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="24, pass ≥ 40, weak ≥ 20"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-weak" x="0" y="3" width="48.00%" height="8" data-value="24"></rect><g class="dv-mark dv-mark-pass" data-at="80.00" transform="translate(-1 0)"><title>pass line</title><rect x="80.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="40.00" transform="translate(-1 0)"><title>weak line</title><rect x="40.00%" y="0" width="2" height="4"></rect><rect x="40.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>24</strong> <span class="dv-muted">· pass ≥ 40, weak ≥ 20</span></div>
+        </div><div class="dv-check" data-metric="outcome_evidence_retention_rate" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Outcome evidence retention rate</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div></div>
+    </div><div class="dv-card dv-s-weak-edge" data-capability="forecast_assistance">
+      <div class="dv-card-head"><div class="dv-card-title">Forecast support</div><span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> Usable with caution</span></div>
+      <p class="dv-why">Forecast support can run, but on a less complete picture of the pipeline than ideal. Right now, not enough closed-deal outcomes have been recorded.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="amount_fill_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Amount fill rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="93%, pass ≥ 90%, weak ≥ 75%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="93.00%" height="8" data-value="0.93"></rect><g class="dv-mark dv-mark-pass" data-at="90.00" transform="translate(-1 0)"><title>pass line</title><rect x="90.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="75.00" transform="translate(-1 0)"><title>weak line</title><rect x="75.00%" y="0" width="2" height="4"></rect><rect x="75.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>93%</strong> <span class="dv-muted">· pass ≥ 90%, weak ≥ 75%</span></div>
+        </div><div class="dv-check" data-metric="past_due_close_date_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Past due close date rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="0%, pass ≤ 10%, weak ≤ 25% · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="0.00%" height="8" data-value="0"></rect><g class="dv-mark dv-mark-pass" data-at="10.00" transform="translate(-1 0)"><title>pass line</title><rect x="10.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="25.00" transform="translate(-1 0)"><title>weak line</title><rect x="25.00%" y="0" width="2" height="4"></rect><rect x="25.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>0%</strong> <span class="dv-muted">· pass ≤ 10%, weak ≤ 25% · lower is better</span></div>
+        </div><div class="dv-check" data-metric="stage_mapping_coverage" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Stage mapping coverage</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="100%, pass ≥ 100%, weak ≥ 90%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="100.00%" height="8" data-value="1"></rect><g class="dv-mark dv-mark-pass" data-at="100.00" transform="translate(-1 0)"><title>pass line</title><rect x="100.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="90.00" transform="translate(-1 0)"><title>weak line</title><rect x="90.00%" y="0" width="2" height="4"></rect><rect x="90.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>100%</strong> <span class="dv-muted">· pass ≥ 100%, weak ≥ 90%</span></div>
+        </div><div class="dv-check" data-metric="closed_deal_count_12m" data-status="weak">
+          <div class="dv-check-head"><span class="dv-check-name">Closed deal count 12m</span> <span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="24, pass ≥ 40, weak ≥ 20"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-weak" x="0" y="3" width="48.00%" height="8" data-value="24"></rect><g class="dv-mark dv-mark-pass" data-at="80.00" transform="translate(-1 0)"><title>pass line</title><rect x="80.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="40.00" transform="translate(-1 0)"><title>weak line</title><rect x="40.00%" y="0" width="2" height="4"></rect><rect x="40.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>24</strong> <span class="dv-muted">· pass ≥ 40, weak ≥ 20</span></div>
+        </div><div class="dv-check" data-metric="win_rate_dispersion" data-status="weak">
+          <div class="dv-check-head"><span class="dv-check-name">Win rate dispersion</span> <span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="20.3%, pass ≥ 30%, weak ≥ 15%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-weak" x="0" y="3" width="20.27%" height="8" data-value="0.2026505250441229"></rect><g class="dv-mark dv-mark-pass" data-at="30.00" transform="translate(-1 0)"><title>pass line</title><rect x="30.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="15.00" transform="translate(-1 0)"><title>weak line</title><rect x="15.00%" y="0" width="2" height="4"></rect><rect x="15.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>20.3%</strong> <span class="dv-muted">· pass ≥ 30%, weak ≥ 15%</span></div>
+        </div></div>
+    </div><div class="dv-card dv-s-pass-edge" data-capability="bulk_hygiene_automation">
+      <div class="dv-card-head"><div class="dv-card-title">Bulk data clean-up suggestions</div><span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> Ready to use</span></div>
+      <p class="dv-why">Batch fixes for stale or missing data can be proposed for a person to approve.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="close_date_fill_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Close date fill rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="95%, pass ≥ 95%, weak ≥ 85%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="95.00%" height="8" data-value="0.95"></rect><g class="dv-mark dv-mark-pass" data-at="95.00" transform="translate(-1 0)"><title>pass line</title><rect x="95.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="85.00" transform="translate(-1 0)"><title>weak line</title><rect x="85.00%" y="0" width="2" height="4"></rect><rect x="85.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>95%</strong> <span class="dv-muted">· pass ≥ 95%, weak ≥ 85%</span></div>
+        </div><div class="dv-check" data-metric="stage_mapping_coverage" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Stage mapping coverage</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="100%, pass ≥ 100%, weak ≥ 90%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="100.00%" height="8" data-value="1"></rect><g class="dv-mark dv-mark-pass" data-at="100.00" transform="translate(-1 0)"><title>pass line</title><rect x="100.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="90.00" transform="translate(-1 0)"><title>weak line</title><rect x="90.00%" y="0" width="2" height="4"></rect><rect x="90.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>100%</strong> <span class="dv-muted">· pass ≥ 100%, weak ≥ 90%</span></div>
+        </div><div class="dv-check" data-metric="duplicate_account_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Duplicate account rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="0%, pass ≤ 2%, weak ≤ 8% · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="0.00%" height="8" data-value="0"></rect><g class="dv-mark dv-mark-pass" data-at="2.00" transform="translate(-1 0)"><title>pass line</title><rect x="2.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="8.00" transform="translate(-1 0)"><title>weak line</title><rect x="8.00%" y="0" width="2" height="4"></rect><rect x="8.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>0%</strong> <span class="dv-muted">· pass ≤ 2%, weak ≤ 8% · lower is better</span></div>
+        </div></div>
+    </div><div class="dv-card dv-s-failing-edge" data-capability="autonomous_writeback">
+      <div class="dv-card-head"><div class="dv-card-title">Fully automatic CRM updates with no human check</div><span class="dv-tag dv-s-failing"><span aria-hidden="true">✕</span> Not ready yet</span></div>
+      <p class="dv-why">AI should not write to the CRM without a person checking every change, and this scan can&#39;t see everything needed to judge otherwise. Right now, the data doesn&#39;t meet the quality bar.</p>
+      <div class="dv-checks"><div class="dv-check" data-metric="activity_capture_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Activity capture rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="88%, pass ≥ 80%, weak ≥ 50%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="88.00%" height="8" data-value="0.88"></rect><g class="dv-mark dv-mark-pass" data-at="80.00" transform="translate(-1 0)"><title>pass line</title><rect x="80.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="50.00" transform="translate(-1 0)"><title>weak line</title><rect x="50.00%" y="0" width="2" height="4"></rect><rect x="50.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>at least 88%</strong> <span class="dv-muted">· pass ≥ 80%, weak ≥ 50%</span></div>
+        </div><div class="dv-check" data-metric="stage_mapping_coverage" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Stage mapping coverage</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="100%, pass ≥ 100%, weak ≥ 90%"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="100.00%" height="8" data-value="1"></rect><g class="dv-mark dv-mark-pass" data-at="100.00" transform="translate(-1 0)"><title>pass line</title><rect x="100.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="90.00" transform="translate(-1 0)"><title>weak line</title><rect x="90.00%" y="0" width="2" height="4"></rect><rect x="90.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>100%</strong> <span class="dv-muted">· pass ≥ 100%, weak ≥ 90%</span></div>
+        </div><div class="dv-check" data-metric="duplicate_account_rate" data-status="pass">
+          <div class="dv-check-head"><span class="dv-check-name">Duplicate account rate</span> <span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> pass</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="0%, pass ≤ 2%, weak ≤ 8% · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-pass" x="0" y="3" width="0.00%" height="8" data-value="0"></rect><g class="dv-mark dv-mark-pass" data-at="2.00" transform="translate(-1 0)"><title>pass line</title><rect x="2.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="8.00" transform="translate(-1 0)"><title>weak line</title><rect x="8.00%" y="0" width="2" height="4"></rect><rect x="8.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>0%</strong> <span class="dv-muted">· pass ≤ 2%, weak ≤ 8% · lower is better</span></div>
+        </div><div class="dv-check" data-metric="temporal_anomaly_rate" data-status="weak">
+          <div class="dv-check-head"><span class="dv-check-name">Temporal anomaly rate</span> <span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="3%, pass ≤ 1%, weak ≤ 5% · lower is better"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-weak" x="0" y="3" width="3.04%" height="8" data-value="0.03044496487119438"></rect><g class="dv-mark dv-mark-pass" data-at="1.00" transform="translate(-1 0)"><title>pass line</title><rect x="1.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="5.00" transform="translate(-1 0)"><title>weak line</title><rect x="5.00%" y="0" width="2" height="4"></rect><rect x="5.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>3%</strong> <span class="dv-muted">· pass ≤ 1%, weak ≤ 5% · lower is better</span></div>
+        </div><div class="dv-check" data-metric="untrusted_text_ratio" data-status="cant_tell">
+          <div class="dv-check-head"><span class="dv-check-name">Untrusted text ratio</span> <span class="dv-tag dv-s-cant_tell"><span aria-hidden="true">?</span> can&#39;t tell</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="can't tell"><rect class="dv-track" x="0" y="3" width="100%" height="8" fill="url(#dv-hatch)"></rect></svg>
+          <div class="dv-check-foot dv-hint">Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.</div>
+        </div><div class="dv-check" data-metric="closed_deal_count_12m" data-status="weak">
+          <div class="dv-check-head"><span class="dv-check-name">Closed deal count 12m</span> <span class="dv-tag dv-s-weak"><span aria-hidden="true">!</span> weak</span></div>
+          <svg class="dv-bar dv-checkbar" role="img" aria-label="24, pass ≥ 40, weak ≥ 20"><rect class="dv-track" x="0" y="3" width="100%" height="8"></rect><rect class="dv-fill dv-f-weak" x="0" y="3" width="48.00%" height="8" data-value="24"></rect><g class="dv-mark dv-mark-pass" data-at="80.00" transform="translate(-1 0)"><title>pass line</title><rect x="80.00%" y="0" width="2" height="14"></rect></g><g class="dv-mark dv-mark-weak" data-at="40.00" transform="translate(-1 0)"><title>weak line</title><rect x="40.00%" y="0" width="2" height="4"></rect><rect x="40.00%" y="10" width="2" height="4"></rect></g></svg>
+          <div class="dv-check-foot"><strong>24</strong> <span class="dv-muted">· pass ≥ 40, weak ≥ 20</span></div>
+        </div></div>
+    </div></div>
+    <h3>Use cases by CRM object</h3>
+    <div class="dv-note">Each cell shows the worst check for that pair.</div>
+    <div class="dv-heat-wrap"><div class="dv-heat" role="table" style="--dv-cols: 6"><div class="dv-heat-row" role="row"><div class="dv-heat-corner" role="columnheader">Use case</div><div class="dv-heat-col" role="columnheader">Opportunity</div><div class="dv-heat-col" role="columnheader">Account</div><div class="dv-heat-col" role="columnheader">Activities (Task/Event)</div><div class="dv-heat-col" role="columnheader">Notes</div><div class="dv-heat-col" role="columnheader">Opportunity history</div><div class="dv-heat-col" role="columnheader">Contact roles</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">AI-generated account briefs</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Duplicate account rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-cant_tell" role="cell" title="Note coverage rate"><span aria-hidden="true">?</span> can&#39;t tell</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Pipeline risk alerts</div><div class="dv-cell dv-s-pass" role="cell" title="Median days since modified"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Activity capture rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Stage history months"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Close-date reality checks</div><div class="dv-cell dv-s-pass" role="cell" title="Close date fill rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Close date history enabled"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Next-step suggestions on deals</div><div class="dv-cell dv-s-pass" role="cell" title="Next step fill rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Activity capture rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-cant_tell" role="cell" title="Substantive note rate"><span aria-hidden="true">?</span> can&#39;t tell</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Contact linkage rate"><span aria-hidden="true">✓</span> pass</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Pitch and objection-handling answers</div><div class="dv-cell dv-s-weak" role="cell" title="Closed deal count 12m"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-cant_tell" role="cell" title="Substantive note rate"><span aria-hidden="true">?</span> can&#39;t tell</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Forecast support</div><div class="dv-cell dv-s-weak" role="cell" title="Closed deal count 12m"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-weak" role="cell" title="Win rate dispersion"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Bulk data clean-up suggestions</div><div class="dv-cell dv-s-pass" role="cell" title="Close date fill rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-pass" role="cell" title="Duplicate account rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Fully automatic CRM updates with no human check</div><div class="dv-cell dv-s-weak" role="cell" title="Closed deal count 12m"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-pass" role="cell" title="Duplicate account rate"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-weak" role="cell" title="Temporal anomaly rate"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-cant_tell" role="cell" title="Untrusted text ratio"><span aria-hidden="true">?</span> can&#39;t tell</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div></div></div>
+  </section>
   <p>There is enough good-quality data to support pipeline risk alerts, close-date reality checks, and bulk data clean-up suggestions. The data can also support forecast support, but treat the output with caution. It&#39;s thinner or less certain than ideal for now. This scan can&#39;t see some of the data behind AI-generated account briefs, next-step suggestions on deals, and pitch and objection-handling answers, so it can&#39;t say yet whether those are ready. Fully automatic CRM updates stay off until a person checks every change. This report only reads your CRM data. It doesn&#39;t change anything.</p>
   
   <h2>Ready to use</h2>

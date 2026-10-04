@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { MockAdapter, MockSecondSourceAdapter } from '@gtm-trust-kernel/adapters/mock.js';
+import { NOTES_ACCESS_HINT } from '@gtm-trust-kernel/adapters/salesforce.js';
 import { FIXTURE_NAMES, MOCK_ORG_FIXTURES, type FixtureName } from '../../src/fixtures/mockOrgs.js';
 import { buildReportData, gateVerdictOf, type MetricRow, type ReportData } from '../../src/report/buildReport.js';
 import { buildFullNarrative } from '../../src/report/plainSummary.js';
@@ -23,12 +24,16 @@ import { CAPABILITIES, THRESHOLDS, type MetricId } from '../../src/rubric.js';
 
 async function build(
   name: FixtureName,
-  opts: { withSecondSource?: boolean; activitySync?: boolean } = {},
+  opts: { withSecondSource?: boolean; activitySync?: boolean; notesReadable?: boolean } = {},
 ): Promise<ReportData> {
   const fixture = MOCK_ORG_FIXTURES[name];
   const adapter = new MockAdapter(fixture.orgId, fixture.data, {
     ...fixture.capabilities,
     ...(opts.activitySync === false ? { activitySync: false } : {}),
+    // The demo's notes sample: Enhanced Notes unreadable, with the Salesforce adapter's own hint.
+    ...(opts.notesReadable === false
+      ? { notesComplete: false, settingHints: { ...fixture.capabilities.settingHints, notesComplete: NOTES_ACCESS_HINT } }
+      : {}),
   });
   const secondSource =
     (opts.withSecondSource ?? true) && fixture.secondSource
@@ -49,6 +54,7 @@ async function allCases(): Promise<{ name: string; data: ReportData }[]> {
     cases.push({ name: `${name} (no second source)`, data: await build(name, { withSecondSource: false }) });
   }
   cases.push({ name: 'healthy (activity sync off)', data: await build('healthy', { activitySync: false }) });
+  cases.push({ name: 'healthy (notes not readable)', data: await build('healthy', { notesReadable: false }) });
   return cases;
 }
 
@@ -289,5 +295,61 @@ describe('decision view model', () => {
     // Only objects with a gating check become columns, in fixed order.
     const gating = new Set(data.metrics.filter((m) => gateIdsOf(m.metric).length > 0).map((m) => METRIC_OBJECT[m.metric]));
     expect(heatmap.columns.map((c) => c.object)).toEqual(OBJECT_ORDER.filter((o) => gating.has(o)));
+  });
+
+  // The model infers "no second system" from how buildReport marks the four
+  // cross-system rows (ReportData carries no flag). If buildReport changes
+  // that marking, this fails before the inference silently goes wrong.
+  it('relies on buildReport marking cross-system rows not instrumented, not "not measured", with no second source', async () => {
+    for (const name of FIXTURE_NAMES) {
+      const alone = await build(name, { withSecondSource: false });
+      for (const metric of SECOND_SOURCE_METRICS) {
+        const row = alone.metrics.find((m) => m.metric === metric)!;
+        expect({ metric, status: row.status, notMeasured: row.notMeasured }, name).toEqual({
+          metric,
+          status: 'not_instrumented',
+          notMeasured: false,
+        });
+      }
+      expect(buildDecisionView(alone).secondSourceConnected, name).toBe(false);
+    }
+
+    // healthy ships a second source: none of its cross-system rows carries the no-source marking.
+    expect(MOCK_ORG_FIXTURES.healthy.secondSource).toBeDefined();
+    const connected = await build('healthy');
+    for (const metric of SECOND_SOURCE_METRICS) {
+      const row = connected.metrics.find((m) => m.metric === metric)!;
+      expect(row.status === 'not_instrumented' && !row.notMeasured, metric).toBe(false);
+    }
+    expect(buildDecisionView(connected).secondSourceConnected).toBe(true);
+  });
+
+  it('lists Contact as second-system-only, uncounted, when no second source is connected', async () => {
+    const alone = buildDecisionView(await build('healthy', { withSecondSource: false }));
+    expect(alone.secondSystemOnly.map((o) => o.label)).toEqual(['Contact']);
+    const connected = buildDecisionView(await build('healthy'));
+    expect(connected.secondSystemOnly).toEqual([]);
+  });
+
+  it("the demo's notes sample: every note check reads can't tell, with the adapter's notes hint", async () => {
+    const data = await build('healthy', { notesReadable: false });
+    const view = buildDecisionView(data);
+    const notes = view.objects.find((o) => o.object === 'notes')!;
+    const unseen = data.metrics.filter((m) => METRIC_OBJECT[m.metric] === 'notes' && m.notMeasured);
+    expect(unseen.length).toBeGreaterThan(0);
+    expect(notes.cantTell).toBe(unseen.length);
+
+    const noteFixes = view.fixes.filter((f) => f.object === 'notes' && f.status === 'cant_tell');
+    expect(noteFixes.map((f) => f.metric).sort()).toEqual(
+      unseen.filter((m) => gateIdsOf(m.metric).length > 0).map((m) => m.metric).sort(),
+    );
+    for (const fix of noteFixes) expect(fix.action, fix.metric).toBe(NOTES_ACCESS_HINT);
+
+    const brief = view.cards.find((c) => c.id === 'grounded_account_brief')!;
+    expect(brief.bucket).toBe('cantTell');
+    for (const check of brief.checks.filter((c) => METRIC_OBJECT[c.metric] === 'notes')) {
+      expect(check.status, check.metric).toBe('cant_tell');
+      expect(check.hint, check.metric).toBe(NOTES_ACCESS_HINT);
+    }
   });
 });

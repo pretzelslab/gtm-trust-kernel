@@ -10,6 +10,7 @@ import type { ReportData } from './buildReport.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildFullNarrative, type CapabilityOutcome } from './plainSummary.js';
 import { coverageNoticeText, sampleSizeText, stageMapNoticeText } from './render.js';
+import { renderDecisionView } from './decisionView/render.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -55,6 +56,7 @@ export function renderPlainReportHtml(
   <div class="meta">${escapeHtml(sampleSizeText(data))}</div>
   ${coverageNoticeText(data) ? `<p class="note">${escapeHtml(coverageNoticeText(data)!)}</p>` : ''}
   ${stageMapNoticeText(data) ? `<p class="note">${escapeHtml(stageMapNoticeText(data)!)}</p>` : ''}
+  ${renderDecisionView(data)}
   <p>${escapeHtml(narrative.summary)}</p>
   ${renderBucket('Ready to use', narrative.ready)}
   ${renderBucket('Usable with caution', narrative.caution)}

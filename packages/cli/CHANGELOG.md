@@ -6,6 +6,14 @@ All notable changes to `gtm-trust-kernel` (the CLI).
 
 ### Added
 
+- An "At a glance" decision view at the top of both reports (the
+  plain-English report and `latest.html`): data health by CRM object, the
+  use-case counts, a ranked "Fix this first" list with a plain action,
+  object and likely owner for each check, a card per use case with each
+  check's value against its pass and weak lines, and a use case by object
+  grid. It uses the same verdicts and thresholds as the rest of the report
+  and adds no score. Inline HTML and SVG only; the report still works
+  offline. The `--all` comparison page is unchanged.
 - `--fail-on [<verdicts>]`: exit 2 when any capability has a listed
   verdict (`blocked`, `degraded`, `not_measured`; a bare `--fail-on` means
   `blocked`), after the report is written. Off by default. `blocked` also

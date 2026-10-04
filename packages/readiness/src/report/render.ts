@@ -8,6 +8,7 @@ import { gateVerdictOf, type MetricRow, type MetricRowStatus, type ReportCapabil
 import { THRESHOLDS, type CapabilityVerdict, type Unit } from '../rubric.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildExecutiveSummary } from './plainSummary.js';
+import { renderDecisionView } from './decisionView/render.js';
 import type { NarrativeResult } from './narrative.js';
 
 type StatusKey = CapabilityVerdict | MetricRowStatus;
@@ -237,6 +238,7 @@ export function renderReportHtml(
   ${renderCoverageNotice(data)}
   ${renderStageMapNotice(data)}
   <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
+  ${renderDecisionView(data)}
   ${renderSummaryCards(data)}
   ${renderCapabilitiesTable(data.capabilities, data.metrics)}
   ${renderMetricsTable(data.metrics)}
