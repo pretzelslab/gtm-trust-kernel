@@ -8,7 +8,7 @@ import { gateVerdictOf, type MetricRow, type MetricRowStatus, type ReportCapabil
 import { THRESHOLDS, type CapabilityVerdict, type Unit } from '../rubric.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildExecutiveSummary } from './plainSummary.js';
-import { renderDecisionView } from './decisionView/render.js';
+import { DETAILS_ID, renderDecisionView, renderJumpBar } from './decisionView/render.js';
 import type { NarrativeResult } from './narrative.js';
 
 type StatusKey = CapabilityVerdict | MetricRowStatus;
@@ -148,10 +148,10 @@ function renderCapabilitiesTable(caps: readonly ReportCapabilityRow[], metrics: 
     .join('');
   return `
   <h2>Capabilities</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Capability</th><th>Verdict</th><th>Coverage ceiling</th><th>Blockers</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function renderMetricsTable(rows: readonly MetricRow[]): string {
@@ -187,10 +187,10 @@ function renderMetricsTable(rows: readonly MetricRow[]): string {
     .join('');
   return `
   <h2>Metrics</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Metric</th><th>Value</th><th>Tier</th><th>Note</th><th>Gates / threshold</th></tr></thead>
     <tbody>${body}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 /**
@@ -219,6 +219,9 @@ function renderNarrativeBody(data: ReportData, narrative: NarrativeResult | unde
   return `<div class="narrative-fallback-notice">${escapeHtml(narrative.notice)}</div><p>${escapeHtml(narrative.text)}</p>`;
 }
 
+/** The details band's lede in latest.html. */
+export const DETAILED_DETAILS_LEDE = 'Every metric with its threshold and sample size, and the capability table.';
+
 export function renderReportHtml(
   data: ReportData,
   options?: { readonly mode?: 'fixture' | 'live'; readonly narrative?: NarrativeResult; readonly orgHostShown?: boolean },
@@ -230,18 +233,24 @@ export function renderReportHtml(
     orgHostShown: options?.orgHostShown ?? false,
   });
   const body = `
+  <main class="page">
   ${banner}
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">asOf ${escapeHtml(org.asOf)} · generated ${escapeHtml(data.generatedAt)}</div>
   <div class="meta">${escapeHtml(sampleSizeText(data))}</div>
+  ${renderJumpBar()}
   ${renderCoverageNotice(data)}
   ${renderStageMapNotice(data)}
   <details class="plain-summary"><summary>Plain-English summary</summary>${renderNarrativeBody(data, options?.narrative)}</details>
   ${renderDecisionView(data)}
+  <div class="details-band" id="${DETAILS_ID}">
+  <div class="details-head"><h2>Details</h2><p class="details-lede">${escapeHtml(DETAILED_DETAILS_LEDE)}</p></div>
   ${renderSummaryCards(data)}
   ${renderCapabilitiesTable(data.capabilities, data.metrics)}
   ${renderMetricsTable(data.metrics)}
+  </div>
+  </main>
   `;
   return pageShell(`Readiness report — ${org.orgLabel}`, body);
 }

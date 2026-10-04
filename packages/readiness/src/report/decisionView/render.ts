@@ -93,6 +93,61 @@ function formatNumber(value: number, unit: Unit): string {
 }
 
 // ---------------------------------------------------------------------------
+// The five numbered parts and the jump bar
+// ---------------------------------------------------------------------------
+
+export type PartId = 'data-health' | 'verdict-counts' | 'fix-first' | 'use-cases' | 'heatmap';
+
+/**
+ * The five parts in page order: anchor id, numbered heading and one-line
+ * lede. A lede never repeats a heading (a polish test slices the view from
+ * "Fix this first" to "Use cases and the checks behind them").
+ */
+export const DV_PARTS: readonly { readonly id: PartId; readonly title: string; readonly lede: string }[] = [
+  { id: 'data-health', title: 'Data health by CRM object', lede: 'Which CRM objects have weak or failing checks, worst first.' },
+  {
+    id: 'verdict-counts',
+    title: 'AI use cases',
+    lede: "How many AI use cases your data supports today, and how many it can't judge yet.",
+  },
+  { id: 'fix-first', title: 'Fix this first', lede: 'The changes that free up the most use cases, and who usually owns them.' },
+  {
+    id: 'use-cases',
+    title: 'Use cases and the checks behind them',
+    lede: 'For each use case, the checks behind its verdict and how far each is from passing.',
+  },
+  { id: 'heatmap', title: 'Use cases by CRM object', lede: 'Where each use case breaks down, by CRM object.' },
+];
+
+/** The id of the band that wraps each report's existing content after the decision view. */
+export const DETAILS_ID = 'details';
+
+/** Jump bar labels, in page order; the last one goes to the details band. */
+export const JUMP_LINKS: readonly { readonly id: string; readonly label: string }[] = [
+  { id: 'data-health', label: 'Data health' },
+  { id: 'verdict-counts', label: 'Counts' },
+  { id: 'fix-first', label: 'Fixes' },
+  { id: 'use-cases', label: 'Use cases' },
+  { id: 'heatmap', label: 'Grid' },
+  { id: DETAILS_ID, label: 'Details' },
+];
+
+/** Plain links only, no list markup (the report tests count "<li"). */
+export function renderJumpBar(): string {
+  const links = JUMP_LINKS.map((l) => `<a href="#${escapeHtml(l.id)}">${escapeHtml(l.label)}</a>`).join('');
+  return `<div class="jump" role="navigation" aria-label="Jump to section">${links}</div>`;
+}
+
+function part(id: PartId, content: string): string {
+  const n = DV_PARTS.findIndex((p) => p.id === id);
+  const p = DV_PARTS[n]!;
+  return `<div class="dv-part" id="${id}">
+    <div class="dv-part-head"><h3>${n + 1} · ${escapeHtml(p.title)}</h3><p class="dv-lede">${escapeHtml(p.lede)}</p></div>
+    ${content}
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // 1. Data health by CRM object
 // ---------------------------------------------------------------------------
 
@@ -163,8 +218,7 @@ function renderObjects(view: DecisionViewModel): string {
     ...view.secondSystemOnly.map((o) => renderGreyRow(o.label, 'needs a second system')),
     ...view.unscanned.map((o) => renderGreyRow(o.label, 'not scanned yet')),
   ].join('');
-  return `<h3>Data health by CRM object</h3>
-    <div class="dv-panel dv-objects">${rows}</div>`;
+  return part('data-health', `<div class="dv-panel dv-objects">${rows}</div>`);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,8 +238,7 @@ function renderSummary(view: DecisionViewModel): string {
         <div class="dv-stat-l"><span aria-hidden="true">${BUCKET_SYMBOL[b]}</span> ${escapeHtml(BUCKET_WORD[b])}</div>
       </div>`,
   ).join('');
-  return `<h3>AI use cases</h3>
-    <div class="dv-strip">${stats}</div>`;
+  return part('verdict-counts', `<div class="dv-strip">${stats}</div>`);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,8 +272,7 @@ function renderFixes(view: DecisionViewModel): string {
     view.fixGroups.length === 0
       ? `<div class="dv-empty">${statusTag('pass')} Nothing to fix: every check behind a use case passes.</div>`
       : view.fixGroups.map((g, i) => renderFix(g, i + 1)).join('');
-  return `<h3>Fix this first</h3>
-    <div class="dv-fixes">${body}</div>`;
+  return part('fix-first', `<div class="dv-fixes">${body}</div>`);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,8 +346,7 @@ function renderCard(card: UseCaseCard): string {
 }
 
 function renderCards(view: DecisionViewModel): string {
-  return `<h3>Use cases and the checks behind them</h3>
-    <div class="dv-cards">${view.cards.map(renderCard).join('')}</div>`;
+  return part('use-cases', `<div class="dv-cards">${view.cards.map(renderCard).join('')}</div>`);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,9 +370,11 @@ function renderHeatmap(view: DecisionViewModel): string {
           .join('')}</div>`,
     )
     .join('');
-  return `<h3>Use cases by CRM object</h3>
-    <div class="dv-note">Each cell shows the worst check for that pair.</div>
-    <div class="dv-heat-wrap"><div class="dv-heat" role="table" style="--dv-cols: ${columns.length}">${head}${body}</div></div>`;
+  return part(
+    'heatmap',
+    `<div class="dv-note">Each cell shows the worst check for that pair.</div>
+    <div class="dv-heat-wrap"><div class="dv-heat" role="table" style="--dv-cols: ${columns.length}">${head}${body}</div></div>`,
+  );
 }
 
 /** The whole decision view, for the top of both single-org reports. */

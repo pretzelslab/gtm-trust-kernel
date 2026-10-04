@@ -32,6 +32,7 @@ export const STYLE = `
     --dv-unknown: #3b5b82; --dv-unknown-bg: #e6ecf4;
     --dv-none: #6b7280; --dv-none-bg: #f3f4f6;
     --dv-track: #e8e9ee; --dv-mark: #1a1a1a; --dv-panel: #ffffff;
+    --accent: #2457c5; --accent-tint: #e7eefc; --band: #f4f5f8;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -42,6 +43,7 @@ export const STYLE = `
       --dv-unknown: #9db7da; --dv-unknown-bg: #1d2633;
       --dv-none: #9aa0a6; --dv-none-bg: #22252a;
       --dv-track: #2e3238; --dv-mark: #e7e7ea; --dv-panel: #181b20;
+      --accent: #7aa7ff; --accent-tint: #1b2740; --band: #1a1d23;
     }
   }
   * { box-sizing: border-box; }
@@ -79,13 +81,35 @@ export const STYLE = `
   .narrative-fallback-notice { background: var(--ninstr-bg); color: var(--ninstr-fg); border: 1px solid var(--ninstr-fg); border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 12px; }
   ul { padding-left: 20px; }
   ul li { margin-bottom: 10px; }
+  .page { max-width: 1100px; margin: 0 auto; }
+  .table-wrap { overflow-x: auto; margin-bottom: 18px; }
+  .table-wrap table { margin-bottom: 0; }
+
+  /* Jump bar and section bands. Sticky only on wide screens; :target outlines the section a link landed on. */
+  .jump { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; margin: 12px 0 4px; background: var(--bg); }
+  .jump a { color: var(--fg); text-decoration: none; font-size: 13px; font-weight: 600; padding: 4px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--band); }
+  .jump a:hover, .jump a:focus-visible { border-color: var(--accent); color: var(--accent); }
+  .jump a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dv-part, .details-band { scroll-margin-top: 64px; }
+  .dv-part { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 12px; padding: 0 18px 18px; margin: 0 0 16px; }
+  .dv-part-head { margin: 0 -18px 16px; padding: 12px 18px; background: var(--band); border-bottom: 1px solid var(--border); border-radius: 11px 11px 0 0; }
+  .dv-lede, .details-lede { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .details-band { margin-top: 32px; padding-top: 4px; border-top: 2px solid var(--border); border-radius: 0; }
+  .details-head { padding: 12px 0 4px; }
+  .details-head h2 { font-size: 18px; margin: 0; }
+  .dv-part:target, .details-band:target { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dv-part:target .dv-part-head, .details-band:target .details-head { background: var(--accent-tint); }
+  .details-band:target .details-head { padding-left: 12px; padding-right: 12px; }
+  @media (min-width: 720px) {
+    .jump { position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--border); }
+  }
 
   /* Decision view (decisionView/render.ts). Every coloured mark also has a symbol or a word. */
   .dv { margin: 18px 0 28px; }
+  .dv .dv-title { margin-bottom: 12px; }
   .dv-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
   .dv-title { font-size: 18px; margin: 0 0 4px; }
-  .dv h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 26px 0 10px; }
-  .dv h3:first-of-type { margin-top: 14px; }
+  .dv h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg); margin: 0; }
   .dv-panel { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 6px 16px; }
   .dv-muted { color: var(--muted); }
   .dv-note { color: var(--muted); font-size: 12px; margin: -4px 0 8px; }
@@ -161,6 +185,10 @@ export const STYLE = `
 
   @media (max-width: 720px) {
     body { padding: 16px; }
+    .dv-part { padding: 0 12px 12px; }
+    .dv-part-head { margin: 0 -12px 12px; padding: 10px 12px; }
+    .dv-card { padding: 12px; }
+    .dv-card-head { flex-wrap: wrap; }
     .dv-obj { grid-template-columns: 1fr; gap: 4px; }
     .dv-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .dv-cards { grid-template-columns: 1fr; }

@@ -17,6 +17,46 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Report sections, 2026-10-04
+
+Layout only, from the approved plan. No metric, threshold, verdict or
+score changed, and nothing new is sent to the AI summary. Not committed
+yet (awaiting visual review).
+
+- **Parts.** The five decision-view parts sit inside the one
+  `<section class="dv">` (the placement tests pin it) as
+  `<div class="dv-part">` cards with ids `data-health`, `verdict-counts`,
+  `fix-first`, `use-cases` and `heatmap`, a numbered `<h3>` ("1 · Data
+  health by CRM object" ... "5 · Use cases by CRM object", the current
+  words kept) and a one-line lede. `DV_PARTS` in `decisionView/render.ts`
+  holds the ids, titles and ledes.
+- **Jump bar.** `renderJumpBar()` writes six plain links (Data health,
+  Counts, Fixes, Use cases, Grid, Details) right after the header meta
+  lines of both reports. No list markup: `render.test.ts` counts `<li`.
+  Sticky at 720 px and wider; wraps and scrolls with the page below that.
+- **Details band.** The existing content after the decision view (the
+  plain report's summary paragraph and bucket lists; `latest.html`'s
+  summary cards and both tables) is wrapped in
+  `<div class="details-band" id="details">` under an `<h2>Details</h2>`
+  and a lede. Both reports sit in `<main class="page">`, at most 1100 px
+  wide; `latest.html`'s tables scroll sideways in `.table-wrap`. The
+  `--all` comparison page is unchanged.
+- **Styles.** New `--accent`, `--accent-tint` and `--band` tokens, light
+  and dark. A targeted part or the details band gets a 2 px accent
+  outline and a tinted header; targets have `scroll-margin-top: 64px`
+  so the sticky bar doesn't cover the heading. Still no script and no
+  outside URL.
+- **Glance crop.** 1000 x 1450 to 1000 x 1696. The numbered cards made
+  the top of the report taller; the nearest card edge to 1450 that is
+  not inside "Fix this first" is that card's bottom (1688 px), and the
+  next card starts at 1704, so the crop ends in the gap.
+  `glanceScreenshot.test.ts` reads the size from `GLANCE_SCREENSHOT`, so
+  no assertion changed; its title and comment still say "1000 x 1450".
+- **Checks.** At 1200 and 390 px, light and dark, `scrollWidth` equals
+  the viewport width for both plain samples and `scan.html`.
+- **Tests.** New `reportSections.test.ts` (14 tests). No existing
+  assertion was edited.
+
 ## Re-pack (C8), 2026-10-04
 
 Adapters 0.3.0 and CLI 0.2.0 packed once, after the README story, demo kit

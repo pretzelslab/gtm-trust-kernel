@@ -10,7 +10,10 @@ import type { ReportData } from './buildReport.js';
 import { escapeHtml, pageShell, renderBanner } from './shell.js';
 import { buildFullNarrative, type CapabilityOutcome } from './plainSummary.js';
 import { coverageNoticeText, sampleSizeText, stageMapNoticeText } from './render.js';
-import { renderDecisionView } from './decisionView/render.js';
+import { DETAILS_ID, renderDecisionView, renderJumpBar } from './decisionView/render.js';
+
+/** The details band's lede in the plain report. */
+export const PLAIN_DETAILS_LEDE = 'The same verdicts in sentences, use case by use case.';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -49,19 +52,25 @@ export function renderPlainReportHtml(
   const narrative = buildFullNarrative(data);
 
   const body = `
+  <main class="page">
   ${banner}
   <h1>Readiness report: ${escapeHtml(org.orgLabel)}</h1>
   <div class="meta">${escapeHtml(org.orgDescription)}</div>
   <div class="meta">Data as of ${formatPlainDate(org.asOf)} · Report generated ${formatPlainDate(data.generatedAt)}</div>
   <div class="meta">${escapeHtml(sampleSizeText(data))}</div>
+  ${renderJumpBar()}
   ${coverageNoticeText(data) ? `<p class="note">${escapeHtml(coverageNoticeText(data)!)}</p>` : ''}
   ${stageMapNoticeText(data) ? `<p class="note">${escapeHtml(stageMapNoticeText(data)!)}</p>` : ''}
   ${renderDecisionView(data)}
+  <div class="details-band" id="${DETAILS_ID}">
+  <div class="details-head"><h2>Details</h2><p class="details-lede">${escapeHtml(PLAIN_DETAILS_LEDE)}</p></div>
   <p>${escapeHtml(narrative.summary)}</p>
   ${renderBucket('Ready to use', narrative.ready)}
   ${renderBucket('Usable with caution', narrative.caution)}
   ${renderBucket("Can't tell yet", narrative.notMeasured)}
   ${renderBucket('Not ready yet', narrative.notReady)}
+  </div>
+  </main>
   `;
   return pageShell(`Readiness report (plain English) — ${org.orgLabel}`, body);
 }

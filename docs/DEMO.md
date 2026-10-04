@@ -234,7 +234,7 @@ above show the two plain reports.
 | File | What it is |
 |---|---|
 | `scan-plain.html`, `scan-plain.png` | Plain-English report on the sample CRM |
-| `scan-plain-glance.png` | The top of that report (1000 x 1450), used in the README |
+| `scan-plain-glance.png` | The top of that report down to the end of "Fix this first" (1000 x 1696), used in the README |
 | `scan.html` | Full report: every metric, threshold, sample size and the seed |
 | `scan-notes-not-measured-plain.html`, `scan-notes-not-measured-plain.png` | Plain report with Enhanced Notes unreadable |
 | `kernel-transcript.txt` | The transcript above |

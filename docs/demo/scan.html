@@ -22,6 +22,7 @@
     --dv-unknown: #3b5b82; --dv-unknown-bg: #e6ecf4;
     --dv-none: #6b7280; --dv-none-bg: #f3f4f6;
     --dv-track: #e8e9ee; --dv-mark: #1a1a1a; --dv-panel: #ffffff;
+    --accent: #2457c5; --accent-tint: #e7eefc; --band: #f4f5f8;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -32,6 +33,7 @@
       --dv-unknown: #9db7da; --dv-unknown-bg: #1d2633;
       --dv-none: #9aa0a6; --dv-none-bg: #22252a;
       --dv-track: #2e3238; --dv-mark: #e7e7ea; --dv-panel: #181b20;
+      --accent: #7aa7ff; --accent-tint: #1b2740; --band: #1a1d23;
     }
   }
   * { box-sizing: border-box; }
@@ -69,13 +71,35 @@
   .narrative-fallback-notice { background: var(--ninstr-bg); color: var(--ninstr-fg); border: 1px solid var(--ninstr-fg); border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 12px; }
   ul { padding-left: 20px; }
   ul li { margin-bottom: 10px; }
+  .page { max-width: 1100px; margin: 0 auto; }
+  .table-wrap { overflow-x: auto; margin-bottom: 18px; }
+  .table-wrap table { margin-bottom: 0; }
+
+  /* Jump bar and section bands. Sticky only on wide screens; :target outlines the section a link landed on. */
+  .jump { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; margin: 12px 0 4px; background: var(--bg); }
+  .jump a { color: var(--fg); text-decoration: none; font-size: 13px; font-weight: 600; padding: 4px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--band); }
+  .jump a:hover, .jump a:focus-visible { border-color: var(--accent); color: var(--accent); }
+  .jump a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dv-part, .details-band { scroll-margin-top: 64px; }
+  .dv-part { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 12px; padding: 0 18px 18px; margin: 0 0 16px; }
+  .dv-part-head { margin: 0 -18px 16px; padding: 12px 18px; background: var(--band); border-bottom: 1px solid var(--border); border-radius: 11px 11px 0 0; }
+  .dv-lede, .details-lede { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .details-band { margin-top: 32px; padding-top: 4px; border-top: 2px solid var(--border); border-radius: 0; }
+  .details-head { padding: 12px 0 4px; }
+  .details-head h2 { font-size: 18px; margin: 0; }
+  .dv-part:target, .details-band:target { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dv-part:target .dv-part-head, .details-band:target .details-head { background: var(--accent-tint); }
+  .details-band:target .details-head { padding-left: 12px; padding-right: 12px; }
+  @media (min-width: 720px) {
+    .jump { position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--border); }
+  }
 
   /* Decision view (decisionView/render.ts). Every coloured mark also has a symbol or a word. */
   .dv { margin: 18px 0 28px; }
+  .dv .dv-title { margin-bottom: 12px; }
   .dv-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
   .dv-title { font-size: 18px; margin: 0 0 4px; }
-  .dv h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 26px 0 10px; }
-  .dv h3:first-of-type { margin-top: 14px; }
+  .dv h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg); margin: 0; }
   .dv-panel { background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 6px 16px; }
   .dv-muted { color: var(--muted); }
   .dv-note { color: var(--muted); font-size: 12px; margin: -4px 0 8px; }
@@ -151,6 +175,10 @@
 
   @media (max-width: 720px) {
     body { padding: 16px; }
+    .dv-part { padding: 0 12px 12px; }
+    .dv-part-head { margin: 0 -12px 12px; padding: 10px 12px; }
+    .dv-card { padding: 12px; }
+    .dv-card-head { flex-wrap: wrap; }
     .dv-obj { grid-template-columns: 1fr; gap: 4px; }
     .dv-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .dv-cards { grid-template-columns: 1fr; }
@@ -160,18 +188,21 @@
 </head>
 <body>
 
+  <main class="page">
   <div class="banner">MOCK DATA — fixture: Healthy. No real CRM was contacted; nothing leaves this machine.</div>
   <h1>Readiness report: Healthy</h1>
   <div class="meta">Good field hygiene, full capability matrix, clean unique account domains.</div>
   <div class="meta">asOf 2026-09-20T00:00:00.000Z · generated 2026-09-20T12:00:00.000Z</div>
   <div class="meta">Scanned 124 of 124 eligible deals; detailed checks on 124 sampled deals (up to 20 per stage, seed &quot;report&quot;).</div>
+  <div class="jump" role="navigation" aria-label="Jump to section"><a href="#data-health">Data health</a><a href="#verdict-counts">Counts</a><a href="#fix-first">Fixes</a><a href="#use-cases">Use cases</a><a href="#heatmap">Grid</a><a href="#details">Details</a></div>
   
   
   <details class="plain-summary"><summary>Plain-English summary</summary><p>There is enough good-quality data to support pipeline risk alerts, close-date reality checks, next-step suggestions on deals, and bulk data clean-up suggestions. The data can also support AI-generated account briefs, pitch and objection-handling answers, and forecast support, but treat the output with caution. It&#39;s thinner or less certain than ideal for now. Fully automatic CRM updates stay off until a person checks every change. This report only reads your CRM data. It doesn&#39;t change anything.</p></details>
   <section class="dv" aria-label="At a glance">
     <svg class="dv-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id="dv-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="dv-hatch-bg" width="6" height="6"></rect><rect class="dv-hatch-line" x="0" y="0" width="2.5" height="6"></rect></pattern></defs></svg>
     <h2 class="dv-title">At a glance</h2>
-    <h3>Data health by CRM object</h3>
+    <div class="dv-part" id="data-health">
+    <div class="dv-part-head"><h3>1 · Data health by CRM object</h3><p class="dv-lede">Which CRM objects have weak or failing checks, worst first.</p></div>
     <div class="dv-panel dv-objects"><div class="dv-obj" data-object="opportunity">
       <div class="dv-obj-name">Opportunity</div>
       <svg class="dv-bar dv-objbar" role="img" aria-label="8 of 10 checks pass, 2 weak, 0 failing"><rect class="dv-f-pass" x="0.00%" y="0" width="80.00%" height="100%"><title>8 pass</title></rect><rect class="dv-f-weak" x="80.00%" y="0" width="20.00%" height="100%"><title>2 weak</title></rect></svg>
@@ -221,7 +252,9 @@
       <div class="dv-bar dv-objbar dv-bar-off"></div>
       <div class="dv-obj-counts">not scanned yet</div>
     </div></div>
-    <h3>AI use cases</h3>
+  </div>
+    <div class="dv-part" id="verdict-counts">
+    <div class="dv-part-head"><h3>2 · AI use cases</h3><p class="dv-lede">How many AI use cases your data supports today, and how many it can&#39;t judge yet.</p></div>
     <div class="dv-strip"><div class="dv-stat dv-s-pass" data-bucket="ready">
         <div class="dv-stat-n">4</div>
         <div class="dv-stat-l"><span aria-hidden="true">✓</span> Ready to use</div>
@@ -235,7 +268,9 @@
         <div class="dv-stat-n">0</div>
         <div class="dv-stat-l"><span aria-hidden="true">?</span> Can&#39;t tell yet</div>
       </div></div>
-    <h3>Fix this first</h3>
+  </div>
+    <div class="dv-part" id="fix-first">
+    <div class="dv-part-head"><h3>3 · Fix this first</h3><p class="dv-lede">The changes that free up the most use cases, and who usually owns them.</p></div>
     <div class="dv-fixes"><div class="dv-fix dv-s-weak-edge" data-metric="closed_deal_count_12m">
       <div class="dv-fix-rank">1</div>
       <div class="dv-fix-body">
@@ -265,7 +300,9 @@
         <div class="dv-fix-holds">Holds back 1 use case: Forecast support</div>
       </div>
     </div></div>
-    <h3>Use cases and the checks behind them</h3>
+  </div>
+    <div class="dv-part" id="use-cases">
+    <div class="dv-part-head"><h3>4 · Use cases and the checks behind them</h3><p class="dv-lede">For each use case, the checks behind its verdict and how far each is from passing.</p></div>
     <div class="dv-cards"><div class="dv-card dv-s-pass-edge" data-capability="pipeline_risk_signals">
       <div class="dv-card-head"><div class="dv-card-title">Pipeline risk alerts</div><span class="dv-tag dv-s-pass"><span aria-hidden="true">✓</span> Ready to use</span></div>
       <p class="dv-why">Stalled, silent or slipping deals can be flagged automatically.</p>
@@ -427,10 +464,15 @@
           <div class="dv-check-foot"><strong>24</strong> <span class="dv-muted">· pass ≥ 40, weak ≥ 20</span></div>
         </div></div>
     </div></div>
-    <h3>Use cases by CRM object</h3>
+  </div>
+    <div class="dv-part" id="heatmap">
+    <div class="dv-part-head"><h3>5 · Use cases by CRM object</h3><p class="dv-lede">Where each use case breaks down, by CRM object.</p></div>
     <div class="dv-note">Each cell shows the worst check for that pair.</div>
     <div class="dv-heat-wrap"><div class="dv-heat" role="table" style="--dv-cols: 6"><div class="dv-heat-row" role="row"><div class="dv-heat-corner" role="columnheader">Use case</div><div class="dv-heat-col" role="columnheader">Opportunity</div><div class="dv-heat-col" role="columnheader">Account</div><div class="dv-heat-col" role="columnheader">Activities (Task/Event)</div><div class="dv-heat-col" role="columnheader">Notes</div><div class="dv-heat-col" role="columnheader">Opportunity history</div><div class="dv-heat-col" role="columnheader">Contact roles</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Pipeline risk alerts</div><div class="dv-cell dv-s-pass" role="cell" title="Deals touched recently"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Activities captured"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Months of stage history"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Close-date reality checks</div><div class="dv-cell dv-s-pass" role="cell" title="Close dates filled in"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Close-date history on"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Next-step suggestions on deals</div><div class="dv-cell dv-s-pass" role="cell" title="Next steps filled in"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Activities captured"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-pass" role="cell" title="Notes with real content"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Contacts linked to deals"><span aria-hidden="true">✓</span> pass</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Bulk data clean-up suggestions</div><div class="dv-cell dv-s-pass" role="cell" title="Close dates filled in"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-pass" role="cell" title="Duplicate accounts"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">AI-generated account briefs</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Duplicate accounts"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-weak" role="cell" title="Notes long enough to use"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Forecast support</div><div class="dv-cell dv-s-weak" role="cell" title="Closed deals in the last 12 months"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-weak" role="cell" title="Win rates that differ by stage"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Pitch and objection-handling answers</div><div class="dv-cell dv-s-weak" role="cell" title="Closed deals in the last 12 months"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-pass" role="cell" title="Notes with real content"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div><div class="dv-heat-row" role="row"><div class="dv-heat-rowhead" role="rowheader">Fully automatic CRM updates with no human check</div><div class="dv-cell dv-s-weak" role="cell" title="Closed deals in the last 12 months"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-pass" role="cell" title="Duplicate accounts"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-weak" role="cell" title="Date anomalies"><span aria-hidden="true">!</span> weak</div><div class="dv-cell dv-s-pass" role="cell" title="Text written by people outside your company"><span aria-hidden="true">✓</span> pass</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div><div class="dv-cell dv-s-none" role="cell"><span aria-hidden="true">–</span> none</div></div></div></div>
+  </div>
   </section>
+  <div class="details-band" id="details">
+  <div class="details-head"><h2>Details</h2><p class="details-lede">Every metric with its threshold and sample size, and the capability table.</p></div>
   
   <div class="summary-grid">
     <div class="card"><div class="n">100</div><div class="l">Open sampled</div></div>
@@ -444,7 +486,7 @@
   </div>
   
   <h2>Capabilities</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Capability</th><th>Verdict</th><th>Coverage ceiling</th><th>Blockers</th></tr></thead>
     <tbody><tr>
         <td>Grounded account brief<div class="note">A cited summary of an account and its open deals, drawn only from records in the CRM.</div></td>
@@ -487,10 +529,10 @@
         <td>—</td>
         <td>2<div class="gates">temporal_anomaly_rate (degraded), closed_deal_count_12m (degraded)</div></td>
       </tr></tbody>
-  </table>
+  </table></div>
   
   <h2>Metrics</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Metric</th><th>Value</th><th>Tier</th><th>Note</th><th>Gates / threshold</th></tr></thead>
     <tbody><tr class="dim-header"><td colspan="5">D1 — Coverage</td></tr><tr>
         <td>close_date_fill_rate</td>
@@ -661,7 +703,9 @@
         <td class="note"></td>
         <td class="gates">Enablement answer engine<div class="thresh">viable ≥ 0.8, degraded ≥ 0.5</div></td>
       </tr></tbody>
-  </table>
+  </table></div>
+  </div>
+  </main>
   
 </body>
 </html>

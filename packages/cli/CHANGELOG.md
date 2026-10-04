@@ -4,6 +4,16 @@ All notable changes to `gtm-trust-kernel` (the CLI).
 
 ## 0.2.0
 
+### Changed
+
+- Both single-org reports have a jump bar under the title (Data health,
+  Counts, Fixes, Use cases, Grid, Details); it stays at the top of the
+  window on screens 720 px and wider. The five "At a glance" parts are
+  numbered cards with a one-line explanation each, the rest of the report
+  sits under a "Details" heading, pages are at most 1100 px wide, and the
+  `latest.html` tables scroll sideways on narrow screens. The `--all`
+  comparison page is unchanged.
+
 ### Added
 
 - An "At a glance" decision view at the top of both reports (the

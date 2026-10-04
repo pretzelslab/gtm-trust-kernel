@@ -38,7 +38,10 @@ gap or decision refer to that log.
   and thresholds, adds no score, sends nothing new to the AI summary, and
   leaves the `--all` comparison page unchanged. Checks that need a second
   system are left out of the object counts when none is connected; Contact
-  then shows as a greyed "needs a second system" row. Code:
+  then shows as a greyed "needs a second system" row. A jump bar under
+  the title links to the five numbered parts and to a "Details" band
+  holding the rest of each report (sticky at 720 px and wider; pages at
+  most 1100 px wide). Code:
   `packages/readiness/src/report/decisionView/`.
 - **CLI from npm.** `npx gtm-trust-kernel scan --demo` runs the report on a
   bundled sample CRM with no credentials or network. 0.2.0 adds a verdict
@@ -187,6 +190,12 @@ After that:
 2. Later: live scanning in the CLI, an `--out` flag, an approver role
    check, per-record atomic writes, an injection test corpus, an
    evaluation harness, a HubSpot adapter.
+
+### Next-release backlog
+
+- One-screen executive summary at the top: N of 8 use cases supported; top
+  2 fixes and how many use cases they unlock; built only from existing
+  data.
 
 ### Phase 5 backlog (objects not scanned yet)
 

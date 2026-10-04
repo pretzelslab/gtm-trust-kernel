@@ -59,10 +59,11 @@ export const SCREENSHOTS = {
 
 /**
  * Cropped "At a glance" screenshot for the README: the top of the plain
- * report only, 1000 x 1450. Kept out of SCREENSHOTS, which the full-length
- * PNGs in DEMO.md use.
+ * report only, 1000 x 1696, down to the bottom edge of the "Fix this
+ * first" card. Kept out of SCREENSHOTS, which the full-length PNGs in
+ * DEMO.md use.
  */
-export const GLANCE_SCREENSHOT = { png: 'scan-plain-glance.png', html: 'scan-plain.html', width: 1000, height: 1450 } as const;
+export const GLANCE_SCREENSHOT = { png: 'scan-plain-glance.png', html: 'scan-plain.html', width: 1000, height: 1696 } as const;
 
 export type TextSampleName = (typeof TEXT_SAMPLES)[number];
 
