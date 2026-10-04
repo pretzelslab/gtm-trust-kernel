@@ -150,3 +150,8 @@ none is designed, and none touches `rubric.ts` until it is.
 - Product × account coverage
 - Geo field completeness
 - Industry consistency
+- Firmographic completeness
+- Target account list coverage
+- Partner attribution on deals
+- Renewal and contract dates
+- Churn and loss reason capture
