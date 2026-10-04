@@ -257,6 +257,8 @@ export interface BuildReportOptions {
   readonly maxRecordsToScan?: number;
   /** --quick: stop the scan once every stratum's detailed-check sample is full. Off by default. */
   readonly quick?: boolean;
+  /** ISO timestamp recorded as ReportData.generatedAt; default now. Fixed by the demo kit so its committed samples are reproducible. */
+  readonly generatedAt?: string;
 }
 
 /**
@@ -464,7 +466,7 @@ export async function buildReportData(
   }
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: options.generatedAt ?? new Date().toISOString(),
     org: {
       orgLabel: options.orgLabel,
       orgDescription: options.orgDescription,

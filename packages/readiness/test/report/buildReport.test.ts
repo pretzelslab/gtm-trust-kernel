@@ -202,3 +202,19 @@ describe('no-raw-PII (D5 second-source-adapter-design.md decision 4, and D6 pii_
     expect(row.value).toBeGreaterThan(0); // real matches exist — a passing test here isn't just "nothing to find"
   });
 });
+
+describe('buildReportData generatedAt', () => {
+  it('records the given timestamp, and the current time when none is given', async () => {
+    const fixture = MOCK_ORG_FIXTURES.healthy;
+    const base = { orgLabel: fixture.label, orgDescription: fixture.description, asOf: fixture.asOf };
+    const fixed = await buildReportData(new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities), undefined, {
+      ...base,
+      generatedAt: '2026-09-20T12:00:00.000Z',
+    });
+    expect(fixed.generatedAt).toBe('2026-09-20T12:00:00.000Z');
+
+    const before = Date.now();
+    const now = await buildReportData(new MockAdapter(fixture.orgId, fixture.data, fixture.capabilities), undefined, base);
+    expect(Date.parse(now.generatedAt)).toBeGreaterThanOrEqual(before);
+  });
+});
