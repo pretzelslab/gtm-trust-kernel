@@ -17,6 +17,24 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Dark-mode screenshots, 2026-10-04
+
+Docs and demo kit only; no package file changed (pack dry-run shasums for
+adapters 0.3.0 and CLI 0.2.0 are the ones in STATUS.md).
+
+- The demo screenshot generator also writes `scan-plain-dark.png` and
+  `scan-plain-glance-dark.png`, rendered with `prefers-color-scheme: dark`
+  at the light ones' viewport and crop height (1000 x 1696). They are
+  returned from `writeSamples` as `dark`, outside `written`, like `glance`,
+  so the existing "regenerates every sample" assertion needed no edit.
+- README and DEMO.md show the glance image and the full screenshot with
+  `<picture>`: a `prefers-color-scheme: dark` source, the light PNG as the
+  default `<img>`.
+- Tests: the dark PNGs are added to the screenshot existence test, the
+  `--write-samples` test and the glance size test as new cases; no
+  existing assertion was changed. The light PNGs and all text samples
+  regenerate unchanged.
+
 ## Re-pack after the use-case section, 2026-10-04
 
 CLI 0.2.0 re-packed (the report sections and use-case section changes live

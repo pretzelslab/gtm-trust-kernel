@@ -48,7 +48,10 @@ Every coloured mark also carries a symbol and a word, and the view uses
 the same verdicts and thresholds as the rest of the report. It adds no
 score.
 
-![The plain-English readiness report for the sample CRM, opening with the At a glance view: data health by CRM object, use-case counts, a Fix this first list, a card per use case and a use-case by object grid. Next-step suggestions on deals is Ready to use.](demo/scan-plain.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="demo/scan-plain-dark.png">
+  <img src="demo/scan-plain.png" alt="The plain-English readiness report for the sample CRM, opening with the At a glance view: data health by CRM object, use-case counts, a Fix this first list, a card per use case and a use-case by object grid. Next-step suggestions on deals is Ready to use." width="1000">
+</picture>
 
 ### When the scan can't see the notes
 
@@ -235,6 +238,7 @@ above show the two plain reports.
 |---|---|
 | `scan-plain.html`, `scan-plain.png` | Plain-English report on the sample CRM |
 | `scan-plain-glance.png` | The top of that report down to the end of "Fix this first" (1000 x 1696), used in the README |
+| `scan-plain-dark.png`, `scan-plain-glance-dark.png` | The same two screenshots rendered in dark mode; GitHub shows them to readers on a dark theme |
 | `scan.html` | Full report: every metric, threshold, sample size and the seed |
 | `scan-notes-not-measured-plain.html`, `scan-notes-not-measured-plain.png` | Plain report with Enhanced Notes unreadable |
 | `kernel-transcript.txt` | The transcript above |

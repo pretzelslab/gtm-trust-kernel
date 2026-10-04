@@ -14,8 +14,8 @@ async function main(): Promise<void> {
     process.stdout.write((await runDemo()).transcript);
     return;
   }
-  const { run, written, glance } = await writeSamples();
-  written.push(glance);
+  const { run, written, glance, dark } = await writeSamples();
+  written.push(glance, ...dark);
   process.stdout.write(run.transcript);
   for (const file of written) console.log(`Wrote ${path.relative(process.cwd(), file) || file}`);
   console.log(`Samples are in ${SAMPLES_DIR}`);

@@ -65,6 +65,15 @@ export const SCREENSHOTS = {
  */
 export const GLANCE_SCREENSHOT = { png: 'scan-plain-glance.png', html: 'scan-plain.html', width: 1000, height: 1696 } as const;
 
+/**
+ * Dark-mode twins of the plain report screenshots (rendered with
+ * prefers-color-scheme: dark, same viewport and crop height), for the
+ * README's and DEMO.md's <picture> elements. Kept out of SCREENSHOTS and
+ * the `written` list, like the glance image.
+ */
+export const DARK_SCREENSHOTS = { 'scan-plain-dark.png': 'scan-plain.html' } as const;
+export const GLANCE_DARK_SCREENSHOT = { ...GLANCE_SCREENSHOT, png: 'scan-plain-glance-dark.png' } as const;
+
 export type TextSampleName = (typeof TEXT_SAMPLES)[number];
 
 const NOT_MEASURED_DESCRIPTION =

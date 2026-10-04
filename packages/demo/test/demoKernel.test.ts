@@ -12,6 +12,8 @@ import { NOTES_ACCESS_HINT } from '@gtm-trust-kernel/adapters/salesforce.js';
 import { healthyFixture } from '@gtm-trust-kernel/readiness/fixtures/healthy.js';
 import { gateVerdictOf } from '@gtm-trust-kernel/readiness/report/buildReport.js';
 import {
+  DARK_SCREENSHOTS,
+  GLANCE_DARK_SCREENSHOT,
   MOTION_CAPABILITY,
   plainBucketOf,
   renderTextSamples,
@@ -55,6 +57,14 @@ describe('committed samples', () => {
     }
   });
 
+  it('include the dark-mode PNG screenshots', () => {
+    for (const png of [...Object.keys(DARK_SCREENSHOTS), GLANCE_DARK_SCREENSHOT.png]) {
+      const file = path.join(SAMPLES_DIR, png);
+      expect(existsSync(file), png).toBe(true);
+      expect(readFileSync(file).subarray(0, 8).equals(PNG_SIGNATURE), png).toBe(true);
+    }
+  });
+
   it('hold no record text, emails, account domains, hostnames or local paths', () => {
     const d = healthyFixture.data;
     const noteBodies = d.notes.map((n) => n.body.value);
@@ -90,6 +100,13 @@ describe('--write-samples', () => {
       expect(readFileSync(file).subarray(0, 8).equals(PNG_SIGNATURE), png).toBe(true);
       expect(statSync(file).size, png).toBeGreaterThan(10_000);
     }
+  });
+
+  it('also writes the dark-mode screenshots, apart from the written list', async () => {
+    const { written, dark } = await writeSamples(dir);
+    expect(written.map((f) => path.basename(f))).not.toContain('scan-plain-dark.png');
+    expect(dark.map((f) => path.basename(f)).sort()).toEqual([...Object.keys(DARK_SCREENSHOTS), GLANCE_DARK_SCREENSHOT.png].sort());
+    for (const file of dark) expect(statSync(file).size, file).toBeGreaterThan(10_000);
   });
 });
 
