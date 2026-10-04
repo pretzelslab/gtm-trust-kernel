@@ -73,7 +73,7 @@ Every GTM motion runs on the same spine: accounts, deals, products and
 activities. When the spine is weak, each motion stalls in its own way.
 Cross-sell can't see what an account already owns. A new-geo push can't
 size a region it can't filter. The scan checks the spine before AI goes on
-top. Check your data before you buy.
+top.
 
 **New business**
 
@@ -126,8 +126,7 @@ two problems show up indirectly, through duplicate accounts and
 cross-system matching rates.
 
 An AI tool fed this data still gives answers. They just aren't right, and
-the reps who notice stop using it.
-
+the reps who notice stop using it. Check your data before you buy.
 
 ## Check the data before you put AI into these moments
 
@@ -352,8 +351,8 @@ Not yet. Salesforce is the only CRM it can scan today. HubSpot is planned.
 ## Help calibrate the thresholds
 
 The verdicts are only as good as the thresholds behind them, and those need
-real orgs. If you run the scan, you can help by sharing your anonymised
-scores: **share anonymised scores, never data.** The form only offers
+real orgs. If you run the scan, you can help: **share anonymised scores,
+never data.** The form only offers
 fixed choices (verdicts and value ranges), so it has no place for record
 data. [Share your scores](https://github.com/pretzelslab/gtm-trust-kernel/issues/new?template=calibration-scores.yml).
 
