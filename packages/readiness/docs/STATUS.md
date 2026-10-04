@@ -155,7 +155,10 @@ point, the shasums above are stale: re-run the pack check.
 rewrite. They must stay private: never make them public, transfer them,
 or publish from them. The same applies to the local mirror and bundle
 backups. Published 0.1.0 and adapters 0.2.0 `gitHead` values point at
-pre-rewrite commits and don't resolve in this repository.
+pre-rewrite commits and don't resolve in this repository. The tags
+`adapters-v0.1.0`, `adapters-v0.2.0` and `cli-v0.1.0` mark the released
+content on the rewritten history; npm's `gitHead` for those versions
+points to pre-rewrite commits.
 
 ## Next
 

@@ -53,11 +53,12 @@ One commit after the decision view. No metric, threshold or score changed.
   the distinct use cases they hold back (a use case behind three checks
   counts once), then worst status, then the first check's place in
   `THRESHOLDS`. Checks with a static action are never grouped.
-- **Screenshot.** `docs/demo/scan-plain-glance.png`, the top 1000 x 1400
+- **Screenshot.** `docs/demo/scan-plain-glance.png`, the top 1000 x 1450
   of the plain report, is the README image; DEMO.md keeps the full-length
   PNGs. It is returned from `writeSamples` as `glance`, outside `written`,
   so the existing "regenerates every sample" assertion needed no edit.
-  The 1400 px cut falls inside the fourth fix row.
+  It first cut through the fourth fix row at 1400 px; 1450 ends after the
+  last fix row, before the use-case cards.
 - **Tests.** New `decisionView.polish.test.ts` and
   `glanceScreenshot.test.ts`. No existing assertion was edited; the demo
   sample comparison failed until the samples were regenerated, as designed.

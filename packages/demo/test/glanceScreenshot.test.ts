@@ -1,6 +1,6 @@
 /**
  * The cropped "At a glance" screenshot used by the README: committed, a
- * valid PNG, and exactly 1000 x 1400.
+ * valid PNG, and exactly 1000 x 1450.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { GLANCE_SCREENSHOT } from '../src/demoKernel.js';
 import { SAMPLES_DIR } from '../src/samples.js';
 
 describe('glance screenshot', () => {
-  it('is committed as a 1000 x 1400 PNG', () => {
+  it('is committed as a 1000 x 1450 PNG', () => {
     const file = path.join(SAMPLES_DIR, GLANCE_SCREENSHOT.png);
     expect(existsSync(file)).toBe(true);
     const bytes = readFileSync(file);
