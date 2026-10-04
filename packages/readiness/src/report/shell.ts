@@ -126,6 +126,7 @@ export const STYLE = `
   .dv-fixes { display: grid; gap: 8px; }
   .dv-fix { display: grid; grid-template-columns: 28px 1fr; gap: 12px; background: var(--dv-panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
   .dv-fix-rank { font-size: 18px; font-weight: 800; color: var(--muted); line-height: 1.3; text-align: center; }
+  .dv-fix-group { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
   .dv-fix-action { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
   .dv-fix-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; }
   .dv-fix-holds { font-size: 12px; color: var(--muted); margin-top: 4px; }

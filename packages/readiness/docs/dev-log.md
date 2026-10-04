@@ -17,6 +17,31 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Decision view polish, 2026-10-04
+
+One commit after the decision view. No metric, threshold or score changed.
+
+- **Order.** Use-case cards group by verdict in the summary strip's order
+  (Ready, Usable with caution, Not ready yet, Can't tell yet), and within
+  a group follow the README's lead order (account briefs, forecast
+  support, pipeline risk alerts, close-date checks, next-step
+  suggestions, pitch and objection-handling answers, bulk clean-up, fully
+  automatic updates). The heatmap rows use the same order.
+- **Fix groups.** `fixes` stays flat, one entry per check (the model tests
+  assert it). The new `fixGroups` merges can't-tell checks that share one
+  adapter hint into one row, "One setting unlocks N checks". Groups rank by
+  the distinct use cases they hold back (a use case behind three checks
+  counts once), then worst status, then the first check's place in
+  `THRESHOLDS`. Checks with a static action are never grouped.
+- **Screenshot.** `docs/demo/scan-plain-glance.png`, the top 1000 x 1400
+  of the plain report, is the README image; DEMO.md keeps the full-length
+  PNGs. It is returned from `writeSamples` as `glance`, outside `written`,
+  so the existing "regenerates every sample" assertion needed no edit.
+  The 1400 px cut falls inside the fourth fix row.
+- **Tests.** New `decisionView.polish.test.ts` and
+  `glanceScreenshot.test.ts`. No existing assertion was edited; the demo
+  sample comparison failed until the samples were regenerated, as designed.
+
 ## Decision view, 2026-10-03
 
 Goal: a sales or RevOps leader sees what to clean and what to do in about

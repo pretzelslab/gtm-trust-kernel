@@ -12,7 +12,8 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   object and likely owner for each check, a card per use case with each
   check's value against its pass and weak lines, and a use case by object
   grid. It uses the same verdicts and thresholds as the rest of the report
-  and adds no score. Inline HTML and SVG only; the report still works
+  and adds no score. Use cases are grouped by verdict, and checks that one
+  adapter setting unlocks share a single "Fix this first" row. Inline HTML and SVG only; the report still works
   offline. The `--all` comparison page is unchanged.
 - `--fail-on [<verdicts>]`: exit 2 when any capability has a listed
   verdict (`blocked`, `degraded`, `not_measured`; a bare `--fail-on` means

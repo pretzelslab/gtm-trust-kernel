@@ -38,6 +38,19 @@ const METRIC_ORDER: readonly MetricId[] = Object.keys(THRESHOLDS) as MetricId[];
 const METRIC_INDEX: ReadonlyMap<MetricId, number> = new Map(METRIC_ORDER.map((m, i) => [m, i]));
 const CAPABILITY_ORDER: readonly CapabilityId[] = CAPABILITIES.map((c) => c.id);
 
+/** Display order for use cases within a bucket and for heatmap rows: the README's lead order. */
+const DISPLAY_ORDER: readonly CapabilityId[] = [
+  'grounded_account_brief',
+  'forecast_assistance',
+  'pipeline_risk_signals',
+  'close_date_realism',
+  'next_action_recommendation',
+  'enablement_answer_engine',
+  'bulk_hygiene_automation',
+  'autonomous_writeback',
+];
+const BUCKET_ORDER: readonly CardBucket[] = ['ready', 'caution', 'notReady', 'cantTell'];
+
 export function plainStatusOf(row: MetricRow): PlainStatus {
   switch (gateVerdictOf(row)) {
     case 'viable':
@@ -96,6 +109,22 @@ export interface FixItem {
   readonly action: string | null;
   readonly holdsBackCount: number;
   readonly holdsBack: readonly { readonly id: CapabilityId; readonly label: string }[];
+}
+
+/**
+ * One row of "Fix this first". Checks that are can't-tell and share the
+ * same adapter setting hint form one group ("One setting unlocks N
+ * checks"); every other check is a group of one.
+ */
+export interface FixGroup {
+  readonly items: readonly FixItem[];
+  /** The worst status among the items (failing, then can't tell, then weak). */
+  readonly status: Exclude<PlainStatus, 'pass'>;
+  /** The shared action or hint; null when the adapter gave none. */
+  readonly action: string | null;
+  /** Distinct use cases held back by any item, in the fixed use-case order. */
+  readonly holdsBack: readonly { readonly id: CapabilityId; readonly label: string }[];
+  readonly holdsBackCount: number;
 }
 
 export type CheckKind = 'rate' | 'yes_no' | 'scale';
@@ -161,6 +190,8 @@ export interface DecisionViewModel {
   readonly summary: SummaryStrip;
   /** Empty means every gating check passes: the "nothing to fix" state. */
   readonly fixes: readonly FixItem[];
+  /** `fixes` grouped by shared setting hint, ranked by distinct use cases held back. */
+  readonly fixGroups: readonly FixGroup[];
   readonly cards: readonly UseCaseCard[];
   readonly heatmap: Heatmap;
 }
@@ -260,6 +291,31 @@ function buildFixes(rows: readonly MetricRow[]): FixItem[] {
   );
 }
 
+/** Groups can't-tell fixes that share one setting hint; ranks groups by distinct use cases held back. */
+function buildFixGroups(fixes: readonly FixItem[]): FixGroup[] {
+  const buckets = new Map<string, FixItem[]>();
+  fixes.forEach((f, i) => {
+    const key = f.status === 'cant_tell' && f.action !== null ? `hint:${f.action}` : `own:${i}`;
+    const list = buckets.get(key);
+    if (list) list.push(f);
+    else buckets.set(key, [f]);
+  });
+  const groups: FixGroup[] = [...buckets.values()].map((items) => {
+    const ids = new Set(items.flatMap((f) => f.holdsBack.map((h) => h.id)));
+    const holdsBack = CAPABILITY_ORDER.filter((id) => ids.has(id)).map((id) => ({ id, label: plainCapabilityLabel(id) }));
+    const status = items.reduce<FixGroup['status']>(
+      (w, f) => (FIX_STATUS_RANK[f.status] < FIX_STATUS_RANK[w] ? f.status : w),
+      items[0]!.status,
+    );
+    return { items, status, action: items[0]!.action, holdsBack, holdsBackCount: holdsBack.length };
+  });
+  const first = (g: FixGroup): number => Math.min(...g.items.map((f) => METRIC_INDEX.get(f.metric)!));
+  return groups.sort(
+    (a, b) =>
+      b.holdsBackCount - a.holdsBackCount || FIX_STATUS_RANK[a.status] - FIX_STATUS_RANK[b.status] || first(a) - first(b),
+  );
+}
+
 function buildCheck(row: MetricRow, secondSource: boolean): CardCheck {
   const t = THRESHOLDS[row.metric];
   const viableAt = numericThreshold(t.viableAt);
@@ -303,7 +359,7 @@ export function buildDecisionView(data: ReportData): DecisionViewModel {
     [...narrative.ready, ...narrative.caution, ...narrative.notMeasured, ...narrative.notReady].map((o) => [o.label, o.outcome]),
   );
 
-  const cards: UseCaseCard[] = capabilityIds.map((id) => {
+  const cards: UseCaseCard[] = [...capabilityIds].map((id) => {
     const bucket = bucketOf(data, id);
     const label = plainCapabilityLabel(id);
     return {
@@ -315,6 +371,12 @@ export function buildDecisionView(data: ReportData): DecisionViewModel {
       checks: rows.filter((r) => r.gatesCapabilities.some((g) => g.id === id)).map((r) => buildCheck(r, secondSource)),
     };
   });
+
+  cards.sort(
+    (a, b) =>
+      BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket) ||
+      DISPLAY_ORDER.indexOf(a.id) - DISPLAY_ORDER.indexOf(b.id),
+  );
 
   // Heatmap columns: scanned objects with at least one gating check.
   const gatingObjects = new Set(rows.filter((r) => r.gatesCapabilities.length > 0).map((r) => METRIC_OBJECT[r.metric]));
@@ -336,6 +398,7 @@ export function buildDecisionView(data: ReportData): DecisionViewModel {
   };
 
   const { objects, secondSystemOnly } = buildObjects(rows, secondSource);
+  const fixes = buildFixes(rows);
   return {
     secondSourceConnected: secondSource,
     objects,
@@ -347,7 +410,8 @@ export function buildDecisionView(data: ReportData): DecisionViewModel {
       notReady: narrative.notReady.length,
       cantTell: narrative.notMeasured.length,
     },
-    fixes: buildFixes(rows),
+    fixes,
+    fixGroups: buildFixGroups(fixes),
     cards,
     heatmap,
   };

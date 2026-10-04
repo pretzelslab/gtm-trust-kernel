@@ -33,13 +33,16 @@ sees what to clean and what to do in about ten seconds:
   listed greyed as "not scanned yet".
 - **AI use cases:** four counts: Ready to use, Usable with caution, Not
   ready yet and Can't tell yet.
-- **Fix this first:** the checks holding back the most use cases, each
+- **Fix this first:** the fixes holding back the most use cases, each
   with a plain action, the object, the likely owner and the use cases it
-  holds back.
-- **Use cases and the checks behind them:** a card per use case, with
-  each check's value against its pass and weak lines.
+  holds back. When one adapter setting unlocks several checks, they share
+  one row ("One setting unlocks 3 checks"), ranked by the distinct use
+  cases it holds back.
+- **Use cases and the checks behind them:** a card per use case, grouped
+  by verdict (Ready to use, Usable with caution, Not ready yet, Can't
+  tell yet), with each check's value against its pass and weak lines.
 - **Use cases by CRM object:** a grid showing the worst check for each
-  pair.
+  pair, in the same order as the cards.
 
 Every coloured mark also carries a symbol and a word, and the view uses
 the same verdicts and thresholds as the rest of the report. It adds no
@@ -231,6 +234,7 @@ above show the two plain reports.
 | File | What it is |
 |---|---|
 | `scan-plain.html`, `scan-plain.png` | Plain-English report on the sample CRM |
+| `scan-plain-glance.png` | The top of that report (1000 x 1400), used in the README |
 | `scan.html` | Full report: every metric, threshold, sample size and the seed |
 | `scan-notes-not-measured-plain.html`, `scan-notes-not-measured-plain.png` | Plain report with Enhanced Notes unreadable |
 | `kernel-transcript.txt` | The transcript above |

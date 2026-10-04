@@ -57,6 +57,13 @@ export const SCREENSHOTS = {
   'scan-notes-not-measured-plain.png': 'scan-notes-not-measured-plain.html',
 } as const;
 
+/**
+ * Cropped "At a glance" screenshot for the README: the top of the plain
+ * report only, 1000 x 1400. Kept out of SCREENSHOTS, which the full-length
+ * PNGs in DEMO.md use.
+ */
+export const GLANCE_SCREENSHOT = { png: 'scan-plain-glance.png', html: 'scan-plain.html', width: 1000, height: 1400 } as const;
+
 export type TextSampleName = (typeof TEXT_SAMPLES)[number];
 
 const NOT_MEASURED_DESCRIPTION =

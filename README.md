@@ -234,9 +234,10 @@ Not ready yet
 ```
 
 `out/latest.html` has the full detail: every metric, its threshold, the
-sample sizes and the seed. The plain report for the sample CRM:
+sample sizes and the seed. The top of the plain report for the sample CRM (the full-length report is
+in [docs/DEMO.md](docs/DEMO.md)):
 
-![The plain-English readiness report for the sample CRM. It opens with an At a glance view (data health by CRM object, use-case counts, a Fix this first list, a card per use case and a use-case by object grid), then groups use cases under Ready to use, Usable with caution and Not ready yet.](docs/demo/scan-plain.png)
+![The plain-English readiness report for the sample CRM. It opens with an At a glance view (data health by CRM object, use-case counts, a Fix this first list, a card per use case and a use-case by object grid), then groups use cases under Ready to use, Usable with caution and Not ready yet.](docs/demo/scan-plain-glance.png)
 
 When a scan can't see data a use case needs, it says "Can't tell yet" and
 names the setting to change, instead of guessing. Here, the same data read

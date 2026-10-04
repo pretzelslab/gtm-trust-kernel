@@ -19,7 +19,7 @@ import {
   type CardCheck,
   type CellStatus,
   type DecisionViewModel,
-  type FixItem,
+  type FixGroup,
   type ObjectHealthRow,
   type PlainStatus,
   type UseCaseCard,
@@ -192,14 +192,23 @@ function renderSummary(view: DecisionViewModel): string {
 // 3. Fix this first
 // ---------------------------------------------------------------------------
 
-function renderFix(fix: FixItem, rank: number): string {
-  const action = fix.action ?? NO_HINT_FALLBACK;
-  const holds = `Holds back ${plural(fix.holdsBackCount, 'use case', 'use cases')}: ${fix.holdsBack.map((h) => h.label).join(', ')}`;
-  return `<div class="dv-fix dv-s-${fix.status}-edge" data-metric="${escapeHtml(fix.metric)}">
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
+function renderFix(group: FixGroup, rank: number): string {
+  const action = group.action ?? NO_HINT_FALLBACK;
+  const many = group.items.length > 1;
+  const holds = `Holds back ${plural(group.holdsBackCount, 'use case', 'use cases')}: ${group.holdsBack.map((h) => h.label).join(', ')}`;
+  const objects = unique(group.items.map((f) => f.objectLabel)).join(', ');
+  const owners = unique(group.items.map((f) => f.owner)).join(', ');
+  const checks = group.items.map((f) => checkName(f.metric)).join(', ');
+  const headline = many ? `<div class="dv-fix-group">One setting unlocks ${group.items.length} checks</div>` : '';
+  return `<div class="dv-fix dv-s-${group.status}-edge" data-metric="${escapeHtml(group.items.map((f) => f.metric).join(' '))}">
       <div class="dv-fix-rank">${rank}</div>
       <div class="dv-fix-body">
-        <div class="dv-fix-action">${escapeHtml(action)}</div>
-        <div class="dv-fix-meta">${statusTag(fix.status)} <span>${escapeHtml(fix.objectLabel)}</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: ${escapeHtml(fix.owner)}</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">${escapeHtml(checkName(fix.metric))}</span></div>
+        ${headline}<div class="dv-fix-action">${escapeHtml(action)}</div>
+        <div class="dv-fix-meta">${statusTag(group.status)} <span>${escapeHtml(objects)}</span> <span class="dv-dot" aria-hidden="true">·</span> <span>Owner: ${escapeHtml(owners)}</span> <span class="dv-dot" aria-hidden="true">·</span> <span class="dv-muted">${escapeHtml(checks)}</span></div>
         <div class="dv-fix-holds">${escapeHtml(holds)}</div>
       </div>
     </div>`;
@@ -207,9 +216,9 @@ function renderFix(fix: FixItem, rank: number): string {
 
 function renderFixes(view: DecisionViewModel): string {
   const body =
-    view.fixes.length === 0
+    view.fixGroups.length === 0
       ? `<div class="dv-empty">${statusTag('pass')} Nothing to fix: every check behind a use case passes.</div>`
-      : view.fixes.map((f, i) => renderFix(f, i + 1)).join('');
+      : view.fixGroups.map((g, i) => renderFix(g, i + 1)).join('');
   return `<h3>Fix this first</h3>
     <div class="dv-fixes">${body}</div>`;
 }
