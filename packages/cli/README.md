@@ -108,10 +108,9 @@ plain words. The detailed report (`latest.html`), `--json` and
 
 One exception: fully automatic CRM updates is shown as **Not ready yet**
 when its raw verdict is `degraded` or `not_measured`, because AI writing
-to the CRM needs a person to check every change. `--fail-on` uses the raw
-verdict, so on the demo data a bare `--fail-on` exits 0 even though the
-plain report lists one use case as not ready. Use
-`--fail-on blocked,degraded` to catch it.
+to the CRM needs a person to check every change. `--fail-on blocked` (and a
+bare `--fail-on`) follows the same rule: it fails whenever the plain report
+shows a use case as **Not ready yet**.
 
 ### `--fail-on` (for CI)
 
@@ -120,10 +119,12 @@ Opt-in. The value is a comma-separated list of `blocked`, `degraded` and
 only when you list it. The report is always written first; then the exit
 code is 2 if any capability has a listed verdict, and the failing ones are
 named on stderr. `--fail-on` works on the raw verdicts shown in
-`latest.html`.
+`latest.html`, except that `blocked` also matches fully automatic CRM
+updates when the plain report shows it as Not ready yet. On the demo data a
+bare `--fail-on` exits 2 for that reason.
 
 ```bash
-npx gtm-trust-kernel scan --demo --fail-on                    # fail on blocked
+npx gtm-trust-kernel scan --demo --fail-on                    # fail on anything "Not ready yet"
 npx gtm-trust-kernel scan --demo --fail-on blocked,degraded
 ```
 

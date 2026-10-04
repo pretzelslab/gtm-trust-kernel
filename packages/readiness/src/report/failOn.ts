@@ -3,7 +3,9 @@
  * the `report` script (cli.ts) and the `gtm-trust-kernel scan` command.
  *
  *   --fail-on                      same as --fail-on blocked
- *   --fail-on blocked              exit 2 if any capability is blocked
+ *   --fail-on blocked              exit 2 if any capability shows as "Not ready
+ *                                  yet" in the plain report: blocked, or
+ *                                  autonomous_writeback degraded or not measured
  *   --fail-on blocked,degraded     exit 2 if any is blocked or degraded
  *   --fail-on not_measured         not_measured counts only when listed
  *
@@ -17,6 +19,7 @@
 
 import type { CapabilityVerdict } from '../rubric.js';
 import type { ReportCapabilityRow } from './buildReport.js';
+import { showsAsNotReady } from './plainSummary.js';
 
 export const FAIL_ON_VERDICTS = ['blocked', 'degraded', 'not_measured'] as const satisfies readonly CapabilityVerdict[];
 export type FailOnVerdict = (typeof FAIL_ON_VERDICTS)[number];
@@ -72,12 +75,26 @@ export function evaluateFailOn(
   failOn: ReadonlySet<FailOnVerdict> | undefined,
 ): FailOnResult {
   if (!failOn) return { exitCode: 0, failing: [] };
-  const failing = capabilities.filter((c) => (failOn as ReadonlySet<string>).has(c.verdict));
+  const failing = capabilities.filter((c) => matches(c, failOn));
   if (failing.length === 0) return { exitCode: 0, failing };
-  const list = failing.map((c) => `${c.label} (${c.verdict})`).join(', ');
+  const list = failing.map((c) => `${c.label} (${describeVerdict(c)})`).join(', ');
   return {
     exitCode: EXIT_VERDICT_FAILURE,
     failing,
     message: `--fail-on ${[...failOn].join(',')}: ${failing.length} capabilit${failing.length === 1 ? 'y' : 'ies'} failed: ${list}`,
   };
+}
+
+/**
+ * A raw verdict match, plus `blocked` matching anything the plain report
+ * shows as "Not ready yet", so the gate and the plain report agree.
+ */
+function matches(c: ReportCapabilityRow, failOn: ReadonlySet<FailOnVerdict>): boolean {
+  if ((failOn as ReadonlySet<string>).has(c.verdict)) return true;
+  return failOn.has('blocked') && showsAsNotReady(c);
+}
+
+/** The raw verdict, noting when the plain report shows it as not ready. */
+function describeVerdict(c: ReportCapabilityRow): string {
+  return c.verdict !== 'blocked' && showsAsNotReady(c) ? `${c.verdict}, shown as not ready` : c.verdict;
 }

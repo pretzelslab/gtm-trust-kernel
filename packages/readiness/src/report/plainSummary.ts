@@ -137,6 +137,15 @@ function effectiveBucket(c: ReportCapabilityRow): Bucket {
   return 'notReady';
 }
 
+/**
+ * True when the plain report lists this capability under "Not ready yet":
+ * blocked, or autonomous_writeback degraded or not measured (the fail-safe
+ * above). `--fail-on blocked` (and a bare `--fail-on`) uses the same rule.
+ */
+export function showsAsNotReady(c: ReportCapabilityRow): boolean {
+  return effectiveBucket(c) === 'notReady';
+}
+
 function joinPlain(phrases: readonly string[]): string {
   if (phrases.length === 0) return '';
   if (phrases.length === 1) return phrases[0]!;

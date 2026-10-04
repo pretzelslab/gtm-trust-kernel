@@ -8,7 +8,10 @@ All notable changes to `gtm-trust-kernel` (the CLI).
 
 - `--fail-on [<verdicts>]`: exit 2 when any capability has a listed
   verdict (`blocked`, `degraded`, `not_measured`; a bare `--fail-on` means
-  `blocked`), after the report is written. Off by default.
+  `blocked`), after the report is written. Off by default. `blocked` also
+  matches anything the plain report shows as "Not ready yet" (fully
+  automatic CRM updates when degraded or not measured), so the gate and
+  the plain report agree; on the demo data a bare `--fail-on` exits 2.
 - A verdict summary after each scan ("4 ready, 3 use with caution, 1 not
   ready", the same groups as the plain-English report) and which file to
   open.

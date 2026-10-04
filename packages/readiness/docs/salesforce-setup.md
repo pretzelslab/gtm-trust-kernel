@@ -286,7 +286,7 @@ npm run report -- --live                            # HTML reports
 npm run report -- --live --json                     # also write the report data as JSON
 npm run report -- --live --quick                    # stop scanning once every stage's sample is full
 npm run report -- --live --hydrate-per-stratum 5    # detailed checks on up to 5 deals per stage (default 20)
-npm run report -- --live --fail-on                  # exit 2 if any capability is blocked
+npm run report -- --live --fail-on                  # exit 2 if any capability is "Not ready yet"
 npm run report -- --live --show-org                 # include your org's hostname in the reports
 ```
 
@@ -305,7 +305,8 @@ so. The hostname is never sent with `--narrative`.
 `--fail-on` is opt-in and off by default: without it, a finished run exits
 0 whatever its verdicts. With it, the report is still written, then the run
 exits 2 if any capability has a listed verdict (a comma list of `blocked`,
-`degraded`, `not_measured`; a bare `--fail-on` means `blocked`;
+`degraded`, `not_measured`; a bare `--fail-on` means `blocked`, which also
+matches anything the plain report shows as "Not ready yet";
 `not_measured` counts only when listed). Errors, including an invalid
 `--fail-on` value, exit 1.
 

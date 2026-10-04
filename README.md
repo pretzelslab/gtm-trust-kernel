@@ -241,7 +241,7 @@ per problem.
 |---|---|
 | `--narrative` | Add an AI-written summary. Needs `ANTHROPIC_API_KEY`. Asks before sending anything |
 | `--narrative-preview` | Show the exact request `--narrative` would send. Sends nothing |
-| `--fail-on` | For CI: exit with code 2 if any use case has a verdict you list (a bare `--fail-on` means blocked). How the plain verdict words map to these: [CLI README](packages/cli/README.md#verdict-words) |
+| `--fail-on` | For CI: exit with code 2 if any use case has a verdict you list. A bare `--fail-on` fails on anything the plain report shows as Not ready yet. How the plain verdict words map to these: [CLI README](packages/cli/README.md#verdict-words) |
 | `--show-org` | Live scans only: include your org's hostname in the reports (it's left out by default) |
 
 All options, exit codes and `--fail-on` details:
