@@ -20,8 +20,10 @@ Governing rules: `CLAUDE.md` at the repo root.
 ## Report sections, 2026-10-04
 
 Layout only, from the approved plan. No metric, threshold, verdict or
-score changed, and nothing new is sent to the AI summary. Not committed
-yet (awaiting visual review).
+score changed, and nothing new is sent to the AI summary. Visual review
+approved; committed as 5158a15. CLI 0.2.0 re-packed afterwards (new
+shasum in STATUS.md, "Releases"); adapters 0.3.0 unchanged. Part 5 keeps
+the heading "Use cases by CRM object".
 
 - **Parts.** The five decision-view parts sit inside the one
   `<section class="dv">` (the placement tests pin it) as

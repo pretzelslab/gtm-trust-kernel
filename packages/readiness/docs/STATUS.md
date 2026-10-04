@@ -124,12 +124,13 @@ is known), and must be dispatched from the release tag, not `master`.
 
 Pack check (`npm pack --dry-run` in each package folder, after a clean
 `npm run ci`; the tarballs built for the clean-room install had the same
-shasums):
+shasums). Re-packed after the report sections change (5158a15): the
+adapters tarball is byte-identical, only the CLI shasum changed:
 
 | Package | Tarball | Files | Size (packed / unpacked) | shasum |
 |---|---|---|---|---|
 | `@gtm-trust-kernel/adapters` | 0.3.0 | 24 | 60.3 kB / 229.2 kB | `59cd85dc00821587025c9cf32cda12f88ccc4e49` |
-| `gtm-trust-kernel` | 0.2.0 | 7 | 56.4 kB / 214.2 kB | `9e86dbb309c19ba4939707155acae15bb3725168` |
+| `gtm-trust-kernel` | 0.2.0 | 7 | 57.8 kB / 218.9 kB | `4b443488414f5b5885871f04f2ab12394b180f02` |
 
 Adapters 0.3.0 files: `CHANGELOG.md`, `LICENSE`, `README.md`,
 `package.json`, and under `dist/src/`: `mock`, `retry`, `salesforce`,
@@ -145,8 +146,8 @@ rows are ignored because both packages are ESM-only). Clean-room check:
 both tarballs installed together in an empty folder outside the repository
 (`npm install` of the two `.tgz` files); `npm ls` shows adapters 0.3.0
 under CLI 0.2.0, `gtm-trust-kernel --version` prints 0.2.0, and
-`gtm-trust-kernel scan --demo` writes the report with the "At a glance"
-section and prints "4 ready, 3 use with caution, 1 not ready".
+`gtm-trust-kernel scan --demo` writes both reports with the jump bar, the
+five numbered "At a glance" parts and the "Details" band, and prints "4 ready, 3 use with caution, 1 not ready".
 
 If any file under a package folder, or a version, changes after this
 point, the shasums above are stale: re-run the pack check.
