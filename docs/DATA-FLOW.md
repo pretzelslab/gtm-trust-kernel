@@ -59,7 +59,7 @@ SYSTEM and Administrators). If your profile folder's permissions have been
 widened, the token file is exposed the same way.
 
 **Older versions.** Adapters 0.2.0 and earlier cached the token inside the
-adapters package folder. The first live run with 0.2.1 deletes that file
+adapters package folder. The first live run with 0.3.0 deletes that file
 (it is not moved), so it fetches one new token.
 
 ## What leaves your machine

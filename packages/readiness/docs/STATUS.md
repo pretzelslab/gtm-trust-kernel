@@ -7,10 +7,10 @@ gap or decision refer to that log.
 
 ## Packages
 
-| Package | npm | Published | Next (unreleased, not yet packed) |
+| Package | npm | Published | Packed, not yet published |
 |---|---|---|---|
 | CLI | `gtm-trust-kernel` | 0.1.0 | 0.2.0 |
-| CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.3.0 (`package.json` still says 0.2.1 until the re-pack) |
+| CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.3.0 |
 | Readiness report | (private, bundled into the CLI) | | |
 | Proposal kernel | (private) | | |
 | Demo kit | (private, never published) | | |
@@ -73,7 +73,7 @@ gap or decision refer to that log.
   including the Enhanced Notes not-measured path. Committed samples and
   screenshots are in `docs/demo/`; the walkthrough is
   [docs/DEMO.md](../../../docs/DEMO.md).
-- **CI.** Typecheck and about 880 tests on every push (`npm run ci` removes
+- **CI.** Typecheck and about 930 tests on every push (`npm run ci` removes
   any `dist/` first), plus a packed-tarball lint of both npm packages
   (publint, arethetypeswrong).
 
@@ -112,15 +112,41 @@ The full list, with the reasoning behind each item, is in
 ## Releases
 
 Releases are published from GitHub Actions with npm trusted publishing;
-the steps are in [RELEASING.md](../../../RELEASING.md). Adapters 0.3.0
-(planned as 0.2.1 until the reliability batch) and CLI 0.2.0 are not
-packed yet. **The re-pack is held until right before going public**: the
-README story and the demo kit change the package contents again, so both
-are packed once, last (version bump, CLI range `^0.3.0`, lockfile, file
-lists and shasums, clean-room install). Publishing
-also waits on the repository becoming public (`publish.yml` publishes
-with `--provenance`, which npm accepts only from a public repository, as
-far as is known).
+the steps are in [RELEASING.md](../../../RELEASING.md). **Adapters 0.3.0
+and CLI 0.2.0 were re-packed on 2026-10-04** (versions bumped, CLI range
+`^0.3.0`, lockfile, changelogs) and are not tagged or published. Publishing
+waits on the repository becoming public (`publish.yml` publishes with
+`--provenance`, which npm accepts only from a public repository, as far as
+is known), and must be dispatched from the release tag, not `master`.
+
+Pack check (`npm pack --dry-run` in each package folder, after a clean
+`npm run ci`; the tarballs built for the clean-room install had the same
+shasums):
+
+| Package | Tarball | Files | Size (packed / unpacked) | shasum |
+|---|---|---|---|---|
+| `@gtm-trust-kernel/adapters` | 0.3.0 | 24 | 60.3 kB / 229.2 kB | `59cd85dc00821587025c9cf32cda12f88ccc4e49` |
+| `gtm-trust-kernel` | 0.2.0 | 7 | 56.4 kB / 214.2 kB | `9e86dbb309c19ba4939707155acae15bb3725168` |
+
+Adapters 0.3.0 files: `CHANGELOG.md`, `LICENSE`, `README.md`,
+`package.json`, and under `dist/src/`: `mock`, `retry`, `salesforce`,
+`tokenCache`, `types` (each `.js` + `.d.ts`) and `model/canonical`,
+`model/trust`; under `dist/test/`: `contract/adapter.contract`,
+`contract/secondSource.contract`, `fixtures` (each `.js` + `.d.ts`).
+CLI 0.2.0 files: `CHANGELOG.md`, `LICENSE`, `README.md`, `package.json`,
+`dist/cli.js`, `dist/chunk-PQV3VBQU.js`,
+`dist/anthropicNarrativeModelClient-XPRGRPJG.js`.
+
+`npm run lint:pack` passes (publint and arethetypeswrong; the CommonJS
+rows are ignored because both packages are ESM-only). Clean-room check:
+both tarballs installed together in an empty folder outside the repository
+(`npm install` of the two `.tgz` files); `npm ls` shows adapters 0.3.0
+under CLI 0.2.0, `gtm-trust-kernel --version` prints 0.2.0, and
+`gtm-trust-kernel scan --demo` writes the report with the "At a glance"
+section and prints "4 ready, 3 use with caution, 1 not ready".
+
+If any file under a package folder, or a version, changes after this
+point, the shasums above are stale: re-run the pack check.
 
 **Backup repositories.** The repository's history was rewritten on
 2026-10-03. Two private backup repositories,
@@ -139,12 +165,12 @@ Before going public:
    dev log, 2026-10-03.
 2. **Demo kit:** done (`packages/demo`, `docs/demo/`, `docs/DEMO.md`);
    see the dev log, 2026-10-03.
-3. **Re-pack**, right before going public: adapters 0.3.0 and CLI 0.2.0
-   once (version bump, new shasums, file lists and changelogs), with a
-   clean-room install check.
+3. **Re-pack:** done 2026-10-04 (see Releases); not tagged.
 4. **Go public**, then switch on private vulnerability reporting, secret
    scanning with push protection, Dependabot alerts and a ruleset for
-   `master`. Then publish adapters 0.3.0, then CLI 0.2.0.
+   `master` with a repository-admin bypass (RELEASING.md, "Repository
+   settings"). Then tag and publish adapters 0.3.0, then CLI 0.2.0, each
+   dispatched from its tag.
 5. **Terminal recording** of the demo (GIF or similar), after the
    re-pack, so it shows the released CLI and package versions.
 

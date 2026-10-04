@@ -47,14 +47,27 @@ it with an authentication error; nothing else changes.
    git push origin adapters-v0.3.0
    ```
 
-6. **Dispatch the workflow:** GitHub, Actions, **publish**, Run workflow,
-   choose the package. Or:
+6. **Dispatch the workflow from the tag, not from `master`.** The
+   `adapters` and `cli` environments only accept deployments from their own
+   tags (`adapters-v*`, `cli-v*`; see "Repository settings" below), so a run
+   dispatched from `master` is blocked at the environment gate. In GitHub:
+
+   1. Actions, then **publish** in the left list, then **Run workflow**.
+   2. **Use workflow from:** open the dropdown, switch to the **Tags** tab
+      and pick the release tag (`adapters-v0.3.0` for adapters,
+      `cli-v0.2.0` for the CLI). Not Branch: master.
+   3. **Package to publish:** `adapters` or `cli`, matching the tag.
+   4. Run workflow, open the run, and approve the environment's required
+      reviewer prompt.
+
+   Or from the command line:
 
    ```bash
-   gh workflow run publish.yml -f package=adapters
+   gh workflow run publish.yml --ref adapters-v0.3.0 -f package=adapters
    ```
 
-   It publishes the code at the tag, not the branch head. It refuses to
+   Dispatching adapters from the `cli-v*` tag (or the reverse) fails the
+   environment's tag rule. It publishes the code at the tag, not the branch head. It refuses to
    publish if the tag doesn't exist, if the tag's `package.json` has a
    different version, or if that version is already on npm. It runs
    `npm ci` and `npm run ci` before `npm publish --provenance`.
@@ -66,6 +79,30 @@ it with an authentication error; nothing else changes.
 
    `dist.shasum` should match step 3 and `gitHead` the tagged commit. The
    package page on npmjs.com shows the provenance badge.
+
+## Repository settings (set when the repository goes public)
+
+Set by hand under Settings on the repository; GitHub only offers some of
+them once it is public.
+
+- **Master ruleset** (Rules, Rulesets, New branch ruleset, target the
+  default branch): require the `verify` and `package-lint` status checks,
+  block force pushes, restrict deletions. **Add Repository admin (role)
+  as a bypass actor, mode "Always"**, so the maintainer's direct pushes
+  to `master` keep working; this is a one-person repository and the
+  maintainer pushes straight to `master`. The rules still stop force pushes
+  and deletions for everyone else, and the bypass is logged. If the
+  bypass is ever removed, direct pushes need a pull request.
+- **Environments** `adapters` and `cli` (Settings, Environments):
+  deployment branches and tags set to "Selected branches and tags" with
+  one tag rule each, `adapters-v*` and `cli-v*`, and a required reviewer.
+- **Private vulnerability reporting, secret scanning with push
+  protection, Dependabot alerts and security updates:** Settings,
+  Advanced Security.
+- **Dependabot** (`.github/dependabot.yml`) ignores major-version bumps of
+  `typescript` and `@types/node`: the compiler major is a deliberate
+  upgrade, and `@types/node` should track the Node version in `engines`,
+  not the latest. Minor and patch updates for both still arrive.
 
 ## Before trusted publishing
 

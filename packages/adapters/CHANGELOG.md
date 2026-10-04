@@ -4,11 +4,10 @@ All notable changes to `@gtm-trust-kernel/adapters`. Versions follow
 semver; before 1.0, a minor version may include changes that break
 adapter authors, and each one is listed under "Breaking".
 
-## 0.3.0 (unreleased)
+## 0.3.0
 
-Planned as 0.2.1; the reliability changes below make it 0.3.0.
-`package.json` still says 0.2.1 until the release is packed, right before
-the repository goes public.
+Covers everything since 0.2.0. A 0.2.1 was planned but never published;
+the reliability changes below made it 0.3.0.
 
 ### Breaking
 

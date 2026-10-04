@@ -2,7 +2,7 @@
 
 All notable changes to `gtm-trust-kernel` (the CLI).
 
-## 0.2.0 (unreleased)
+## 0.2.0
 
 ### Added
 
@@ -47,7 +47,7 @@ All notable changes to `gtm-trust-kernel` (the CLI).
   `--narrative-consent` is passed. The API key is still checked first.
   Answering no runs the scan without the AI summary (the deterministic
   summary, as without `--narrative`), writes the report and exits 0.
-- Dependencies: `@gtm-trust-kernel/adapters` `^0.2.1`; `@anthropic-ai/sdk`
+- Dependencies: `@gtm-trust-kernel/adapters` `^0.3.0`; `@anthropic-ai/sdk`
   and `tldts` use caret ranges instead of exact pins.
 
 ## 0.1.0

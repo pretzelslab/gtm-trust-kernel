@@ -17,6 +17,26 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Re-pack (C8), 2026-10-04
+
+Adapters 0.3.0 and CLI 0.2.0 packed once, after the README story, demo kit
+and decision view. Nothing tagged, nothing published.
+
+- Adapters `package.json` 0.2.1 to 0.3.0 (0.2.1 was never published); CLI
+  range `@gtm-trust-kernel/adapters` `^0.2.1` to `^0.3.0`; lockfile
+  refreshed (two lines); changelog headings no longer say "unreleased";
+  DATA-FLOW.md's "first live run with 0.2.1" now says 0.3.0.
+- Pack check, file lists and shasums are in STATUS.md, "Releases".
+  `npm run ci` green (about 930 tests, 2 skipped), `lint:pack` passes.
+- Clean-room install of both tarballs outside the repository: adapters
+  0.3.0 under CLI 0.2.0, `--version` 0.2.0, `scan --demo` writes both
+  reports with the "At a glance" section.
+- RELEASING.md now records: publish is dispatched from the release tag
+  (the environments only accept `adapters-v*` / `cli-v*`); the `master`
+  ruleset has Repository admin as an "Always" bypass actor so direct
+  pushes keep working; Dependabot ignores `typescript` and `@types/node`
+  major versions (`dependabot.yml`).
+
 ## Decision view polish, 2026-10-04
 
 One commit after the decision view. No metric, threshold or score changed.
