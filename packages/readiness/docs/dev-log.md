@@ -19,8 +19,9 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ## README story, 2026-10-03
 
-On branch `readme-story`, pushed, not merged. Each commit green with
-`npm run ci`.
+Merged to `master` through PR #5 (merge commit `f1219f7`); the PR's CI
+and `master` CI after the merge were green. Each commit green locally
+with `npm run ci`.
 
 | Commit | What |
 |---|---|
@@ -53,8 +54,42 @@ doesn't print the calls actually used; the README quotes the 11
 preflight and 12 read calls measured on the same org in the reliability
 batch.
 
-**Release state:** nothing packed, tagged or published. The label change
-reaches users with the CLI 0.2.0 re-pack.
+**Second round (same day):**
+
+| Commit | What |
+|---|---|
+| `ae07fd3` | Outcome-first top: headline, outcome chain, outcome map, seller-journey Mermaid diagram, "Measure the outcome"; CLI README opening |
+| `7387afa` | "One data spine, every GTM motion" and "Governance and canonical standards"; old "Why this matters" bullets folded in |
+| `1c93da5` | STATUS: Phase 5 backlog (five candidate checks) |
+| `ffaa0b4` | `--fail-on blocked` (and the bare flag) also matches anything the plain report shows as "Not ready yet": `showsAsNotReady()` in `plainSummary.ts`, used by `failOn.ts`; help text, CLI README (workaround dropped), CHANGELOG, salesforce-setup |
+| `12e12d0` | Motions grouped (new business, existing customers, win-back); section order: outcome map, spine, verdict table, governance, who it's for; cadence "before each AI rollout, then quarterly" |
+| `38ddfc5` | STATUS: five more Phase 5 titles |
+| `28883ab` | Technical review fixes: abridged excerpt; cross-system checks "rated blocked" on live orgs; undeclared activity capture is "not measured"; retries cover 429 and 503 |
+
+**Test assertions changed (approved by the maintainer):**
+- `packages/cli/test/failOn.exit.test.ts`: the demo's bare `--fail-on`
+  now expects exit 2 (was 0), and stderr names the capability as
+  "(degraded, shown as not ready)". Reason: the demo's fully automatic CRM
+  updates is degraded, which the plain report shows as "Not ready yet".
+- `packages/readiness/test/report/failOn.exit.test.ts`: the healthy
+  fixture's `--fail-on blocked` now expects exit 2 (was 0), same reason.
+- New unit test in `failOn.test.ts` for the rule. Tests: readiness 559 ->
+  560.
+
+**Also:**
+- The `calibration` label was created on GitHub for the issue form.
+- The maintainer's GitHub edit to the motions table never reached the
+  remote; the grouped table was built from the motions listed in the
+  request.
+- Flaky once, passed on re-run, not changed:
+  `salesforce.tokenCache.test.ts` "deletes the pre-0.2.1 cache file"
+  hit ENOENT writing the legacy cache file (`packages/adapters/.cache/`),
+  probably a race with another test removing that folder.
+- The README describes CLI 0.2.0 (verdict summary, `--fail-on`,
+  `--narrative-preview`); npm still has 0.1.0 until the re-pack.
+
+**Release state:** nothing packed, tagged or published. The label rename
+and the `--fail-on` change reach users with the CLI 0.2.0 re-pack.
 
 ---
 

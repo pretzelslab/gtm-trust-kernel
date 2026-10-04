@@ -32,7 +32,8 @@ gap or decision refer to that log.
 - **CLI from npm.** `npx gtm-trust-kernel scan --demo` runs the report on a
   bundled sample CRM with no credentials or network. 0.2.0 adds a verdict
   summary, `--verbose`, one-line usage errors, and `--fail-on` for CI (exit
-  2 on a listed verdict).
+  2 on a listed verdict; `blocked` also matches anything the plain report
+  shows as "Not ready yet").
 - **Salesforce, read-only.** The adapter reads deals, contact roles,
   accounts, contacts, Tasks, Events, Notes, Enhanced Notes and stage
   history, batched by deal id (12 API calls for a 35-deal org). It cannot
@@ -118,8 +119,8 @@ pre-rewrite commits and don't resolve in this repository.
 
 Before going public:
 
-1. **README story:** drafted on branch `readme-story` (not merged), in
-   review; see the dev log, 2026-10-03.
+1. **README story:** done, merged to `master` (PR #5, `f1219f7`); see the
+   dev log, 2026-10-03.
 2. **Demo kit:** a `demo:kernel` script, committed sample reports and a
    walkthrough.
 3. **Re-pack**, right before going public: adapters 0.3.0 and CLI 0.2.0
