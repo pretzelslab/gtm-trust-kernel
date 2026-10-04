@@ -24,7 +24,28 @@ trusting it.
 On the sample CRM, next-step suggestions are **Ready to use**: every check
 behind them passes.
 
-![The plain-English readiness report for the sample CRM. Next-step suggestions on deals is listed under Ready to use.](demo/scan-plain.png)
+The report opens with an "At a glance" view, so a sales or RevOps leader
+sees what to clean and what to do in about ten seconds:
+
+- **Data health by CRM object:** how many checks pass, are weak or fail on
+  each object, worst first. Objects the scan doesn't read yet (Leads,
+  Quotes, products and line items, campaigns, territories and targets) are
+  listed greyed as "not scanned yet".
+- **AI use cases:** four counts: Ready to use, Usable with caution, Not
+  ready yet and Can't tell yet.
+- **Fix this first:** the checks holding back the most use cases, each
+  with a plain action, the object, the likely owner and the use cases it
+  holds back.
+- **Use cases and the checks behind them:** a card per use case, with
+  each check's value against its pass and weak lines.
+- **Use cases by CRM object:** a grid showing the worst check for each
+  pair.
+
+Every coloured mark also carries a symbol and a word, and the view uses
+the same verdicts and thresholds as the rest of the report. It adds no
+score.
+
+![The plain-English readiness report for the sample CRM, opening with the At a glance view: data health by CRM object, use-case counts, a Fix this first list, a card per use case and a use-case by object grid. Next-step suggestions on deals is Ready to use.](demo/scan-plain.png)
 
 ### When the scan can't see the notes
 
@@ -36,7 +57,10 @@ notes, and the report says what to switch on:
 > Enable Notes (Setup, Notes Settings) and give the Run As user read access
 > to Notes (ContentNote), so Enhanced Notes can be read.
 
-![The same report when Enhanced Notes can't be read. Next-step suggestions on deals is listed under Can't tell yet, with the setting to change.](demo/scan-notes-not-measured-plain.png)
+In the At a glance view, the note checks show hatched "can't tell" bars,
+and "Fix this first" lists the setting to change.
+
+![The same At a glance view when Enhanced Notes can't be read: the Notes row shows can't tell, the note checks are hatched, and Next-step suggestions on deals is under Can't tell yet with the setting to change.](demo/scan-notes-not-measured-plain.png)
 
 On a live org, the check that runs before the scan also prints one line
 about it, then the scan carries on:

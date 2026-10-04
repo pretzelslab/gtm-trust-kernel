@@ -24,6 +24,7 @@ import {
   type PlainStatus,
   type UseCaseCard,
 } from './model.js';
+import { PLAIN_CHECK_LABEL } from './labels.js';
 import type { MetricId, Unit } from '../../rubric.js';
 
 /** Shown for a can't-tell check when the adapter gave no setting hint. */
@@ -53,15 +54,9 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** A metric id as words: "stage_mapping_coverage" reads "Stage mapping coverage". */
+/** The plain label for a check (labels.ts). */
 export function checkName(metric: MetricId): string {
-  const words = metric.replace(/_/g, ' ').replace(/\bpii\b/, 'PII');
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-/** Mid-sentence form: lower case, keeping "PII". */
-function checkNameInline(metric: MetricId): string {
-  return metric.replace(/_/g, ' ').replace(/\bpii\b/, 'PII');
+  return PLAIN_CHECK_LABEL[metric];
 }
 
 function statusTag(status: CellStatus): string {
@@ -141,10 +136,10 @@ function renderObjectRow(o: ObjectHealthRow): string {
       : '';
   const activityNote = o.metrics.some((m) => m.alsoReadsActivityText)
     ? `<div class="dv-sub">${escapeHtml(
-        `${o.metrics
+        `Also reads activity text: ${o.metrics
           .filter((m) => m.alsoReadsActivityText)
-          .map((m, i) => (i === 0 ? checkName(m.metric) : checkNameInline(m.metric)))
-          .join(' and ')} also read activity text`,
+          .map((m) => checkName(m.metric))
+          .join('; ')}`,
       )}</div>`
     : '';
   return `<div class="dv-obj" data-object="${escapeHtml(o.object)}">

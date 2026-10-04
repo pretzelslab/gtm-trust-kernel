@@ -16,6 +16,7 @@ import { renderReportHtml } from '../../src/report/render.js';
 import { BUCKET_WORD, buildDecisionView, STATUS_WORD, type PlainStatus } from '../../src/report/decisionView/model.js';
 import { barPercent, NO_HINT_FALLBACK, renderDecisionView } from '../../src/report/decisionView/render.js';
 import { escapeHtml } from '../../src/report/shell.js';
+import { PLAIN_CHECK_LABEL } from '../../src/report/decisionView/labels.js';
 import { THRESHOLDS, type MetricId } from '../../src/rubric.js';
 
 async function build(name: FixtureName, withSecondSource = true): Promise<ReportData> {
@@ -292,5 +293,32 @@ describe('decision view placement', () => {
     const { renderComparisonHtml } = await import('../../src/report/render.js');
     const html = renderComparisonHtml([await build('healthy'), await build('legacy')]);
     expect(html).not.toContain('<section class="dv"');
+  });
+});
+
+describe('decision view plain check labels', () => {
+  const ids = Object.keys(THRESHOLDS) as MetricId[];
+
+  it('gives every metric a plain label: non-empty, unique, no em dash, no snake_case', () => {
+    const labels = ids.map((id) => PLAIN_CHECK_LABEL[id]);
+    for (const [i, label] of labels.entries()) {
+      expect(label, ids[i]).toBeTruthy();
+      expect(label, ids[i]).not.toMatch(/—|_/);
+      expect(label.trim(), ids[i]).toBe(label);
+    }
+    expect(new Set(labels).size).toBe(ids.length);
+    expect(Object.keys(PLAIN_CHECK_LABEL).sort()).toEqual([...ids].sort());
+  });
+
+  it('shows labels, never metric ids, in the fix list, cards and object rows', async () => {
+    for (const { name, data } of await allFixtures()) {
+      const html = renderDecisionView(data);
+      for (const id of ids) expect(html, `${name} ${id}`).not.toContain(id.replace(/_/g, ' '));
+      for (const check of buildDecisionView(data).cards.flatMap((c) => c.checks)) {
+        expect(html, `${name} ${check.metric}`).toContain(escapeHtml(PLAIN_CHECK_LABEL[check.metric]));
+      }
+    }
+    const notes = renderDecisionView(await build('healthy'));
+    expect(notes).toContain('Also reads activity text: Personal data in notes and activities; Text written by people outside your company');
   });
 });

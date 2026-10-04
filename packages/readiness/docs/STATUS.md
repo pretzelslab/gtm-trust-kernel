@@ -30,6 +30,16 @@ gap or decision refer to that log.
   the machine. A live report leaves out the org hostname unless
   `--show-org` is passed. The whole data flow is in
   [docs/DATA-FLOW.md](../../../docs/DATA-FLOW.md).
+- **Decision view.** Both reports open with an "At a glance" section: data
+  health by CRM object, the four use-case counts, a ranked "Fix this
+  first" list (plain action, object, likely owner, use cases held back), a
+  card per use case with each check's value against its pass and weak
+  lines, and a use-case by object grid. It reuses the existing verdicts
+  and thresholds, adds no score, sends nothing new to the AI summary, and
+  leaves the `--all` comparison page unchanged. Checks that need a second
+  system are left out of the object counts when none is connected; Contact
+  then shows as a greyed "needs a second system" row. Code:
+  `packages/readiness/src/report/decisionView/`.
 - **CLI from npm.** `npx gtm-trust-kernel scan --demo` runs the report on a
   bundled sample CRM with no credentials or network. 0.2.0 adds a verdict
   summary, `--verbose`, one-line usage errors, and `--fail-on` for CI (exit
@@ -148,6 +158,17 @@ After that:
 2. Later: live scanning in the CLI, an `--out` flag, an approver role
    check, per-record atomic writes, an injection test corpus, an
    evaluation harness, a HubSpot adapter.
+
+### Phase 5 backlog (objects not scanned yet)
+
+The decision view lists these as greyed "not scanned yet" rows, in this
+order. No check, adapter read or threshold exists for any of them.
+
+- Leads
+- Quotes
+- Products / line items
+- Campaigns
+- Territories / targets
 
 ### Phase 5 backlog (candidate checks, not scoped)
 

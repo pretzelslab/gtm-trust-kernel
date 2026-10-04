@@ -17,6 +17,50 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Decision view, 2026-10-03
+
+Goal: a sales or RevOps leader sees what to clean and what to do in about
+ten seconds. Built from the approved plan in three commits, each green
+locally with `npm run ci`, pushed to `master`, CI green.
+
+| Commit | What |
+|---|---|
+| `0120426` | `decisionView/objects.ts`, `fixActions.ts`, `model.ts` and the model tests: a pure `buildDecisionView(data)`, no report output change |
+| `2d46553` | `decisionView/render.ts`, the `dv-` styles and light and dark colour tokens in `shell.ts`, insertion into both reports, CLI changelog, regenerated sample HTML, render tests |
+| this entry | plain check labels (`labels.ts`), regenerated samples and screenshots, `docs/DEMO.md` and README text and alt text, STATUS, this log |
+
+**Decisions.**
+- No new metric, number, weight, threshold or score; `rubric.ts` is only
+  read. Statuses are `gateVerdictOf`; use-case sentences and the four
+  counts come from `buildFullNarrative`.
+- Cross-system checks with no second system are left out of the object
+  counts and shown as "N checks need a second system". They keep their
+  real verdict on the cards and the grid, labelled "no second system".
+  The model infers "no second system" from how `buildReport` marks the
+  four D5 rows (`not_instrumented`, not `notMeasured`), because
+  `ReportData` carries no flag; a test fails if that marking changes.
+- Contact, with no second system, shows as a greyed "needs a second
+  system" row, never counted.
+- A can't-tell check shows the adapter's own setting hint, or, with none,
+  the fixed line "The scan can't see this data. Check field access or the
+  integration."
+- Bar scale for count, days, months and chars checks is display only:
+  1.25 x the largest of the value and the two lines. It is never printed.
+- Plain check labels follow the README's use-case table; a few
+  (accounts and contacts matched across systems, personal data in notes
+  and activities) are new. A test requires one for every metric.
+- Unscanned objects (Leads, Quotes, Products / line items, Campaigns,
+  Territories / targets) are greyed rows and a Phase 5 backlog item.
+
+**Things that bit.**
+- `render.test.ts` counts `<li` in the detailed report. SVG `<line>`
+  also matches that prefix, so the pass and weak markers are `<rect>`s.
+  No existing assertion was edited.
+- The plain-report test forbids `<table` and the `pill` class, so the
+  use-case by object grid is built from divs with table roles.
+- A repeated hint: when one setting unlocks several checks (Enhanced
+  Notes), the fix list repeats it once per check. Left as is.
+
 ## Demo kit, README polish and a test flake, 2026-10-03
 
 Each commit green locally with `npm run ci`, pushed to `master`, CI green.
