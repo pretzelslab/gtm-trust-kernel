@@ -220,7 +220,7 @@ Open out/latest-plain.html for the plain-English report (full detail: out/latest
 
 This runs on a built-in sample CRM. No login, no account, no network calls.
 The reports are written to `./out` in the folder you ran it from. Open
-`out/latest-plain.html` first. An excerpt:
+`out/latest-plain.html` first. An abridged excerpt:
 
 ```text
 Ready to use
@@ -337,15 +337,17 @@ Not yet. Salesforce is the only CRM it can scan today. HubSpot is planned.
   CLI. It has been tested on a Salesforce Developer Edition org, not on
   large production orgs.
 - **Cross-system matching runs on the demo data only.** A live scan
-  doesn't connect a second system yet, so those checks read Not ready yet
+  doesn't connect a second system yet, so those checks are rated blocked
   on a live org. They don't decide any use case's verdict.
 - **Activity capture is something you declare, not something the scan
-  detects.** Until you set `SF_ACTIVITY_CAPTURE=auto`, activity checks
-  read "Can't tell yet". Activities logged only against a contact, not the
-  deal, aren't counted yet.
+  detects.** Until you set `SF_ACTIVITY_CAPTURE=auto`, activity checks are
+  not measured, so use cases that need them read "Can't tell yet" (or "Not
+  ready yet", if another check already fails). Activities logged only
+  against a contact, not the deal, aren't counted yet.
 - **Smaller gaps:** very long Enhanced Notes past the fetch limit show
   their length as a minimum; deal currency isn't read; a dropped network
-  connection isn't retried (rate limits and Salesforce outages are).
+  connection isn't retried (rate limits and 503 "service unavailable"
+  responses are).
 
 ## Help calibrate the thresholds
 
