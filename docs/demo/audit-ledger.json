@@ -1,0 +1,54 @@
+[
+  {
+    "kind": "proposal_created",
+    "proposalId": "prop-1",
+    "at": "2026-09-20T12:05:00.000Z",
+    "actorId": "user:rep-demo",
+    "detail": {
+      "evidenceSetId": "ev-opp-1",
+      "modelVersion": "scripted-demo",
+      "promptVersion": "demo-1",
+      "fields": [
+        "nextStep"
+      ]
+    },
+    "seq": 0,
+    "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "hash": "521312475b18c3be36f3412478379f245faa704c58c992ed6e555bc94dc75ccb"
+  },
+  {
+    "kind": "proposal_approved",
+    "proposalId": "prop-1",
+    "at": "2026-09-20T12:06:00.000Z",
+    "actorId": "user:rep-demo",
+    "detail": {
+      "role": "rep"
+    },
+    "seq": 1,
+    "prevHash": "521312475b18c3be36f3412478379f245faa704c58c992ed6e555bc94dc75ccb",
+    "hash": "6724b60ee47fe02289c848e1cecadae4ee032675b2ae3e16e026a5b57faa50ee"
+  },
+  {
+    "kind": "applied",
+    "proposalId": "prop-1",
+    "at": "2026-09-20T12:07:00.000Z",
+    "actorId": "user:rep-demo",
+    "detail": {
+      "fields": [
+        "nextStep"
+      ]
+    },
+    "seq": 2,
+    "prevHash": "6724b60ee47fe02289c848e1cecadae4ee032675b2ae3e16e026a5b57faa50ee",
+    "hash": "a936cdd93bdd2308568e55ac33033585443f3883c8ad809f389c298e3531748c"
+  },
+  {
+    "kind": "rolled_back",
+    "proposalId": "prop-1",
+    "at": "2026-09-20T12:08:00.000Z",
+    "actorId": "user:rep-demo",
+    "seq": 3,
+    "prevHash": "a936cdd93bdd2308568e55ac33033585443f3883c8ad809f389c298e3531748c",
+    "hash": "027cd7266693cfd07e2ff15f60e015d2253583affd856d93a51389aa8490323d"
+  }
+]

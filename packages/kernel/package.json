@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "Deterministic signals, the proposal/approval kernel, and the audit ledger.",
+  "exports": {
+    "./proposals/kernel.js": "./src/proposals/kernel.ts",
+    "./audit/ledger.js": "./src/audit/ledger.ts"
+  },
   "dependencies": {
     "@gtm-trust-kernel/adapters": "*"
   },

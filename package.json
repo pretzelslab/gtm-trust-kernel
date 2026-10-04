@@ -18,7 +18,8 @@
     "lint": "eslint packages --ext .ts",
     "clean": "node scripts/clean-dist.mjs",
     "ci": "npm run clean && npm run typecheck && npm run test",
-    "lint:pack": "node scripts/lint-pack.mjs"
+    "lint:pack": "node scripts/lint-pack.mjs",
+    "demo:kernel": "npm run demo:kernel -w @gtm-trust-kernel/demo --"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

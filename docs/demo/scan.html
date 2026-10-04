@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Readiness report — Healthy</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --border: #e2e2e2; --card-bg: #f9f9fb;
+    --viable-bg: #d9f2e3; --viable-fg: #1a7f37;
+    --degraded-bg: #fdecc8; --degraded-fg: #8a5a00;
+    --blocked-bg: #fbeae9; --blocked-fg: #b42318;
+    --na-bg: #f0f0f2; --na-fg: #6b7280;
+    --ninstr-bg: #eaf1fb; --ninstr-fg: #3b5b82;
+    --deferred-bg: #f1edf9; --deferred-fg: #5b4b8a;
+    --nimpl-bg: #ececec; --nimpl-fg: #767676;
+    --floor-bg: #fff3cd; --floor-fg: #8a6d00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --fg: #e7e7ea; --muted: #9aa0a6; --border: #2b2e33; --card-bg: #1c1f24; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, Segoe UI, Helvetica, Arial, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .banner { background: #b42318; color: #fff; font-weight: 700; padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; letter-spacing: 0.02em; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 12px 0 20px; }
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .card .n { font-size: 20px; font-weight: 700; }
+  .card .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 13px; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr.dim-header td { background: var(--card-bg); font-weight: 700; padding-top: 14px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .status-viable { background: var(--viable-bg); color: var(--viable-fg); }
+  .status-degraded { background: var(--degraded-bg); color: var(--degraded-fg); }
+  .status-blocked { background: var(--blocked-bg); color: var(--blocked-fg); }
+  .status-not_applicable { background: var(--na-bg); color: var(--na-fg); }
+  .status-not_instrumented { background: var(--ninstr-bg); color: var(--ninstr-fg); }
+  .status-deferred { background: var(--deferred-bg); color: var(--deferred-fg); border: 1px dashed var(--deferred-fg); }
+  .status-not_implemented { background: var(--nimpl-bg); color: var(--nimpl-fg); border: 1px dashed var(--nimpl-fg); }
+  .note { color: var(--muted); font-size: 12px; }
+  .gates { font-size: 12px; color: var(--muted); }
+  .thresh { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .lowconf { font-size: 11px; color: var(--degraded-fg); }
+  .floor-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; background: var(--floor-bg); color: var(--floor-fg); border: 1px solid var(--floor-fg); cursor: help; }
+  .banner-live { background: var(--card-bg); color: var(--fg); border: 1px solid var(--border); font-weight: 600; padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; letter-spacing: 0.02em; }
+  .plain-summary { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; }
+  .plain-summary summary { cursor: pointer; font-weight: 600; }
+  .plain-summary p { margin: 10px 0 0; }
+  .plain-summary ul { margin: 10px 0 0; }
+  .narrative-fallback-notice { background: var(--ninstr-bg); color: var(--ninstr-fg); border: 1px solid var(--ninstr-fg); border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 12px; }
+  ul { padding-left: 20px; }
+  ul li { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+  <div class="banner">MOCK DATA — fixture: Healthy. No real CRM was contacted; nothing leaves this machine.</div>
+  <h1>Readiness report: Healthy</h1>
+  <div class="meta">Good field hygiene, full capability matrix, clean unique account domains.</div>
+  <div class="meta">asOf 2026-09-20T00:00:00.000Z · generated 2026-09-20T12:00:00.000Z</div>
+  <div class="meta">Scanned 124 of 124 eligible deals; detailed checks on 124 sampled deals (up to 20 per stage, seed &quot;report&quot;).</div>
+  
+  
+  <details class="plain-summary"><summary>Plain-English summary</summary><p>There is enough good-quality data to support pipeline risk alerts, close-date reality checks, next-step suggestions on deals, and bulk data clean-up suggestions. The data can also support AI-generated account briefs, pitch and objection-handling answers, and forecast support, but treat the output with caution. It&#39;s thinner or less certain than ideal for now. Fully automatic CRM updates stay off until a person checks every change. This report only reads your CRM data. It doesn&#39;t change anything.</p></details>
+  
+  <div class="summary-grid">
+    <div class="card"><div class="n">100</div><div class="l">Open sampled</div></div>
+    <div class="card"><div class="n">24</div><div class="l">Closed sampled</div></div>
+    <div class="card"><div class="n">124</div><div class="l">Records scanned</div></div>
+    <div class="card"><div class="n">124</div><div class="l">Eligible deals</div></div>
+    <div class="card"><div class="n">4 / 4 / 0 / 0</div><div class="l">Capabilities: viable / degraded / not measured / blocked</div></div>
+    <div class="card"><div class="n">28</div><div class="l">Metrics computed</div></div>
+    <div class="card"><div class="n">0</div><div class="l">Not applicable / not instrumented</div></div>
+    <div class="card"><div class="n">0</div><div class="l">Deferred / not yet implemented</div></div>
+  </div>
+  
+  <h2>Capabilities</h2>
+  <table>
+    <thead><tr><th>Capability</th><th>Verdict</th><th>Coverage ceiling</th><th>Blockers</th></tr></thead>
+    <tbody><tr>
+        <td>Grounded account brief<div class="note">A cited summary of an account and its open deals, drawn only from records in the CRM.</div></td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td>82.0%</td>
+        <td>1<div class="gates">median_note_length_chars (degraded)</div></td>
+      </tr><tr>
+        <td>Pipeline risk signals<div class="note">Deterministic flags for stalled, silent, single-threaded or slipping deals.</div></td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td>88.0%</td>
+        <td>0</td>
+      </tr><tr>
+        <td>Close date realism check<div class="note">Flags deals whose close date has slipped repeatedly or has already passed.</div></td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td>95.0%</td>
+        <td>0</td>
+      </tr><tr>
+        <td>Next action recommendation<div class="note">Suggests the next step on a deal, grounded in what has and has not happened.</div></td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td>88.0%</td>
+        <td>0</td>
+      </tr><tr>
+        <td>Enablement answer engine<div class="note">Answers &quot;how have we handled this before&quot; from closed-won and closed-lost history.</div></td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td>91.7%</td>
+        <td>1<div class="gates">closed_deal_count_12m (degraded)</div></td>
+      </tr><tr>
+        <td>Forecast assistance<div class="note">Supports, never replaces, a human forecast call with evidence and outliers.</div></td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td>93.0%</td>
+        <td>2<div class="gates">closed_deal_count_12m (degraded), win_rate_dispersion (degraded)</div></td>
+      </tr><tr>
+        <td>Bulk hygiene automation<div class="note">Proposes batch corrections to stale, missing or contradictory CRM data, under human approval.</div></td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td>—</td>
+        <td>0</td>
+      </tr><tr>
+        <td>Autonomous write-back<div class="note">AI writes to CRM without per-change human approval. Almost always Blocked, and correctly so.</div></td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td>—</td>
+        <td>2<div class="gates">temporal_anomaly_rate (degraded), closed_deal_count_12m (degraded)</div></td>
+      </tr></tbody>
+  </table>
+  
+  <h2>Metrics</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Value</th><th>Tier</th><th>Note</th><th>Gates / threshold</th></tr></thead>
+    <tbody><tr class="dim-header"><td colspan="5">D1 — Coverage</td></tr><tr>
+        <td>close_date_fill_rate</td>
+        <td>95.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Close date realism check, Bulk hygiene automation<div class="thresh">viable ≥ 0.95, degraded ≥ 0.85</div></td>
+      </tr><tr>
+        <td>amount_fill_rate</td>
+        <td>93.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Forecast assistance<div class="thresh">viable ≥ 0.9, degraded ≥ 0.75</div></td>
+      </tr><tr>
+        <td>owner_id_fill_rate</td>
+        <td>100.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">—<div class="thresh">viable ≥ 0.95, degraded ≥ 0.85</div></td>
+      </tr><tr>
+        <td>next_step_fill_rate</td>
+        <td>91.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Next action recommendation<div class="thresh">viable ≥ 0.6, degraded ≥ 0.3</div></td>
+      </tr><tr>
+        <td>activity_capture_rate</td>
+        <td>≥ 88.0%<span class="floor-badge" title="Value is a lower bound: at least one opportunity's related notes/activities were truncated at the adapter's per-opportunity limit.">FLOOR</span></td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note">1 opportunity had truncated related records — value is a floor, not exact</td>
+        <td class="gates">Pipeline risk signals, Next action recommendation, Autonomous write-back<div class="thresh">viable ≥ 0.8, degraded ≥ 0.5</div></td>
+      </tr><tr>
+        <td>contact_linkage_rate</td>
+        <td>90.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Next action recommendation<div class="thresh">viable ≥ 0.85, degraded ≥ 0.6</div></td>
+      </tr><tr>
+        <td>note_coverage_rate</td>
+        <td>≥ 82.0%<span class="floor-badge" title="Value is a lower bound: at least one opportunity's related notes/activities were truncated at the adapter's per-opportunity limit.">FLOOR</span></td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note">1 opportunity had truncated related records — value is a floor, not exact</td>
+        <td class="gates">Grounded account brief<div class="thresh">viable ≥ 0.7, degraded ≥ 0.4</div></td>
+      </tr><tr class="dim-header"><td colspan="5">D2 — Freshness</td></tr><tr>
+        <td>median_days_since_modified</td>
+        <td>4.5 d</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Pipeline risk signals<div class="thresh">viable ≤ 7, degraded ≤ 21</div></td>
+      </tr><tr>
+        <td>past_due_close_date_rate</td>
+        <td>0.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Close date realism check, Forecast assistance<div class="thresh">viable ≤ 0.1, degraded ≤ 0.25</div></td>
+      </tr><tr>
+        <td>median_next_step_age_days</td>
+        <td>19 d</td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td class="note">9 of 91 eligible opportunities excluded: no Next Step change history</td>
+        <td class="gates">—<div class="thresh">viable ≤ 14, degraded ≤ 30</div></td>
+      </tr><tr class="dim-header"><td colspan="5">D3 — Consistency and hygiene</td></tr><tr>
+        <td>stage_mapping_coverage</td>
+        <td>100.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note">119 mapped, 5 inferred, 0 unmapped</td>
+        <td class="gates">Pipeline risk signals, Forecast assistance, Bulk hygiene automation, Autonomous write-back<div class="thresh">viable ≥ 1, degraded ≥ 0.9</div></td>
+      </tr><tr>
+        <td>duplicate_account_rate</td>
+        <td>0.0%</td>
+        <td><span class="pill status-viable">Viable</span><div class="lowconf">low confidence (n=15)</div></td>
+        <td class="note">0 accounts excluded (no resolvable domain), 0 excluded (shared-provider domain), 0 duplicate group(s) among 15 accounts considered; 0 accountRefs did not resolve, 0 opportunities had no usable accountRef</td>
+        <td class="gates">Grounded account brief, Bulk hygiene automation, Autonomous write-back<div class="thresh">viable ≤ 0.02, degraded ≤ 0.08</div></td>
+      </tr><tr>
+        <td>stage_activity_contradiction_rate</td>
+        <td>12.5%</td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td class="note"></td>
+        <td class="gates">—<div class="thresh">viable ≤ 0.05, degraded ≤ 0.2</div></td>
+      </tr><tr>
+        <td>round_amount_rate</td>
+        <td>15.1%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note">7 opportunities excluded from the denominator (null or zero amount)</td>
+        <td class="gates">—<div class="thresh">viable ≤ 0.3, degraded ≤ 0.6</div></td>
+      </tr><tr class="dim-header"><td colspan="5">D4 — History depth</td></tr><tr>
+        <td>close_date_history_enabled</td>
+        <td>Yes</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Close date realism check<div class="thresh">viable ≥ 1, degraded ≥ 0</div></td>
+      </tr><tr>
+        <td>stage_history_months</td>
+        <td>21 mo</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Pipeline risk signals<div class="thresh">viable ≥ 18, degraded ≥ 6</div></td>
+      </tr><tr>
+        <td>owner_history_enabled</td>
+        <td>Yes</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">—<div class="thresh">viable ≥ 1, degraded ≥ 0</div></td>
+      </tr><tr class="dim-header"><td colspan="5">D5 — Cross-system joinability</td></tr><tr>
+        <td>contact_identity_resolution_rate</td>
+        <td>86.7%</td>
+        <td><span class="pill status-viable">Viable</span><div class="lowconf">low confidence (n=15)</div></td>
+        <td class="note"></td>
+        <td class="gates">—<div class="thresh">viable ≥ 0.85, degraded ≥ 0.6</div></td>
+      </tr><tr>
+        <td>account_resolution_rate</td>
+        <td>86.7%</td>
+        <td><span class="pill status-degraded">Degraded</span><div class="lowconf">low confidence (n=15)</div></td>
+        <td class="note"></td>
+        <td class="gates">—<div class="thresh">viable ≥ 0.9, degraded ≥ 0.7</div></td>
+      </tr><tr>
+        <td>activity_attribution_rate</td>
+        <td>100.0%</td>
+        <td><span class="pill status-viable">Viable</span><div class="lowconf">low confidence (n=13)</div></td>
+        <td class="note"></td>
+        <td class="gates">—<div class="thresh">viable ≥ 0.8, degraded ≥ 0.55</div></td>
+      </tr><tr>
+        <td>temporal_anomaly_rate</td>
+        <td>3.0%</td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td class="note"></td>
+        <td class="gates">Autonomous write-back<div class="thresh">viable ≤ 0.01, degraded ≤ 0.05</div></td>
+      </tr><tr class="dim-header"><td colspan="5">D6 — Text substrate</td></tr><tr>
+        <td>substantive_note_rate</td>
+        <td>100.0%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note"></td>
+        <td class="gates">Grounded account brief, Next action recommendation, Enablement answer engine<div class="thresh">viable ≥ 0.5, degraded ≥ 0.25</div></td>
+      </tr><tr>
+        <td>median_note_length_chars</td>
+        <td>101 chars</td>
+        <td><span class="pill status-degraded">Degraded</span></td>
+        <td class="note"></td>
+        <td class="gates">Grounded account brief<div class="thresh">viable ≥ 200, degraded ≥ 80</div></td>
+      </tr><tr>
+        <td>pii_density</td>
+        <td>0.7%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note">3 of 422 sampled records (notes, activities, opportunities) matched a PII pattern</td>
+        <td class="gates">—<div class="thresh">viable ≤ 0.05, degraded ≤ 0.2</div></td>
+      </tr><tr>
+        <td>untrusted_text_ratio</td>
+        <td>1.9%</td>
+        <td><span class="pill status-viable">Viable</span></td>
+        <td class="note">reflects the adapter&#39;s own ingestion-time trust-tier assignment, not independently verified ground truth</td>
+        <td class="gates">Autonomous write-back<div class="thresh">viable ≤ 0.1, degraded ≤ 0.3</div></td>
+      </tr><tr class="dim-header"><td colspan="5">D7 — Label availability</td></tr><tr>
+        <td>closed_deal_count_12m</td>
+        <td>24</td>
+        <td><span class="pill status-degraded">Degraded</span><div class="lowconf">low confidence (n=24)</div></td>
+        <td class="note"></td>
+        <td class="gates">Enablement answer engine, Forecast assistance, Autonomous write-back<div class="thresh">viable ≥ 40, degraded ≥ 20</div></td>
+      </tr><tr>
+        <td>win_rate_dispersion</td>
+        <td>20.3%</td>
+        <td><span class="pill status-degraded">Degraded</span><div class="lowconf">low confidence (n=24)</div></td>
+        <td class="note"></td>
+        <td class="gates">Forecast assistance<div class="thresh">viable ≥ 0.3, degraded ≥ 0.15</div></td>
+      </tr><tr>
+        <td>outcome_evidence_retention_rate</td>
+        <td>91.7%</td>
+        <td><span class="pill status-viable">Viable</span><div class="lowconf">low confidence (n=24)</div></td>
+        <td class="note"></td>
+        <td class="gates">Enablement answer engine<div class="thresh">viable ≥ 0.8, degraded ≥ 0.5</div></td>
+      </tr></tbody>
+  </table>
+  
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "@gtm-trust-kernel/demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo kit: one GTM motion end to end on bundled sample data, from the readiness verdict to an approval-gated change. Never published.",
+  "dependencies": {
+    "@gtm-trust-kernel/adapters": "*",
+    "@gtm-trust-kernel/kernel": "*",
+    "@gtm-trust-kernel/readiness": "*"
+  },
+  "devDependencies": {
+    "playwright-core": "1.63.0",
+    "tsx": "^4.23.15"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "demo:kernel": "tsx --conditions=source src/cli.ts"
+  }
+}

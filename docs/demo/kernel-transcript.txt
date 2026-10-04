@@ -1,0 +1,49 @@
+gtm-trust-kernel demo: one GTM motion end to end (bundled sample data, no network, no model call)
+
+Outcome:  Deal velocity
+Friction: Next step unclear after first calls
+Decision: Which deals need attention this week, and what to do next
+AI assist: next-step suggestions on deals
+
+Scan verdict, sample CRM "Healthy" (as of 2026-09-20T00:00:00.000Z):
+  next-step suggestions on deals: viable (plain report: Ready to use)
+    next_step_fill_rate: viable (0.910, n=100)
+    activity_capture_rate: viable (0.880, n=100)
+    contact_linkage_rate: viable (0.900, n=100)
+    substantive_note_rate: viable (1, n=306)
+
+Same data, Enhanced Notes (ContentNote) not readable:
+  next-step suggestions on deals: not_measured (plain report: Can't tell yet)
+    next_step_fill_rate: viable (0.910, n=100)
+    activity_capture_rate: viable (0.880, n=100)
+    contact_linkage_rate: viable (0.900, n=100)
+    substantive_note_rate: not_measured (no value, n=0)  hint: Enable Notes (Setup, Notes Settings) and give the Run As user read access to Notes (ContentNote), so Enhanced Notes can be read.
+
+Approval-gated change (in-memory mock CRM; the suggestion is scripted):
+Deal opp-1, as read: nextStep = "Follow up with contact on deal opp-1, confirm budget and timeline"
+Evidence set ev-opp-1: act-1, act-inbound-1, note-1, opp-1
+
+1. Suggestions that never become proposals:
+  refused  a rep-level suggestion to change the amount
+           FIELD_NOT_ALLOWED: field 'amount' not writable by role 'rep'
+  refused  a suggestion citing a record outside the evidence set
+           CITATION_OUT_OF_SET: citation 'note-999' is not in evidence set ev-opp-1
+  refused  a suggestion carrying an instruction planted in a note
+           CONTENT_INJECTION_SUSPECTED: change to 'nextStep' contains suspected injected content
+
+2. The grounded suggestion:
+  prop-1: pending_approval, nextStep -> "Send the order form to procurement; the buying committee confirmed the timeline on the last call", cites note-1
+  refused  writing it before anyone approves
+           NOT_APPROVED: apply requires status 'approved', got 'pending_approval'
+
+3. The rep approves; the change is written:
+  prop-1: applied; CRM nextStep = "Send the order form to procurement; the buying committee confirmed the timeline on the last call"
+
+4. Rolled back:
+  prop-1: rolled_back; CRM nextStep = "Follow up with contact on deal opp-1, confirm budget and timeline"
+
+Audit ledger: 4 entries, hash chain verified
+  #0 2026-09-20T12:05:00.000Z proposal_created  user:rep-demo  521312475b18
+  #1 2026-09-20T12:06:00.000Z proposal_approved user:rep-demo  6724b60ee47f
+  #2 2026-09-20T12:07:00.000Z applied           user:rep-demo  a936cdd93bdd
+  #3 2026-09-20T12:08:00.000Z rolled_back       user:rep-demo  027cd7266693
