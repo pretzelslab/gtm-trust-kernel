@@ -190,18 +190,14 @@ adapters 0.3.0 and CLI 0.2.0 (see Releases).
 5. Later: live scanning in the CLI, an `--out` flag, an approver role
    check, per-record atomic writes, an injection test corpus, an
    evaluation harness, a HubSpot adapter.
-6. Housekeeping: delete `gtm-trust-kernel-old` after 2026-11-04; review
-   the open Dependabot PRs for `@anthropic-ai/sdk` and `@types/node` patch.
+6. **Log refused AI suggestions in the kernel audit ledger** (reason +
+   content hash, never the refused text); today they're refused before
+   becoming proposals and leave no ledger entry.
+7. Housekeeping: delete `gtm-trust-kernel-old` after 2026-11-04.
 
-### Declined suggestions
-
-Dependabot bumps closed on purpose; `.github/dependabot.yml` ignores both
-kinds of major so they don't return.
-
-| Suggestion | Why declined |
-|---|---|
-| `@types/node` 22 to 26 (PR #2) | Types track the Node version in `engines`, not the latest Node. |
-| `typescript` 5.9 to 7.0 (PR #4) | A compiler major is its own task. |
+Dependency note: `master` now uses `@anthropic-ai/sdk` 0.131.0 (Dependabot
+#6) and `@types/node` 22.20.4 (#7). The published CLI 0.2.0 keeps
+`^0.128.0` until the next release.
 
 ### Phase 5 backlog (objects not scanned yet)
 

@@ -77,6 +77,7 @@ These hold for proposals created with the kernel's `build()` and approved with i
 - Reps can self-approve changes to their own `nextStep` and `closeDate`. This is by design. The approver's role is not checked, so a rep can approve a proposal created by an admin.
 - The injection guard is a short list of phrases plus a canary token. There is no injection test corpus or red-team report yet.
 - The audit ledger is in memory only and is not anchored outside itself, so rewriting the whole chain would go undetected.
+- Refused AI suggestions leave no ledger entry. They are refused at `build()`, before they become proposals, so the ledger never sees them.
 - Writes are per field today, not atomic per record. If a later field fails, the earlier ones are rolled back; if that rollback can't complete, the proposal can't be retried and the unrestored field is logged.
 
 ## Design rules
