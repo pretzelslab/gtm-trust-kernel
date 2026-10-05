@@ -1,19 +1,19 @@
 # Project status
 
-Current state of the GTM trust kernel, as of 2026-10-03. The dated history
+Current state of the GTM trust kernel, as of 2026-10-05. The dated history
 behind it (decisions, measurements, earlier states) is in
 [dev-log.md](dev-log.md); code comments that cite "STATUS.md" for a known
 gap or decision refer to that log.
 
 ## Packages
 
-| Package | npm | Published | Packed, not yet published |
-|---|---|---|---|
-| CLI | `gtm-trust-kernel` | 0.1.0 | 0.2.0 |
-| CRM adapters | `@gtm-trust-kernel/adapters` | 0.2.0 | 0.3.0 |
-| Readiness report | (private, bundled into the CLI) | | |
-| Proposal kernel | (private) | | |
-| Demo kit | (private, never published) | | |
+| Package | npm | Published |
+|---|---|---|
+| CLI | `gtm-trust-kernel` | 0.2.0 (with provenance) |
+| CRM adapters | `@gtm-trust-kernel/adapters` | 0.3.0 (with provenance) |
+| Readiness report | (private, bundled into the CLI) | |
+| Proposal kernel | (private) | |
+| Demo kit | (private, never published) | |
 
 ## What works
 
@@ -118,21 +118,26 @@ The full list, with the reasoning behind each item, is in
 
 Releases are published from GitHub Actions with npm trusted publishing;
 the steps are in [RELEASING.md](../../../RELEASING.md). **Adapters 0.3.0
-and CLI 0.2.0 were re-packed on 2026-10-04** (versions bumped, CLI range
-`^0.3.0`, lockfile, changelogs) and are not tagged or published. Publishing
-waits on the repository becoming public (`publish.yml` publishes with
-`--provenance`, which npm accepts only from a public repository, as far as
-is known), and must be dispatched from the release tag, not `master`.
+and CLI 0.2.0 were published on 2026-10-04 and 2026-10-05**, each
+dispatched from its release tag (`adapters-v0.3.0`, `cli-v0.2.0`), both
+at commit `94820d4`, both with a provenance attestation that names
+`.github/workflows/publish.yml` at that tag in
+`pretzelslab/gtm-trust-kernel`.
 
-Pack check (`npm pack --dry-run` in each package folder, after a clean
-`npm run ci`; the tarballs built for the clean-room install had the same
-shasums). Re-packed after the use-case section change (85fa693): the
-adapters tarball is byte-identical, only the CLI shasum changed:
+| Package | Version | Publish run | Files | Size (packed / unpacked) | Published shasum (canonical) |
+|---|---|---|---|---|---|
+| `@gtm-trust-kernel/adapters` | 0.3.0 | 37245741544 | 24 | 60.3 kB / 229.2 kB | `59cd85dc00821587025c9cf32cda12f88ccc4e49` |
+| `gtm-trust-kernel` | 0.2.0 | 37246591714 | 7 | 58.3 kB / 221.1 kB | `5c81e7967c4cb0f2647f4b82ee96c7729b3d28e3` |
 
-| Package | Tarball | Files | Size (packed / unpacked) | shasum |
-|---|---|---|---|---|
-| `@gtm-trust-kernel/adapters` | 0.3.0 | 24 | 60.3 kB / 229.2 kB | `59cd85dc00821587025c9cf32cda12f88ccc4e49` |
-| `gtm-trust-kernel` | 0.2.0 | 7 | 58.3 kB / 221.1 kB | `ccf95f5cac6b579815ec63767eb50ff4f195a114` |
+The published shasums are the canonical ones. The adapters tarball packed
+on Windows has the same shasum. The CLI tarball packed locally on Windows
+does not: `npm pack --dry-run` gives `ccf95f5cac6b579815ec63767eb50ff4f195a114`.
+The extracted contents are identical; the only difference in the tar
+entries is the file mode of `dist/cli.js`, `0755` (executable) in the
+published tarball and `0644` in the Windows pack, because Windows has no
+executable bit and npm sets it from the `bin` entry only on the CI
+runner's Linux filesystem. File times in both are the same. So a local
+Windows pack of the CLI is not expected to match the registry shasum.
 
 Adapters 0.3.0 files: `CHANGELOG.md`, `LICENSE`, `README.md`,
 `package.json`, and under `dist/src/`: `mock`, `retry`, `salesforce`,
@@ -152,8 +157,9 @@ under CLI 0.2.0, `gtm-trust-kernel --version` prints 0.2.0, and
 five numbered "At a glance" parts (use cases grouped by verdict, 8 card
 ids) and the "Details" band, and prints "4 ready, 3 use with caution, 1 not ready".
 
-If any file under a package folder, or a version, changes after this
-point, the shasums above are stale: re-run the pack check.
+Pack check before release (clean `npm run ci`, then `npm pack --dry-run`)
+was the gate; after a release, verify by extracted contents, provenance
+and `gitHead` (RELEASING.md, step 7).
 
 **Backup repositories.** The repository's history was rewritten on
 2026-10-03. Two private backup repositories,
@@ -175,7 +181,7 @@ Before going public:
    dev log, 2026-10-03.
 2. **Demo kit:** done (`packages/demo`, `docs/demo/`, `docs/DEMO.md`);
    see the dev log, 2026-10-03.
-3. **Re-pack:** done 2026-10-04 (see Releases); not tagged.
+3. **Re-pack:** done 2026-10-04 (see Releases).
 4. **Go public**, then switch on private vulnerability reporting, secret
    scanning with push protection, Dependabot alerts and a ruleset for
    `master` with a repository-admin bypass (RELEASING.md, "Repository

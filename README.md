@@ -22,8 +22,9 @@ changes; nothing is written without approval, and every change is logged.
 [![npm: adapters](https://img.shields.io/npm/v/@gtm-trust-kernel/adapters?label=%40gtm-trust-kernel%2Fadapters)](https://www.npmjs.com/package/@gtm-trust-kernel/adapters)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Status:** early open-source release. The npm CLI runs on built-in sample
-data. Scanning a live Salesforce org runs from a clone of this repo.
+**Status:** early open-source release. The npm CLI (0.2.0, with the decision
+view) runs on built-in sample data. Scanning a live Salesforce org runs from
+a clone of this repo.
 
 ## Where AI helps sellers, and what it needs
 

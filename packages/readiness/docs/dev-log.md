@@ -17,6 +17,31 @@ Governing rules: `CLAUDE.md` at the repo root.
 
 ---
 
+## Release: adapters 0.3.0 and CLI 0.2.0, 2026-10-05
+
+Both published through `publish.yml` with npm trusted publishing, each
+dispatched from its tag at `94820d4` and approved at the environment gate.
+
+- adapters 0.3.0: run 37245741544. `dist.shasum`
+  `59cd85dc00821587025c9cf32cda12f88ccc4e49`, matching the pack dry-run.
+- CLI 0.2.0: run 37246591714. `dist.shasum`
+  `5c81e7967c4cb0f2647f4b82ee96c7729b3d28e3`, which does **not** match the
+  Windows dry-run (`ccf95f5c…`).
+- Both: `gitHead` `94820d4`; SLSA provenance names `publish.yml` at the
+  release tag; CLI depends on `@gtm-trust-kernel/adapters ^0.3.0`.
+- Shasum cause: the published tarball and a local pack extract to identical
+  files. `tar -tvzf` shows the only difference is the mode of
+  `dist/cli.js` (`-rwxr-xr-x` published, `-rw-r--r--` from Windows);
+  sizes and times match. The published shasums are canonical.
+- Clean-room, empty folder outside the repo: `npx gtm-trust-kernel@0.2.0
+  --version` prints 0.2.0; `scan --demo` prints "4 ready, 3 use with
+  caution, 1 not ready" and both reports carry the jump bar and "At a
+  glance".
+- Decision: RELEASING.md step 7 now verifies by extracted contents,
+  provenance and `gitHead`, not by local shasum.
+
+---
+
 ## Dark-mode screenshots, 2026-10-04
 
 Docs and demo kit only; no package file changed (pack dry-run shasums for

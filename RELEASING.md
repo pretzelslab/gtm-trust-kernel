@@ -77,8 +77,22 @@ it with an authentication error; nothing else changes.
    npm view @gtm-trust-kernel/adapters@0.3.0 dist.shasum gitHead --prefer-online
    ```
 
-   `dist.shasum` should match step 3 and `gitHead` the tagged commit. The
-   package page on npmjs.com shows the provenance badge.
+   `gitHead` should be the tagged commit. The package page on npmjs.com
+   shows the provenance badge, and the attestation should name
+   `publish.yml` at the release tag:
+
+   ```bash
+   curl -s "https://registry.npmjs.org/-/npm/v1/attestations/@gtm-trust-kernel%2Fadapters@0.3.0"
+   ```
+
+   Compare the published tarball's extracted contents with a local pack
+   (`npm pack <name>@<version>`, then `npm pack` in the package folder,
+   extract both, `diff -r`). Don't expect `dist.shasum` to equal the
+   step 3 shasum when you pack on Windows: the CLI's `dist/cli.js` is
+   mode 0755 on the CI runner and 0644 on Windows, which changes the
+   tarball bytes and so the shasum. Identical contents, `gitHead` and
+   provenance are the check. A package with no executable file (adapters)
+   usually still matches.
 
 ## Repository settings (set when the repository goes public)
 
