@@ -132,6 +132,10 @@ from before the 2026-10-03 rewrite. Keep both private. Never make them
 public, transfer them, or point a Trusted Publisher or release at them.
 Releases come only from `pretzelslab/gtm-trust-kernel`.
 
+`gtm-trust-kernel-pre-rewrite` stays private permanently: the `gitHead`
+values of published 0.1.0 and adapters 0.2.0 point into it.
+`gtm-trust-kernel-old` can be deleted after 2026-11-04.
+
 ## If the repository is recreated
 
 GitHub settings don't carry over to a new repository; redo them by hand:

@@ -132,12 +132,10 @@ at commit `94820d4`, both with a provenance attestation that names
 The published shasums are the canonical ones. The adapters tarball packed
 on Windows has the same shasum. The CLI tarball packed locally on Windows
 does not: `npm pack --dry-run` gives `ccf95f5cac6b579815ec63767eb50ff4f195a114`.
-The extracted contents are identical; the only difference in the tar
-entries is the file mode of `dist/cli.js`, `0755` (executable) in the
-published tarball and `0644` in the Windows pack, because Windows has no
-executable bit and npm sets it from the `bin` entry only on the CI
-runner's Linux filesystem. File times in both are the same. So a local
-Windows pack of the CLI is not expected to match the registry shasum.
+The extracted contents are identical. Measured with `tar -tvzf`: the only
+difference in the tar entries is the mode of `dist/cli.js`, `0755` in the
+published tarball and `0644` in a Windows pack. Sizes and file times match.
+A local Windows pack of the CLI therefore does not give the registry shasum.
 
 Adapters 0.3.0 files: `CHANGELOG.md`, `LICENSE`, `README.md`,
 `package.json`, and under `dist/src/`: `mock`, `retry`, `salesforce`,
@@ -162,50 +160,48 @@ was the gate; after a release, verify by extracted contents, provenance
 and `gitHead` (RELEASING.md, step 7).
 
 **Backup repositories.** The repository's history was rewritten on
-2026-10-03. Two private backup repositories,
-`pretzelslab/gtm-trust-kernel-pre-rewrite` and
-`pretzelslab/gtm-trust-kernel-old`, still hold history from before the
-rewrite. They must stay private: never make them public, transfer them,
-or publish from them. The same applies to the local mirror and bundle
-backups. Published 0.1.0 and adapters 0.2.0 `gitHead` values point at
-pre-rewrite commits and don't resolve in this repository. The tags
-`adapters-v0.1.0`, `adapters-v0.2.0` and `cli-v0.1.0` mark the released
-content on the rewritten history; npm's `gitHead` for those versions
-points to pre-rewrite commits.
+2026-10-03. Two private backup repositories still hold history from before
+the rewrite. Never make either public, transfer it, or publish from it;
+the same applies to the local mirror and bundle backups.
+
+- `pretzelslab/gtm-trust-kernel-pre-rewrite` stays private permanently:
+  the `gitHead` values of published 0.1.0 and adapters 0.2.0 point into it
+  and don't resolve in this repository.
+- `pretzelslab/gtm-trust-kernel-old` can be deleted after 2026-11-04.
+
+The tags `adapters-v0.1.0`, `adapters-v0.2.0` and `cli-v0.1.0` mark the
+released content on the rewritten history.
 
 ## Next
 
-Before going public:
-
-1. **README story:** done, merged to `master` (PR #5, `f1219f7`); see the
-   dev log, 2026-10-03.
-2. **Demo kit:** done (`packages/demo`, `docs/demo/`, `docs/DEMO.md`);
-   see the dev log, 2026-10-03.
-3. **Re-pack:** done 2026-10-04 (see Releases).
-4. **Go public**, then switch on private vulnerability reporting, secret
-   scanning with push protection, Dependabot alerts and a ruleset for
-   `master` with a repository-admin bypass (RELEASING.md, "Repository
-   settings"). Then tag and publish adapters 0.3.0, then CLI 0.2.0, each
-   dispatched from its tag.
-5. **Terminal recording** of the demo (GIF or similar), after the
-   re-pack, so it shows the released CLI and package versions.
-
-The reliability batch (L3, L5, L6, L10) is done; see the dev log,
-2026-10-03.
-
-After that:
-
-1. **Phase 4:** calibrate thresholds against real orgs, and settle how
-   `untrusted_text_ratio` treats Salesforce activities.
-2. Later: live scanning in the CLI, an `--out` flag, an approver role
-   check, per-record atomic writes, an injection test corpus, an
-   evaluation harness, a HubSpot adapter.
+Done: README story (PR #5), demo kit, re-pack, go public, and publish of
+adapters 0.3.0 and CLI 0.2.0 (see Releases).
 
 ### Next-release backlog
 
-- One-screen executive summary at the top: N of 8 use cases supported; top
-  2 fixes and how many use cases they unlock; built only from existing
-  data.
+1. **Executive summary** at the top of both reports, one screen: N of 8
+   use cases supported; the top 2 fixes and how many use cases they
+   unlock. Built only from existing data.
+2. **Terminal recording** of the demo (GIF or similar), showing the
+   released CLI and package versions.
+3. **Phase 4:** calibrate thresholds against real orgs, and settle how
+   `untrusted_text_ratio` treats Salesforce activities.
+4. **Phase 5:** the objects and candidate checks below.
+5. Later: live scanning in the CLI, an `--out` flag, an approver role
+   check, per-record atomic writes, an injection test corpus, an
+   evaluation harness, a HubSpot adapter.
+6. Housekeeping: delete `gtm-trust-kernel-old` after 2026-11-04; review
+   the open Dependabot PRs for `@anthropic-ai/sdk` and `@types/node` patch.
+
+### Declined suggestions
+
+Dependabot bumps closed on purpose; `.github/dependabot.yml` ignores both
+kinds of major so they don't return.
+
+| Suggestion | Why declined |
+|---|---|
+| `@types/node` 22 to 26 (PR #2) | Types track the Node version in `engines`, not the latest Node. |
+| `typescript` 5.9 to 7.0 (PR #4) | A compiler major is its own task. |
 
 ### Phase 5 backlog (objects not scanned yet)
 
