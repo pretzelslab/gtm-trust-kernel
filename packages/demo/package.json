@@ -10,7 +10,7 @@
     "@gtm-trust-kernel/readiness": "*"
   },
   "devDependencies": {
-    "playwright-core": "1.63.0",
+    "playwright-core": "1.64.0",
     "tsx": "^4.23.15"
   },
   "scripts": {
